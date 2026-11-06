@@ -23,3 +23,17 @@ HTMLCanvasElement.prototype.getContext = function () { return makeContext(); } a
 // jsdom has no ResizeObserver; Radix components and the page view observe sizes with it.
 class NoResizeObserver { observe() {} unobserve() {} disconnect() {} }
 if (typeof globalThis.ResizeObserver === 'undefined') globalThis.ResizeObserver = NoResizeObserver as unknown as typeof ResizeObserver;
+
+// jsdom does no layout. ProseMirror measures ranges and elements and scrolls the selection into view,
+// so where jsdom lacks these, give it empty boxes, a scroll that does nothing and no element at any point.
+const emptyRect = () => ({ x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0, toJSON: () => ({}) }) as DOMRect;
+const emptyRects = () => Object.assign([] as DOMRect[], { item: () => null }) as unknown as DOMRectList;
+if (typeof Range !== 'undefined') {
+  if (!Range.prototype.getClientRects) Range.prototype.getClientRects = emptyRects;
+  if (!Range.prototype.getBoundingClientRect) Range.prototype.getBoundingClientRect = emptyRect;
+}
+if (typeof Element !== 'undefined') {
+  if (!Element.prototype.getClientRects) Element.prototype.getClientRects = emptyRects;
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+}
+if (typeof document !== 'undefined' && !document.elementFromPoint) document.elementFromPoint = () => null;
