@@ -53,11 +53,12 @@ export function migrateDoc(doc, fromSchema) {
   if (fromSchema >= 2) return doc;
   const boxes = doc.boxes.map(b => {
     if (b.kind !== 'text') return b;
-    const ls = b.text.split('\n').map(l => l.trim()).filter(Boolean);
+    const ls = b.text.split('\n').filter(l => l.trim());
     const ms = ls.map(l => HEADER_LINE.exec(l));
-    if (ls.length < 2 || ms.some(m => !m)) return b;
+    if (ls.length < 2 || ms.some(m => !m || m[2].length > 80 || m[2] !== m[2].trimEnd())) return b;
+    if (new Set(ms.map(m => m[1])).size !== ms.length) return b;
     const fields = {};
-    for (const m of ms) { const k = HEADER_FIELDS.find(([, label]) => label === m[1])[0]; if (!(k in fields)) fields[k] = m[2]; }
+    for (const m of ms) fields[HEADER_FIELDS.find(([, label]) => label === m[1])[0]] = m[2];
     const f = cleanFields(fields);
     return { ...b, kind:'header', name:DEFAULT_NAMES.header, fields:f, text:headerText(f) };
   });
@@ -75,7 +76,7 @@ export function cleanDoc(d) {
       id:String(b.id || uid()), page:Math.max(0, Math.floor(num(b.page, 0))),
       x:num(b.x, 112), y:num(b.y, 110), w:Math.max(60, Math.min(PAGE_W, num(b.w, 300))), text:b.text.replace(/\r\n?/g, '\n'),
       style:cleanStyle(b.style), shuffle:Math.max(0, Math.floor(num(b.shuffle, 0))), frames:cleanFrames(b.frames),
-      kind, name:name || DEFAULT_NAMES[kind], color:b.color != null && Number.isInteger(c) ? ((c % 6) + 6) % 6 : i % 6,
+      kind, name:name || DEFAULT_NAMES[kind], color:typeof b.color === 'number' && Number.isInteger(c) ? ((c % 6) + 6) % 6 : i % 6,
     };
     if (kind === 'header') { o.fields = cleanFields(b.fields); o.text = headerText(o.fields); }
     if (typeof b.from === 'string') o.from = b.from;

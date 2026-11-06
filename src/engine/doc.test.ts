@@ -12,3 +12,18 @@ test('the example has a Header and Main text', () => { const d = sampleDoc(clean
 test('a schema-1 document gets its Header and Main text', () => { const d = migrateDoc(cleanDoc({ boxes: [{ id: 'b2', text: SAMPLE_HEAD }, { id: 'b1', text: SAMPLE_BODY }, { id: 'b3', text: 'note' }] })!, 1); expect(d.boxes.map(b => [b.kind, b.name])).toEqual([['header', 'Header'], ['text', 'Main text'], ['text', 'Text block']]); expect(d.boxes[0].fields).toEqual({ name: 'Aarav Mehta', class: '8-B', date: '29 October 2026' }); });
 test('a block that only partly looks like a header stays text', () => { expect(migrateDoc(cleanDoc({ boxes: [{ text: 'Name: A\nhello' }] })!, 1).boxes[0].kind).toBe('text'); });
 test('schema-2 documents are not migrated', () => { const d = cleanDoc({ boxes: [{ text: SAMPLE_HEAD }] })!; expect(migrateDoc(d, 2).boxes[0].kind).toBe('text'); });
+test('blocks that only look like headers keep their exact text', () => {
+  for (const text of ['Name: A\nName: B', 'Name: ' + 'x'.repeat(81) + '\nClass: 8', 'Name: A\n  Class: 8']) {
+    const b = migrateDoc(cleanDoc({ boxes: [{ text }] })!, 1).boxes[0];
+    expect([b.kind, b.text]).toEqual(['text', text]);
+  }
+});
+test('migration keeps position, style and frames', () => {
+  const keep = { page: 2, x: 130, y: 220, w: 280, style: { size: 30 }, shuffle: 5, frames: { 1: { x: 140 } } };
+  const d = migrateDoc(cleanDoc({ boxes: [{ id: 'h', text: SAMPLE_HEAD, ...keep }, { id: 't', text: 'plain', ...keep }] })!, 1);
+  expect(d.boxes.map(b => [b.kind, b.page, b.x, b.y, b.w, b.style, b.shuffle, b.frames])).toEqual([
+    ['header', 2, 130, 220, 280, { size: 30 }, 5, { 1: { x: 140 } }],
+    ['text', 2, 130, 220, 280, { size: 30 }, 5, { 1: { x: 140 } }],
+  ]);
+});
+test('colour must be a number', () => { const d = cleanDoc({ boxes: [{ text: 'a', color: '' }, { text: 'b', color: true }, { text: 'c', color: '3' }] })!; expect(d.boxes.map(b => b.color)).toEqual([0, 1, 2]); });
