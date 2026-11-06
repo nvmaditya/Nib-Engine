@@ -18,6 +18,15 @@ interface Props {
   multi: boolean;     // the block has parts on other pages too
 }
 
+/** The nearest ancestor that really scrolls: the pages column on wide screens, the whole stage on phones. */
+function scrollerOf(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const { overflowY } = getComputedStyle(p);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
+}
+
 export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const top = sg.top + gap * 0.1;
@@ -28,8 +37,8 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
     const fig = el?.closest<HTMLElement>('.sheet');
     const paperEl = fig?.querySelector<HTMLElement>('.paper');
     const sheetsEl = fig?.closest<HTMLElement>('[data-sheets]');
-    const pagesEl = fig?.closest<HTMLElement>('[data-pages]');
-    if (!el || !fig || !paperEl || !sheetsEl || !pagesEl) return;
+    if (!el || !fig || !paperEl || !sheetsEl) return;
+    const scroller = scrollerOf(fig);
     const box = sg.box, cont = sg.idx > 0; // a later page's part stays on its own page
     const g = geom();
     const r0 = paperEl.getBoundingClientRect();
@@ -67,8 +76,10 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
       const tx = (tr.left + nx * s) - (or.left + f0.x * s), ty = (tr.top + ny * s) - (or.top + f0.y * s);
       el.style.transform = `translate(${tx}px,${ty}px)`;
       if (head) head.style.transform = `translate(${tx}px,${ty}px)`;
-      const cr = pagesEl.getBoundingClientRect();
-      if (ev.clientY < cr.top + 60) pagesEl.scrollTop -= 14; else if (ev.clientY > cr.bottom - 40) pagesEl.scrollTop += 14;
+      // Near the top or bottom edge of what scrolls, scroll it (the window, if nothing inside does).
+      const cr = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: innerHeight };
+      const by = ev.clientY < cr.top + 60 ? -14 : ev.clientY > cr.bottom - 40 ? 14 : 0;
+      if (by) { if (scroller) scroller.scrollTop += by; else scrollBy(0, by); }
     };
     const end = (ev: PointerEvent) => {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', end); el.removeEventListener('pointercancel', end);

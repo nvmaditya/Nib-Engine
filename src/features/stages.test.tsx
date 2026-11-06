@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { createDoc } from '@/store/documents';
 import { App } from '@/app/App';
+import { useEditor } from '@/store/editor';
 
 let id = '';
 beforeAll(async () => {
@@ -37,6 +38,19 @@ test('Style shows the scope switch and hides the removed options', async () => {
   expect(screen.queryByText('As drawn')).toBeNull();
   expect(screen.queryByText('Fold crease')).toBeNull();
   expect(screen.queryByRole('textbox', { name: 'Block contents' })).toBeNull();
+});
+
+test('a document with the fold crease on can turn it off, and then the switch goes', async () => {
+  const S = cleanSettings({ crease: true }, false);
+  const creased = (await createDoc({ title: 'Creased', settings: S, doc: sampleDoc(S) })).id;
+  location.hash = `#/d/${creased}/style`;
+  render(<App />);
+  const crease = await screen.findByRole('switch', { name: 'Fold crease' });
+  expect(crease).toBeChecked();
+  await userEvent.click(crease);
+  await waitFor(() => expect(screen.queryByRole('switch', { name: 'Fold crease' })).toBeNull());
+  expect(useEditor.getState().S.crease).toBe(false);
+  expect(screen.getByRole('switch', { name: 'Punch holes' })).toBeInTheDocument();
 });
 
 test('Export shows the download controls', async () => {

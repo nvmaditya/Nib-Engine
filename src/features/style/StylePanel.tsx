@@ -19,8 +19,10 @@ const fmt: Partial<Record<SliderKey, (v: number) => string>> = {
 };
 
 // "As drawn" and the straight fold crease are no longer offered; documents that use them still draw them.
+// A document that has the crease on (brought over from Longhand) shows its switch until it is turned off.
 const PEN_CHOICES = PENS.filter(p => p.id !== 'font');
-const EFFECTS: [keyof Settings & ('lighting' | 'ghost' | 'holes'), string][] = [['lighting', 'Room lighting'], ['ghost', 'Show-through'], ['holes', 'Punch holes']];
+type Effect = keyof Settings & ('lighting' | 'ghost' | 'crease' | 'holes');
+const EFFECTS: [Effect, string][] = [['lighting', 'Room lighting'], ['ghost', 'Show-through'], ['crease', 'Fold crease'], ['holes', 'Punch holes']];
 
 const option = 'rounded-lg border border-line bg-surface transition-colors hover:border-line-strong aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:ring-1 aria-pressed:ring-primary';
 
@@ -231,7 +233,7 @@ export function StylePanel() {
           ))}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-          {EFFECTS.map(([k, label]) => (
+          {EFFECTS.filter(([k]) => k !== 'crease' || S.crease).map(([k, label]) => (
             <label key={k} className="flex cursor-pointer items-center gap-2 text-sm">
               <Switch checked={!!S[k]} onCheckedChange={v => setS(k, v)} aria-label={label} />{label}
             </label>

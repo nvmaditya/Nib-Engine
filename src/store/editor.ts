@@ -5,7 +5,9 @@ import { toast as sonnerToast } from 'sonner';
 import { cleanDoc, cleanSettings, loadSaved } from '@/engine/doc.js';
 import { clearMeasureCache, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Settings } from '@/engine/types';
+import { MEMORY_ID } from '@/app/route';
 import { putDoc, type DocRecord } from '@/store/documents';
+import { forgetDb } from './db';
 import { History } from './history';
 
 export interface ToastAction { label: string; fn: () => void }
@@ -74,25 +76,37 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savePending = false;
 
 const historyFlags = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
-const snapshotState = () => { const s = get(); return JSON.stringify({ S: s.S, doc: s.doc }); };
+const snapshotState = () => { const s = get(); return JSON.stringify({ S: s.S, doc: s.doc, title: s.title }); };
+
+/** Only documents kept in IndexedDB are saved; the in-memory one (storage blocked) has nowhere to go. */
+const stored = (id: string | null): id is string => id !== null && id !== MEMORY_ID;
+
+export const SAVE_FAILED = 'Nib couldn’t save your last change.';
+let saveFailing = false; // one message per run of failed saves, not one per keystroke
 
 async function saveNow(): Promise<void> {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   savePending = false;
   const s = get();
-  if (s.docId === null) return;
+  if (!stored(s.docId)) return;
   const id = s.docId;
+  const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc };
   try {
-    await putDoc({ id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc });
+    try { await putDoc(rec); } catch {
+      forgetDb(); // the connection may have been closed under us: open a fresh one and try once more
+      await putDoc(rec);
+    }
+    saveFailing = false;
     if (get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
   } catch {
     if (get().docId === id) useEditor.setState({ saving: 'unsaved' });
+    if (!saveFailing) { saveFailing = true; toast(SAVE_FAILED); }
   }
 }
 
 function saveSoon(): void {
-  if (get().docId === null) return;
+  if (!stored(get().docId)) return;
   clearTimeout(saveTimer);
   savePending = true;
   saveTimer = setTimeout(() => { void saveNow(); }, 400);
@@ -106,9 +120,11 @@ export function flushSave(): Promise<void> {
 export function openDocument(rec: DocRecord): void {
   if (savePending) void saveNow(); // don't lose the last edits of the document being left
   clearTimeout(layoutTimer);
+  sonnerToast.dismiss(); // a message's Undo belongs to the document it was shown in
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
   history.clear();
+  saveFailing = false;
   createdAt = rec.createdAt;
   clearMeasureCache();
   use(S, doc);
@@ -116,10 +132,32 @@ export function openDocument(rec: DocRecord): void {
   useEditor.setState({
     docId: rec.id, title: rec.title, S, doc,
     version: s.version + 1, layoutTick: s.layoutTick + 1,
-    selectedId: longestBox(doc)?.id ?? null, scope: 'all', saving: 'saved',
+    selectedId: longestBox(doc)?.id ?? null, scope: 'all', saving: stored(rec.id) ? 'saved' : 'unsaved',
     importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null,
     ...historyFlags(),
   });
+}
+
+/**
+ * Leave the open document (Home does this), so opening it again reads it back from storage and picks
+ * up anything Home changed. Resolves once its last edit is written. The in-memory document stays open:
+ * there is nowhere to read it back from.
+ */
+export function closeDocument(): Promise<void> {
+  const s = get();
+  if (s.docId === null || s.docId === MEMORY_ID) return Promise.resolve();
+  const saved = flushSave(); // takes what to write now, before the state below changes
+  clearTimeout(layoutTimer);
+  layoutTimer = undefined;
+  sonnerToast.dismiss();
+  history.clear();
+  saveFailing = false;
+  useEditor.setState({
+    docId: null, title: '', version: s.version + 1, selectedId: null, scope: 'all', saving: 'saved',
+    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null,
+    ...historyFlags(),
+  });
+  return saved;
 }
 
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.
@@ -138,13 +176,14 @@ export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOption
       useEditor.setState({ layoutTick: t.layoutTick + 1, version: t.version + 1 });
     }, 140);
   }
-  if (save && s.docId !== null) { next.saving = 'saving'; saveSoon(); }
+  if (save && stored(s.docId)) { next.saving = 'saving'; saveSoon(); }
   useEditor.setState(next);
 }
 
 function restore(snap: string): void {
-  const o = JSON.parse(snap) as { S: unknown; doc: unknown };
+  const o = JSON.parse(snap) as { S: unknown; doc: unknown; title: string };
   update(s => {
+    s.title = o.title;
     s.S = cleanSettings(o.S, false);
     s.doc = cleanDoc(o.doc) ?? emptyDoc();
     if (s.selectedId && !s.doc.boxes.some(b => b.id === s.selectedId)) s.selectedId = null;
@@ -171,12 +210,16 @@ export function toast(msg: string, action?: ToastAction): void {
   sonnerToast(msg, action ? { action: { label: action.label, onClick: action.fn } } : undefined);
 }
 
+/** A message's action that only runs while the document it was made in is still open. */
+export function docAction(label: string, fn: () => void): ToastAction {
+  const id = get().docId;
+  return { label, fn: () => { if (get().docId === id) fn(); } };
+}
+
 // Undo for whole-document changes: a snapshot, and an action that puts it back.
 export const snapshot = (): string => JSON.stringify(get().doc);
-export const undoTo = (snap: string, sel: string | null): ToastAction => ({
-  label: 'Undo',
-  fn: () => update(s => { s.doc = cleanDoc(JSON.parse(snap)) ?? emptyDoc(); s.selectedId = sel; }, { history: 'undo-to' }),
-});
+export const undoTo = (snap: string, sel: string | null): ToastAction =>
+  docAction('Undo', () => update(s => { s.doc = cleanDoc(JSON.parse(snap)) ?? emptyDoc(); s.selectedId = sel; }, { history: 'undo-to' }));
 
 export const selectedBox = (): Box | null => {
   const s = get();

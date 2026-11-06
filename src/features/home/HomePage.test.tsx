@@ -1,5 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Toaster, toast as sonner } from 'sonner';
+import { deleteDoc, duplicateDoc, listDocs, putDoc } from '@/store/documents';
 import { HomePage } from './HomePage';
 
 const mem = vi.hoisted(() => ({ docs: [] as any[] }));
@@ -50,4 +52,47 @@ test('leaving a document shows its latest title', async () => {
   renameDocument('Renamed');
   render(<HomePage />);
   expect(await screen.findByText('Renamed')).toBeInTheDocument();
+});
+
+test('when the documents can’t be read, Home says so instead of “No documents yet.”', async () => {
+  vi.mocked(listDocs).mockRejectedValueOnce(new Error('storage gone'));
+  render(<HomePage />);
+  expect(await screen.findByText('Nib can’t read your documents on this device right now.')).toBeInTheDocument();
+  expect(screen.queryByText('No documents yet.')).toBeNull();
+});
+
+test('a rename, duplicate or delete that fails says so and closes its dialog', async () => {
+  const user = userEvent.setup();
+  render(<><HomePage /><Toaster /></>);
+  const failed = 'That didn’t work. Try again.';
+  const menu = async (item: string) => {
+    await user.click(await screen.findByRole('button', { name: 'More for A' }));
+    await user.click(await screen.findByRole('menuitem', { name: item }));
+  };
+
+  vi.mocked(putDoc).mockRejectedValueOnce(new Error('no'));
+  await menu('Rename');
+  const dlg = await screen.findByRole('dialog', { name: 'Rename document' });
+  await user.clear(within(dlg).getByRole('textbox', { name: 'Document name' }));
+  await user.type(within(dlg).getByRole('textbox', { name: 'Document name' }), 'Essay');
+  await user.click(within(dlg).getByRole('button', { name: 'Rename' }));
+  expect(await screen.findByText(failed)).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(screen.getByText('A')).toBeInTheDocument();
+  act(() => { sonner.dismiss(); });
+  await waitFor(() => expect(screen.queryByText(failed)).toBeNull());
+
+  vi.mocked(duplicateDoc).mockRejectedValueOnce(new Error('no'));
+  await menu('Duplicate');
+  expect(await screen.findByText(failed)).toBeInTheDocument();
+  act(() => { sonner.dismiss(); });
+  await waitFor(() => expect(screen.queryByText(failed)).toBeNull());
+
+  vi.mocked(deleteDoc).mockRejectedValueOnce(new Error('no'));
+  await menu('Delete');
+  await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+  expect(await screen.findByText(failed)).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  expect(screen.getByText('A')).toBeInTheDocument();
+  act(() => { sonner.dismiss(); });
 });

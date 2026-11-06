@@ -3,7 +3,7 @@ import { Toaster } from 'sonner';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
 import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
-import { openDocument, toast, useEditor } from '@/store/editor';
+import { closeDocument, openDocument, toast, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { HomePage } from '@/features/home/HomePage';
 import { DocumentView } from '@/features/doc/DocumentView';
@@ -34,11 +34,13 @@ export function App() {
     if (boot === 'pending' || wantId === null || wantId === openId) return;
     if (boot === 'memory') { if (wantId !== MEMORY_ID) navigate({ name: 'home' }); return; }
     let live = true;
+    // Going Home closes the open document first, so Home doesn't clear the message shown here.
+    const goHome = () => { void closeDocument(); navigate({ name: 'home' }); };
     void getDoc(wantId).then(rec => {
       if (!live) return;
       if (rec) openDocument(rec);
-      else { navigate({ name: 'home' }); toast('That document isn’t on this device.'); }
-    }).catch(() => { if (live) navigate({ name: 'home' }); });
+      else { goHome(); toast('That document isn’t on this device.'); }
+    }).catch(() => { if (live) goHome(); });
     return () => { live = false; };
   }, [boot, wantId, openId]);
 

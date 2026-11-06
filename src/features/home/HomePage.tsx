@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { deleteDoc, duplicateDoc, listDocs, putDoc, type DocRecord } from '@/store/documents';
-import { flushSave, toast, useEditor } from '@/store/editor';
+import { closeDocument, toast, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { createAndOpen, importIntoNewDoc, openImportPicker } from './actions';
 
@@ -22,8 +22,10 @@ export function relativeTime(t: number, now = Date.now()): string {
   return `Edited ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+const FAILED = 'That didn’t work. Try again.';
+
 export function HomePage() {
-  const [docs, setDocs] = useState<DocRecord[] | null>(null);
+  const [docs, setDocs] = useState<DocRecord[] | 'unreadable' | null>(null);
   const [renaming, setRenaming] = useState<DocRecord | null>(null);
   const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<DocRecord | null>(null);
@@ -32,13 +34,14 @@ export function HomePage() {
   const memTitle = useEditor(s => s.title);
   const memDoc = useEditor(s => s.doc);
   const reload = useCallback(async () => {
-    try {
-      await flushSave(); // the document just left may still have an edit waiting to be written
-      setDocs(await listDocs());
-    } catch { setDocs([]); }
+    try { setDocs(await listDocs()); } catch { setDocs('unreadable'); }
   }, []);
-  useEffect(() => { if (!memory) void reload(); }, [reload, memory]);
-  const shown: DocRecord[] | null = memory
+  useEffect(() => {
+    if (memory) return;
+    // Leave the document (its last edit is written first), so opening it again reads what Home changed.
+    void closeDocument().then(reload);
+  }, [reload, memory]);
+  const shown = memory
     ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: {} as DocRecord['settings'], doc: memDoc }]
     : docs;
 
@@ -61,15 +64,22 @@ export function HomePage() {
   }, []);
 
   const open = (d: DocRecord) => navigate({ name: 'doc', id: d.id, stage: 'write' });
+  const change = async (fn: () => Promise<unknown>) => {
+    try { await fn(); } catch { toast(FAILED); }
+    await reload();
+  };
   const doRename = async () => {
     if (!renaming) return;
-    await putDoc({ ...renaming, title: name.trim() || 'Untitled', updatedAt: Date.now() });
-    setRenaming(null); await reload();
+    const d = renaming, title = name.trim() || 'Untitled';
+    setRenaming(null);
+    await change(() => putDoc({ ...d, title, updatedAt: Date.now() }));
   };
-  const doDuplicate = async (d: DocRecord) => { await duplicateDoc(d.id); await reload(); };
+  const doDuplicate = (d: DocRecord) => change(() => duplicateDoc(d.id));
   const doDelete = async () => {
     if (!deleting) return;
-    await deleteDoc(deleting.id); setDeleting(null); await reload();
+    const d = deleting;
+    setDeleting(null);
+    await change(() => deleteDoc(d.id));
   };
 
   return (
@@ -88,7 +98,9 @@ export function HomePage() {
 
         <section aria-labelledby="recent-h">
           <h2 id="recent-h" className="mb-3 text-sm font-semibold text-muted">Recent</h2>
-          {shown === null ? null : shown.length === 0 ? (
+          {shown === null ? null : shown === 'unreadable' ? (
+            <p className="rounded-xl border border-line bg-surface p-6 text-muted">Nib can’t read your documents on this device right now.</p>
+          ) : shown.length === 0 ? (
             <div className="flex flex-col items-start gap-3 rounded-xl border border-line bg-surface p-6">
               <p className="text-muted">No documents yet.</p>
               <Button onClick={() => { void createAndOpen(); }}>New document</Button>

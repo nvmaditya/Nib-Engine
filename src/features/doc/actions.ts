@@ -3,7 +3,7 @@ import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS, uid } from '@/engine/doc.js';
 import { boxSettings, clearMeasureCache, frameRange, framesOf, geom, snapX, snapY, splitAtFrame, textWithoutFrame } from '@/engine/core.js';
 import type { Box, Seg, Settings } from '@/engine/types';
-import { selectedBox, snapshot, toast, undoTo, update, useEditor, type ToastAction } from '@/store/editor';
+import { docAction, selectedBox, snapshot, toast, undoTo, update, useEditor, type ToastAction } from '@/store/editor';
 
 const get = useEditor.getState;
 const UI = { save: false, layout: false } as const;
@@ -147,14 +147,11 @@ export function resetBoxStyle(): void {
   if (!b) return;
   const id = b.id, before = { style: b.style, shuffle: b.shuffle };
   update(() => { b.style = {}; b.shuffle = 0; clearMeasureCache(); }, { history: step('match') });
-  const undoMatch: ToastAction = {
-    label: 'Undo',
-    fn: () => update(s => {
-      const box = s.doc.boxes.find(x => x.id === id);
-      if (box) Object.assign(box, before);
-      clearMeasureCache();
-    }, { history: step('match-undo') }),
-  };
+  const undoMatch = docAction('Undo', () => update(s => {
+    const box = s.doc.boxes.find(x => x.id === id);
+    if (box) Object.assign(box, before);
+    clearMeasureCache();
+  }, { history: step('match-undo') }));
   toast('This block matches the document again.', undoMatch);
 }
 

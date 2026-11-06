@@ -4,6 +4,7 @@ import { Logo, Wordmark } from '@/brand/Logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { navigate, type Route } from '@/app/route';
+import { cn } from '@/lib/utils';
 import { useEditor, undo, redo, renameDocument } from '@/store/editor';
 import { StageNav } from './StageNav';
 import { useUndoShortcuts } from './useUndoShortcuts';
@@ -31,7 +32,10 @@ function DocBar({ id, stage }: { id: string; stage: Extract<Route, { name: 'doc'
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         className="h-8 min-w-0 flex-1 border-transparent bg-transparent font-semibold shadow-none hover:border-line md:max-w-56"
       />
-      <span className="hidden text-xs text-muted sm:inline" role="status">{saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : 'Not saved'}</span>
+      {/* "Not saved" shows on phones too; "Saved" and "Saving…" only where there is room. */}
+      <span className={cn('shrink-0 text-xs', saving === 'unsaved' ? 'font-medium text-danger' : 'hidden text-muted sm:inline')} role="status">
+        {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : 'Not saved'}
+      </span>
       <div className="hidden flex-1 md:block" />
       {/* Narrow screens: the stages get a full-width row of their own under the name. */}
       <StageNav id={id} stage={stage} className="order-last w-full md:order-none md:w-auto" />
