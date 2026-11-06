@@ -19,6 +19,13 @@ test.each([
 test('list depth and marker', () => { expect(parseLine('    - a').depth).toBe(2); expect(parseLine('          - a').depth).toBe(3); expect(parseLine('12) a').marker).toBe('12)'); });
 test('srcOffset finds a word after the line’s marker', () => { expect(srcOffset('ab\n## Hello there', { li: 1, tok: 1 })).toBe(12); expect(srcOffset('ab\n## Hello there', { li: 1, tok: 0 })).toBe(3); });
 test('escaped markers are plain text on the page', () => { const L = layoutOf(docOf(box({ text: '\\- not a list\n\\\\newpage\nafter' }))); expect(L.pages).toBe(1); expect(L.segs[0].rows).toHaveLength(3); expect((L.segs[0].rows[0] as any).block.marker).toBeNull(); });
+test('a line with hundreds of marked words keeps every word', () => {
+  const ws = Array.from({ length: 650 }, (_, i) => 'w' + i), line = ws.map((w, i) => (i % 2 ? `**${w}**` : `==${w}==`)).join(' ');
+  expect(parseInline(line).map(p => p.text).join('')).toBe(ws.join(' '));
+  const L = layoutOf(docOf(box({ text: line })));
+  const laid = L.segs.flatMap(s => s.rows.flatMap(r => ((r as any).items ?? []).map((it: any) => it.tok.pieces.map((p: any) => p.text).join(''))));
+  expect(laid).toEqual(ws);
+});
 test('a split in the middle of _underlined_ words closes and reopens the underline', () => {
   const b = box({ y: 1009, text: `${words(20)} _${words(15)}_ ${words(5)}` }); const L = layoutOf(docOf(b));
   const nb = splitAtFrame(b, L.segs.find(s => s.idx === 1)!, 'n');

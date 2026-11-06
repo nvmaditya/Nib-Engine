@@ -233,8 +233,8 @@ export function parseInline(t) {
   return parseInlineRaw(hideEsc(t), {}).map(p => ({ text:showEsc(p.text), style:p.style }));
 }
 function parseInlineRaw(t, st) {
-  const out = []; let rest = t; let guard = 0;
-  while (rest && guard++ < 500) {
+  const out = []; let rest = t;
+  while (rest) {
     let best = null, bi = 0;
     for (const p of INL) {
       const m = p.re.exec(rest);
@@ -244,7 +244,10 @@ function parseInlineRaw(t, st) {
     if (bi > 0) out.push({ text:rest.slice(0, bi), style:st });
     const ns = best.p.k ? { ...st, [best.p.k]:true } : st;
     out.push(...parseInlineRaw(best.m[best.p.g], ns));
-    rest = rest.slice(best.m.index + best.m[0].length);
+    const next = rest.slice(best.m.index + best.m[0].length);
+    // Every match uses up some text; should one ever not, keep the rest as it is rather than loop.
+    if (next.length >= rest.length) { out.push({ text:rest, style:st }); break; }
+    rest = next;
   }
   return out;
 }
