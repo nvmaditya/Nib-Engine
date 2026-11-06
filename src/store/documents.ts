@@ -1,9 +1,17 @@
-import { cleanDoc, cleanSettings } from '@/engine/doc.js';
+import { cleanDoc, cleanSettings, migrateDoc } from '@/engine/doc.js';
 import type { EngineDoc, Settings } from '@/engine/types';
 import { getDb } from './db';
 
 export interface DocRecord {
   id: string; title: string; createdAt: number; updatedAt: number; settings: Settings; doc: EngineDoc;
+  schema?: number; // 2 from Nib's Write milestone; records without it are Longhand-era (1)
+}
+
+export const DOC_SCHEMA = 2;
+
+/** A record in storage was written by a newer Nib; this older copy must not overwrite it. */
+export class NewerDocumentError extends Error {
+  constructor() { super('This document was saved by a newer version of Nib.'); this.name = 'NewerDocumentError'; }
 }
 
 export const newId = (): string => 'd' + Date.now().toString(36) + Math.floor(Math.random() * 1e9).toString(36);
@@ -11,12 +19,12 @@ export const newId = (): string => 'd' + Date.now().toString(36) + Math.floor(Ma
 const emptyDoc = (): EngineDoc => ({ pageCount: 1, boxes: [], fileName: '' });
 
 function clean(rec: DocRecord): DocRecord {
-  return { ...rec, settings: cleanSettings(rec.settings, false), doc: cleanDoc(rec.doc) ?? emptyDoc() };
+  return { ...rec, settings: cleanSettings(rec.settings, false), doc: migrateDoc(cleanDoc(rec.doc) ?? emptyDoc(), rec.schema ?? 1) };
 }
 
 export async function listDocs(): Promise<DocRecord[]> {
   const all = (await (await getDb()).getAll('documents')) as DocRecord[];
-  return all.sort((a, b) => b.updatedAt - a.updatedAt);
+  return all.map(clean).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getDoc(id: string): Promise<DocRecord | undefined> {
@@ -25,7 +33,17 @@ export async function getDoc(id: string): Promise<DocRecord | undefined> {
 }
 
 export async function putDoc(rec: DocRecord): Promise<void> {
-  await (await getDb()).put('documents', structuredClone(rec));
+  const copy = { ...structuredClone(rec), schema: DOC_SCHEMA };
+  const tx = (await getDb()).transaction('documents', 'readwrite');
+  tx.done.catch(() => {}); // an abort is reported through the rejection below
+  const store = tx.objectStore('documents');
+  const stored = (await store.get(rec.id)) as DocRecord | undefined;
+  if (stored && (stored.schema ?? 1) > DOC_SCHEMA) {
+    tx.abort();
+    throw new NewerDocumentError();
+  }
+  await store.put(copy);
+  await tx.done;
 }
 
 export async function createDoc(init: { title?: string; settings?: Settings; doc?: EngineDoc } = {}): Promise<DocRecord> {

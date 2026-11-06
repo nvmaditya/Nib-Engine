@@ -2,7 +2,7 @@ import { cleanSettings, loadSaved, sampleDoc } from '@/engine/doc.js';
 import { KEY, OLD_KEY } from '@/engine/config.js';
 import type { IDBPTransaction } from 'idb';
 import { getDb } from './db';
-import { newId, titleFromDoc, type DocRecord } from './documents';
+import { newId, titleFromDoc, DOC_SCHEMA, type DocRecord } from './documents';
 
 function hasLonghandWork(): boolean {
   try { return localStorage.getItem(KEY) !== null || localStorage.getItem(OLD_KEY) !== null; } catch { return false; }
@@ -21,10 +21,10 @@ export async function bootstrapDocuments(): Promise<{ ok: boolean }> {
     let rec: DocRecord;
     if (hasLonghandWork()) {
       const { S, doc } = loadSaved();
-      rec = { id: newId(), title: titleFromDoc(doc), createdAt: now, updatedAt: now, settings: S, doc };
+      rec = { id: newId(), title: titleFromDoc(doc), createdAt: now, updatedAt: now, settings: S, doc, schema: DOC_SCHEMA };
     } else {
       const S = cleanSettings(null, false);
-      rec = { id: newId(), title: 'The Water Cycle', createdAt: now, updatedAt: now, settings: S, doc: sampleDoc(S) };
+      rec = { id: newId(), title: 'The Water Cycle', createdAt: now, updatedAt: now, settings: S, doc: sampleDoc(S), schema: DOC_SCHEMA };
     }
     const copy = structuredClone(rec); // everything that can throw happens before the first write
     await prefs.put(true, 'bootstrapped');

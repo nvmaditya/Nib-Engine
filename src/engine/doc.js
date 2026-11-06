@@ -35,13 +35,54 @@ function cleanFrames(fr) {
   }
   return o;
 }
+export const HEADER_FIELDS = [['name', 'Name'], ['class', 'Class'], ['subject', 'Subject'], ['roll', 'Roll no.'], ['date', 'Date']];
+export const DEFAULT_NAMES = { text:'Text block', header:'Header', note:'Margin note' };
+const KINDS = ['text', 'header', 'note'];
+// One line per field present, in the fixed order. An empty value leaves a label to fill in.
+export function headerText(f) {
+  return HEADER_FIELDS.filter(([k]) => typeof f[k] === 'string').map(([k, label]) => (f[k] ? `${label}: ${f[k]}` : `${label}:`)).join('\n');
+}
+function cleanFields(f) {
+  const o = {};
+  if (f && typeof f === 'object') for (const [k] of HEADER_FIELDS) if (typeof f[k] === 'string') o[k] = f[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
+  return Object.keys(o).length ? o : { name:'', class:'', date:'' };
+}
+const HEADER_LINE = /^(Name|Class|Subject|Roll no\.|Date):[ \t]*(.*)$/;
+// Documents saved before blocks had kinds: the block of Name:/Class:/Date: lines is the Header, the longest text block the Main text.
+export function migrateDoc(doc, fromSchema) {
+  if (fromSchema >= 2) return doc;
+  const boxes = doc.boxes.map(b => {
+    if (b.kind !== 'text') return b;
+    const ls = b.text.split('\n').filter(l => l.trim());
+    const ms = ls.map(l => HEADER_LINE.exec(l));
+    if (ls.length < 2 || ms.some(m => !m || m[2].length > 80 || m[2] !== m[2].trimEnd())) return b;
+    if (new Set(ms.map(m => m[1])).size !== ms.length) return b;
+    const fields = {};
+    for (const m of ms) fields[HEADER_FIELDS.find(([, label]) => label === m[1])[0]] = m[2];
+    const f = cleanFields(fields);
+    return { ...b, kind:'header', name:DEFAULT_NAMES.header, fields:f, text:headerText(f) };
+  });
+  let main = null;
+  for (const b of boxes) if (b.kind === 'text' && b.name === DEFAULT_NAMES.text && (!main || b.text.length > main.text.length)) main = b;
+  return { ...doc, boxes:boxes.map(b => (b === main ? { ...b, name:'Main text' } : b)) };
+}
 export function cleanDoc(d) {
   if (!d || !Array.isArray(d.boxes)) return null;
-  const boxes = d.boxes.filter(b => b && typeof b.text === 'string').map(b => ({
-    id:String(b.id || uid()), page:Math.max(0, Math.floor(num(b.page, 0))),
-    x:num(b.x, 112), y:num(b.y, 110), w:Math.max(60, Math.min(PAGE_W, num(b.w, 300))), text:b.text.replace(/\r\n?/g, '\n'),
-    style:cleanStyle(b.style), shuffle:Math.max(0, Math.floor(num(b.shuffle, 0))), frames:cleanFrames(b.frames),
-  }));
+  const boxes = d.boxes.filter(b => b && typeof b.text === 'string').map((b, i) => {
+    const kind = KINDS.includes(b.kind) ? b.kind : 'text';
+    const name = typeof b.name === 'string' ? b.name.trim().slice(0, 60).trim() : '';
+    const c = Number(b.color);
+    const o = {
+      id:String(b.id || uid()), page:Math.max(0, Math.floor(num(b.page, 0))),
+      x:num(b.x, 112), y:num(b.y, 110), w:Math.max(60, Math.min(PAGE_W, num(b.w, 300))), text:b.text.replace(/\r\n?/g, '\n'),
+      style:cleanStyle(b.style), shuffle:Math.max(0, Math.floor(num(b.shuffle, 0))), frames:cleanFrames(b.frames),
+      kind, name:name || DEFAULT_NAMES[kind], color:typeof b.color === 'number' && Number.isInteger(c) ? ((c % 6) + 6) % 6 : i % 6,
+    };
+    if (kind === 'header') { o.fields = cleanFields(b.fields); o.text = headerText(o.fields); }
+    if (typeof b.from === 'string') o.from = b.from;
+    return o;
+  });
+  for (const b of boxes) if (b.from !== undefined && (b.from === b.id || !boxes.some(o => o.id === b.from))) delete b.from;
   const fileName = typeof d.fileName === 'string' ? d.fileName.slice(0, 120) : '';
   return { pageCount:Math.max(1, Math.floor(num(d.pageCount, 1))), boxes, fileName };
 }
@@ -66,8 +107,8 @@ export function sampleDoc(S) {
   use(S, { pageCount:1, boxes:[] });
   const g = geom();
   return { pageCount:1, fileName:'', boxes:[
-    { id:'b2', page:0, x:446, y:g.top - g.gap, w:320, text:SAMPLE_HEAD, style:{}, shuffle:0, frames:{} },
-    { id:'b1', page:0, x:g.left, y:g.top + 2 * g.gap, w:g.right - g.left, text:SAMPLE_BODY, style:{}, shuffle:0, frames:{} },
+    { id:'b2', kind:'header', name:'Header', color:0, fields:{ name:'Aarav Mehta', class:'8-B', date:'29 October 2026' }, page:0, x:446, y:g.top - g.gap, w:320, text:SAMPLE_HEAD, style:{}, shuffle:0, frames:{} },
+    { id:'b1', kind:'text', name:'Main text', color:1, page:0, x:g.left, y:g.top + 2 * g.gap, w:g.right - g.left, text:SAMPLE_BODY, style:{}, shuffle:0, frames:{} },
   ] };
 }
 // What was saved in this browser last time (the single-page version saved the same way).
@@ -91,9 +132,10 @@ export function loadSaved() {
   const S = cleanSettings(rawS, legacy);
   let doc = cleanDoc(rawDoc);
   if (!doc) {
-    if (oldText !== null) { use(S, { pageCount:1, boxes:[] }); const g = geom(); doc = { pageCount:1, fileName:'', boxes:[{ id:'b1', page:0, x:g.left, y:g.top, w:g.right - g.left, text:oldText, style:{}, shuffle:0, frames:{} }] }; }
+    if (oldText !== null) { use(S, { pageCount:1, boxes:[] }); const g = geom(); doc = { pageCount:1, fileName:'', boxes:[{ id:'b1', page:0, x:g.left, y:g.top, w:g.right - g.left, text:oldText, style:{}, shuffle:0, frames:{} }] }; doc = cleanDoc(doc); }
     else doc = sampleDoc(S);
   }
+  if (rawDoc && doc) doc = migrateDoc(doc, 1);
   return { S, doc };
 }
 let saveTimer = 0;

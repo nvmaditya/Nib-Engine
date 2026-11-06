@@ -3,6 +3,7 @@ import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS, uid } from '@/engine/doc.js';
 import { boxSettings, clearMeasureCache, frameRange, framesOf, geom, snapX, snapY, splitAtFrame, textWithoutFrame } from '@/engine/core.js';
 import type { Box, Seg, Settings } from '@/engine/types';
+import { continuedName, newBlockName, nextColor } from '@/features/doc/blocks';
 import { docAction, selectedBox, snapshot, toast, undoTo, update, useEditor, type ToastAction } from '@/store/editor';
 
 const get = useEditor.getState;
@@ -79,7 +80,7 @@ export function separateFrame(sg: Seg): void {
   if (!sg.idx) return;
   const snap = snapshot(), box = sg.box;
   update(s => {
-    const nb = splitAtFrame(box, sg, uid());
+    const nb: Box = { ...splitAtFrame(box, sg, uid()), kind: 'text', name: continuedName(box.name), color: nextColor(s.doc), from: box.id };
     s.doc.boxes.splice(s.doc.boxes.indexOf(box) + 1, 0, nb);
     s.selectedId = nb.id;
   }, { history: step('separate') });
@@ -104,7 +105,8 @@ export function addBoxAt(at: { page: number; x: number; y: number }, segs: Seg[]
       if (!busy(up)) { ny = up; break; }
     }
   }
-  const box: Box = { id: uid(), page, x: nx, y: ny, w, text: '', style: {}, shuffle: 0, frames: {} };
+  const doc = get().doc;
+  const box: Box = { id: uid(), page, x: nx, y: ny, w, text: '', style: {}, shuffle: 0, frames: {}, kind: 'text', name: newBlockName(doc, 'text'), color: nextColor(doc) };
   update(s => { s.doc.boxes.push(box); s.doc.pageCount = Math.max(s.doc.pageCount, page + 1); }, { history: step('add-block') });
   editBox(box.id);
 }
@@ -158,7 +160,11 @@ export function resetBoxStyle(): void {
 // An imported document becomes one block that flows over as many pages as it needs.
 export function writeOut(text: string, where: 'replace' | 'append', name: string | undefined, pages: number): { box: Box; undo: ToastAction } {
   const g = geom();
-  const box: Box = { id: uid(), page: 0, x: g.left, y: snapY(g.top - g.gap, g), w: g.right - g.left, text, style: {}, shuffle: 0, frames: {} };
+  const doc = get().doc;
+  const box: Box = {
+    id: uid(), page: 0, x: g.left, y: snapY(g.top - g.gap, g), w: g.right - g.left, text, style: {}, shuffle: 0, frames: {},
+    kind: 'text', name: where === 'replace' ? 'Main text' : newBlockName(doc, 'text'), color: where === 'replace' ? 0 : nextColor(doc),
+  };
   const snap = snapshot();
   update(s => {
     if (where === 'append') { box.page = pages; s.doc.boxes.push(box); s.doc.pageCount = pages + 1; }

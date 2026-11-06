@@ -6,7 +6,7 @@ import { cleanDoc, cleanSettings, loadSaved } from '@/engine/doc.js';
 import { clearMeasureCache, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Settings } from '@/engine/types';
 import { MEMORY_ID } from '@/app/route';
-import { putDoc, type DocRecord } from '@/store/documents';
+import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { forgetDb } from './db';
 import { History } from './history';
 
@@ -82,6 +82,7 @@ const snapshotState = () => { const s = get(); return JSON.stringify({ S: s.S, d
 const stored = (id: string | null): id is string => id !== null && id !== MEMORY_ID;
 
 export const SAVE_FAILED = 'Nib couldn’t save your last change.';
+export const SAVE_NEWER = 'This document was saved by a newer version of Nib. Reload the page to keep editing.';
 let saveSeq = 0;
 let failing: string | null = null; // the document whose saves are failing; one message per streak
 
@@ -96,16 +97,16 @@ async function saveNow(): Promise<void> {
   const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc };
   try {
     try { await putDoc(rec); } catch (e) {
-      if (seq !== saveSeq) throw e; // a newer save has started and carries newer content: no retry
+      if (e instanceof NewerDocumentError || seq !== saveSeq) throw e; // a newer save has started and carries newer content: no retry
       forgetDb(); // the connection may have been closed under us: open a fresh one and try once more
       await putDoc(rec);
     }
     if (failing === id) failing = null;
     if (seq === saveSeq && get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
-  } catch {
+  } catch (e) {
     if (seq !== saveSeq || get().docId !== id) return; // superseded, or its document is closed
     useEditor.setState({ saving: 'unsaved' });
-    if (failing !== id) { failing = id; toast(SAVE_FAILED); }
+    if (failing !== id) { failing = id; toast(e instanceof NewerDocumentError ? SAVE_NEWER : SAVE_FAILED); }
   }
 }
 
