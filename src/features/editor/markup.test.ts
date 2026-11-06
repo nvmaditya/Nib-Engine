@@ -70,6 +70,32 @@ test('every mix of marks over three runs parses back', () => {   // 4 × 16³ ca
     expect(partialUnderline(runs) && hasBold(runs)).toBe(true);           // and only for a partial-word underline on a line with bold
   }
 });
+// A doc with one paragraph made of these runs.
+const paraOf = (runs: Run[]): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph', content: runs.map(r => ({ type: 'text', text: r.text, ...(r.marks.length ? { marks: r.marks.map(type => ({ type })) } : {}) })) }] });
+test('what the serializer writes reads back to the same markup, whitespace marks and all', () => {
+  const unstable: string[] = [];
+  for (const T of [['ab', 'cd', 'ef'], ['ab ', 'cd', ' ef'], ['a b', 'c d', 'e f'], ['x*y', 'c_d', 'e=f'], ['ab', ' ', 'cd'], ['ab', '  ', 'cd'], [' ', 'ab', ' '], ['a', ' b', ' c']])
+    for (const a of SETS) for (const b of SETS) for (const c of SETS) {
+      const md = inlineToMarkup([{ text: T[0], marks: a }, { text: T[1], marks: b }, { text: T[2], marks: c }]);
+      const again = inlineToMarkup(piecesAsRuns(parseInline(md)));
+      if (again !== md && unstable.length < 5) unstable.push(`${JSON.stringify(md)} -> ${JSON.stringify(again)}`);
+    }
+  expect(unstable).toEqual([]);
+});
+test.each<[string, Run[]]>([
+  ['an underlined space before bold', [{ text: 'Read', marks: ['underline'] }, { text: ' ', marks: ['underline', 'bold'] }, { text: 'now', marks: ['bold'] }]],
+  ['a bold space before bold strike', [{ text: 'ab', marks: [] }, { text: ' ', marks: ['bold'] }, { text: 'cd', marks: ['bold', 'strike'] }]],
+  ['an underlined struck space', [{ text: 'x', marks: ['underline'] }, { text: ' ', marks: ['underline', 'strike'] }, { text: 'y', marks: ['strike'] }]],
+])('%s is written once and then stays the same', (_, runs) => {
+  const md = toMarkup(paraOf(runs));
+  expect(rt(md)).toBe(md);
+  expect(sameWords(parseInline(md), runs)).toBe(true);
+});
+test('a line with hundreds of marked words keeps every word', () => {
+  const ws = Array.from({ length: 650 }, (_, i) => ['**b' + i + '**', '*u' + i + '*', '==h' + i + '==', '~~s' + i + '~~'][i % 4]), line = ws.join(' ');
+  expect(rt(line)).toBe(line);
+  expect(plainText(line).split(' ')).toEqual(ws.map(w => w.replace(/[*=~]/g, '')));
+});
 test('both halves of a mid-paragraph split round-trip', () => { const b = box({ y: 1009, text: `${words(20)} **${words(15)}** ${words(5)}` }); const L = layoutOf(docOf(b)); const nb = splitAtFrame(b, L.segs.find(s => s.idx === 1)!, 'n'); expect(rt(b.text)).toBe(b.text); expect(rt(nb.text)).toBe(nb.text); });
 test('ordered markers', () => { expect(listMarkers({ kind: '1', delim: '.', start: 3 }, [0, 0, 1, 1, 0])).toEqual(['3.', '4.', '1.', '2.', '5.']); expect(listMarkers({ kind: 'a', delim: ')', start: 1 }, [0, 0])).toEqual(['a)', 'b)']); });
 test('plain text', () => expect(plainText('## The **water** _cycle_')).toBe('The water cycle'));

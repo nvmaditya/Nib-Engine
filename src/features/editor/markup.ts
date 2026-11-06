@@ -111,14 +111,34 @@ function sameWords(got: InlinePiece[], cs: Ch[]): boolean {
   return back.length === cs.length && cs.every((c, i) => c.ch === back[i].ch && (isWs(c.ch) || c.m === back[i].m));
 }
 
-/** Inline markup for these runs: the first way of writing them that the engine parses back the same. */
-export function inlineToMarkup(runs: Run[]): string {
-  const cs = chars(runs);
+// Whitespace carries no marks of its own: each space takes the marks shared by the nearest non-space
+// characters on both sides (none at either end of the line). The marks of the words alone then decide
+// what is written, so markup read back writes the same bytes again.
+function settle(cs: Ch[]): Ch[] {
+  const out = cs.map(c => ({ ...c }));
+  for (let i = 0; i < out.length; i++) {
+    if (!isWs(out[i].ch)) continue;
+    let a = i - 1, b = i + 1;
+    while (a >= 0 && isWs(cs[a].ch)) a--;
+    while (b < cs.length && isWs(cs[b].ch)) b++;
+    out[i].m = a >= 0 && b < cs.length ? cs[a].m & cs[b].m : 0;
+  }
+  return out;
+}
+
+// The first way of writing these characters that the engine parses back the same, if any.
+function chain(cs: Ch[]): string | null {
   for (const write of [() => nest(cs, 'star'), () => nest(cs, 'edge'), () => perWord(cs)]) {
     const md = write();
     if (sameWords(parseInline(md), cs)) return md;
   }
-  return perWord(widenUnderline(cs));
+  return null;
+}
+
+/** Inline markup for these runs: the first way of writing them that the engine parses back the same. */
+export function inlineToMarkup(runs: Run[]): string {
+  const cs = settle(chars(runs)), wide = settle(widenUnderline(cs));
+  return chain(cs) ?? chain(wide) ?? perWord(wide);
 }
 
 /* ---------- Lists ---------- */
