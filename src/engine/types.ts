@@ -12,9 +12,14 @@ export interface Settings {
 
 export interface FrameRect { x?: number; y?: number; w?: number }
 
+export type BlockKind = 'text' | 'header' | 'note';
+export type HeaderKey = 'name' | 'class' | 'subject' | 'roll' | 'date';
+export type HeaderFields = Partial<Record<HeaderKey, string>>;
+
 export interface Box {
   id: string; page: number; x: number; y: number; w: number; text: string;
   style: Partial<Settings>; shuffle: number; frames: Record<number, FrameRect>;
+  kind: BlockKind; name: string; color: number; fields?: HeaderFields; from?: string;
 }
 
 export interface EngineDoc { pageCount: number; boxes: Box[]; fileName: string }

@@ -84,3 +84,18 @@ test.each(cases)('%s is exactly one undo step', (_name, doc, run) => {
   expect(JSON.stringify(get().S)).toBe(S0);
   expect(get().canUndo).toBe(false);
 });
+
+test('a split-off block is a continued text block that remembers where it came from', () => {
+  open(long());
+  separateFrame(part(1));
+  const [a, b] = get().doc.boxes;
+  expect([b.kind, b.name, b.color, b.from]).toEqual(['text', 'Text block (continued)', 1, a.id]);
+});
+
+test('imports name the block Main text when replacing, else by the document', () => {
+  open(long());
+  writeOut('# T', 'replace', 'f.pdf', 1);
+  expect(get().doc.boxes.map(b => b.name)).toEqual(['Main text']);
+  writeOut('more', 'append', undefined, 1);
+  expect(get().doc.boxes.map(b => [b.name, b.color])).toEqual([['Main text', 0], ['Text block', 1]]);
+});

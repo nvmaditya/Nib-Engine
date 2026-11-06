@@ -3,18 +3,18 @@ import { toast as sonner } from 'sonner';
 import { MEMORY_ID } from '@/app/route';
 import { cleanSettings } from '@/engine/doc.js';
 import { resetBoxStyle } from '@/features/doc/actions';
-import { putDoc, type DocRecord } from '@/store/documents';
+import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { box, docOf, rec as mkRec, open } from '@/test/docs';
 import { SAVE_FAILED, closeDocument, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, undo, undoTo, update, useEditor } from './editor';
 
 const get = useEditor.getState;
 
-vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
+vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
 
 const rec = (title: string, text: string): DocRecord => ({
   id: 'd' + title, title, createdAt: 1, updatedAt: 1, settings: cleanSettings(null, false),
-  doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b1', page: 0, x: 100, y: 100, w: 300, text, style: {}, shuffle: 0, frames: {} }] },
+  doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b1', page: 0, x: 100, y: 100, w: 300, text, style: {}, shuffle: 0, frames: {}, kind: 'text', name: 'Text block', color: 0 }] },
 });
 
 beforeEach(async () => {
@@ -259,4 +259,16 @@ test('updates without a key are separate steps', () => {
   update(s => { s.doc.boxes[0].x = 2; });
   undo();
   expect(get().doc.boxes[0].x).toBe(1);
+});
+
+test('a save refused because a newer Nib wrote the document says so', async () => {
+  vi.mocked(putDoc).mockRejectedValue(new NewerDocumentError());
+  openDocument(rec('A', 'a'));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  await flushSave();
+  update(s => { s.doc.boxes[0].text = 'y'; });
+  await flushSave();
+  expect(sonner).toHaveBeenCalledTimes(1);
+  expect(sonner).toHaveBeenCalledWith('This document was saved by a newer version of Nib. Reload the page to keep editing.', undefined);
+  expect(putDoc).toHaveBeenCalledTimes(2); // no retry for a newer-version refusal
 });

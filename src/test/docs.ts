@@ -11,7 +11,7 @@ import { openDocument, useEditor } from '@/store/editor';
 export const get = useEditor.getState;
 
 export const box = (p: Partial<Box> = {}): Box =>
-  ({ id: 'b1', page: 0, x: 112, y: 110, w: 630, text: '', style: {}, shuffle: 0, frames: {}, ...p });
+  ({ id: 'b1', page: 0, x: 112, y: 110, w: 630, text: '', style: {}, shuffle: 0, frames: {}, kind: 'text', name: 'Text block', color: 0, ...p });
 
 export const docOf = (...b: Box[]): EngineDoc => ({ pageCount: 1, boxes: b, fileName: '' });
 

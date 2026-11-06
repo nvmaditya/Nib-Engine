@@ -2,7 +2,8 @@ import { IDBFactory, forceCloseDatabase } from 'fake-indexeddb';
 import { openDB, unwrap } from 'idb';
 import { beforeEach, expect, test } from 'vitest';
 import { DB_NAME, forgetDb, getDb, resetDbForTests } from './db';
-import { createDoc, deleteDoc, duplicateDoc, getDoc, listDocs, putDoc, titleFromDoc } from './documents';
+import { SAMPLE_BODY, SAMPLE_HEAD } from '@/engine/config.js';
+import { NewerDocumentError, createDoc, deleteDoc, duplicateDoc, getDoc, listDocs, putDoc, titleFromDoc } from './documents';
 
 beforeEach(async () => {
   await resetDbForTests();
@@ -63,4 +64,29 @@ test('another tab opening a newer version is not held up by this tab', async () 
   other.close();
   // This tab let go of its connection; it can't open the newer version, and says so instead of hanging.
   await expect(listDocs()).rejects.toMatchObject({ name: 'VersionError' });
+});
+
+const schemaOf = async (id: string) => ((await (await getDb()).get('documents', id)) as { schema?: number }).schema;
+
+test('documents are written with schema 2', async () => {
+  const a = await createDoc();
+  expect(await schemaOf(a.id)).toBe(2);
+  await putDoc({ ...a, title: 'B' });
+  expect(await schemaOf(a.id)).toBe(2);
+});
+
+test('a schema-1 record is migrated when read', async () => {
+  const a = await createDoc({ title: 'Old' });
+  const old = { ...a, doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b2', page: 0, x: 1, y: 1, w: 300, text: SAMPLE_HEAD }, { id: 'b1', page: 0, x: 1, y: 1, w: 300, text: SAMPLE_BODY }] } } as Record<string, unknown>;
+  delete old.schema;
+  await (await getDb()).put('documents', old);
+  expect((await getDoc(a.id))!.doc.boxes.map(b => b.name)).toEqual(['Header', 'Main text']);
+  expect((await listDocs())[0].doc.boxes.map(b => b.kind)).toEqual(['header', 'text']);
+});
+
+test('a record from a newer Nib is never overwritten', async () => {
+  const a = await createDoc({ title: 'New' });
+  await (await getDb()).put('documents', { ...a, schema: 3 });
+  await expect(putDoc({ ...a, title: 'Old tab' })).rejects.toBeInstanceOf(NewerDocumentError);
+  expect((await getDoc(a.id))!.title).toBe('New');
 });
