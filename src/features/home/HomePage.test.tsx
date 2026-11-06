@@ -9,11 +9,13 @@ vi.mock('@/store/documents', () => ({
   createDoc: vi.fn(async (init: any = {}) => { const r = { id: 'new1', title: init.title ?? 'Untitled', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }; mem.docs.unshift(r); return r; }),
   duplicateDoc: vi.fn(),
   deleteDoc: vi.fn(async (id: string) => { mem.docs = mem.docs.filter(d => d.id !== id); }),
-  putDoc: vi.fn(async () => {}),
+  putDoc: vi.fn(async (r: any) => { mem.docs = mem.docs.map(d => (d.id === r.id ? r : d)); }),
 }));
 
-const mk = (id: string, title: string, updatedAt = Date.now()) => ({ id, title, createdAt: 1, updatedAt, settings: {}, doc: { pageCount: 2, boxes: [], fileName: '' } });
-beforeEach(() => { mem.docs = [mk('a1', 'A'), mk('b2', 'B', new Date(2026, 10, 3).getTime())]; location.hash = '#/'; });
+const NOW = new Date(2026, 10, 6, 12).getTime();
+const mk = (id: string, title: string, updatedAt = NOW) => ({ id, title, createdAt: 1, updatedAt, settings: {}, doc: { pageCount: 2, boxes: [], fileName: '' } });
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); mem.docs = [mk('a1', 'A'), mk('b2', 'B', new Date(2026, 10, 3).getTime())]; location.hash = '#/'; });
 
 test('lists recent documents and opens one', async () => {
   render(<HomePage />);
@@ -38,4 +40,14 @@ test('delete asks first', async () => {
   await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
   await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
   await waitFor(() => expect(screen.queryByText('A')).not.toBeInTheDocument());
+});
+
+afterEach(() => { vi.useRealTimers(); });
+
+test('leaving a document shows its latest title', async () => {
+  const { openDocument, renameDocument } = await import('@/store/editor');
+  openDocument(mem.docs[0]);
+  renameDocument('Renamed');
+  render(<HomePage />);
+  expect(await screen.findByText('Renamed')).toBeInTheDocument();
 });

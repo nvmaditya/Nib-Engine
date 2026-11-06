@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileUp, MoreHorizontal } from 'lucide-react';
-import { navigate } from '@/app/route';
+import { MEMORY_ID, navigate } from '@/app/route';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { deleteDoc, duplicateDoc, listDocs, putDoc, type DocRecord } from '@/store/documents';
-import { toast } from '@/store/editor';
+import { flushSave, toast, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { createAndOpen, importIntoNewDoc, openImportPicker } from './actions';
 
@@ -28,8 +28,19 @@ export function HomePage() {
   const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<DocRecord | null>(null);
   const [over, setOver] = useState(false);
-  const reload = useCallback(async () => { try { setDocs(await listDocs()); } catch { setDocs([]); } }, []);
-  useEffect(() => { void reload(); }, [reload]);
+  const memory = useEditor(s => s.docId === MEMORY_ID);
+  const memTitle = useEditor(s => s.title);
+  const memDoc = useEditor(s => s.doc);
+  const reload = useCallback(async () => {
+    try {
+      await flushSave(); // the document just left may still have an edit waiting to be written
+      setDocs(await listDocs());
+    } catch { setDocs([]); }
+  }, []);
+  useEffect(() => { if (!memory) void reload(); }, [reload, memory]);
+  const shown: DocRecord[] | null = memory
+    ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: {} as DocRecord['settings'], doc: memDoc }]
+    : docs;
 
   // A file dropped anywhere on Home starts a new document with the import dialog open.
   const depth = useRef(0);
@@ -77,14 +88,14 @@ export function HomePage() {
 
         <section aria-labelledby="recent-h">
           <h2 id="recent-h" className="mb-3 text-sm font-semibold text-muted">Recent</h2>
-          {docs === null ? null : docs.length === 0 ? (
+          {shown === null ? null : shown.length === 0 ? (
             <div className="flex flex-col items-start gap-3 rounded-xl border border-line bg-surface p-6">
               <p className="text-muted">No documents yet.</p>
               <Button onClick={() => { void createAndOpen(); }}>New document</Button>
             </div>
           ) : (
             <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-              {docs.map(d => (
+              {shown.map(d => (
                 <li key={d.id} className="flex items-center gap-2 pr-2 hover:bg-surface-2">
                   <button type="button" onClick={() => open(d)} className="flex min-w-0 flex-1 items-center justify-between gap-4 px-4 py-3 text-left">
                     <span className="truncate font-semibold">{d.title}</span>
@@ -94,7 +105,7 @@ export function HomePage() {
                       <span>{relativeTime(d.updatedAt)}</span>
                     </span>
                   </button>
-                  <DropdownMenu>
+                  {!memory && <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" aria-label={`More for ${d.title}`}><MoreHorizontal /></Button>
                     </DropdownMenuTrigger>
@@ -103,7 +114,7 @@ export function HomePage() {
                       <DropdownMenuItem onSelect={() => { void doDuplicate(d); }}>Duplicate</DropdownMenuItem>
                       <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(d)}>Delete</DropdownMenuItem>
                     </DropdownMenuContent>
-                  </DropdownMenu>
+                  </DropdownMenu>}
                 </li>
               ))}
             </ul>

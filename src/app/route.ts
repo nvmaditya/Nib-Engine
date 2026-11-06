@@ -3,13 +3,16 @@ import { useSyncExternalStore } from 'react';
 export type Stage = 'write' | 'outline' | 'style' | 'export';
 export type Route = { name: 'home' } | { name: 'doc'; id: string; stage: Stage };
 
+/** The id of the in-memory document used when this device can't store anything. */
+export const MEMORY_ID = 'memory';
+
 const STAGES: readonly Stage[] = ['write', 'outline', 'style', 'export'];
 
 export function parseHash(hash: string): Route {
   const m = /^#\/d\/([^/]+)(?:\/([^/]*))?\/?$/.exec(hash);
   if (!m) return { name: 'home' };
   const stage = STAGES.find(s => s === m[2]) ?? 'write';
-  return { name: 'doc', id: decodeURIComponent(m[1]), stage };
+  try { return { name: 'doc', id: decodeURIComponent(m[1]), stage }; } catch { return { name: 'home' }; }
 }
 
 export function formatRoute(r: Route): string {

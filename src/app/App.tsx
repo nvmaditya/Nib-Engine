@@ -7,9 +7,7 @@ import { openDocument, toast, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { HomePage } from '@/features/home/HomePage';
 import LegacyDocument from './LegacyDocument.jsx';
-import { navigate, useRoute } from './route';
-
-const MEMORY_ID = 'memory';
+import { MEMORY_ID, navigate, useRoute } from './route';
 
 export function App() {
   const route = useRoute();
@@ -25,6 +23,7 @@ export function App() {
         const now = Date.now();
         openDocument({ id: MEMORY_ID, title: 'The Water Cycle', createdAt: now, updatedAt: now, settings: S, doc: sampleDoc(S) });
       }
+      if (!r.ok) navigate({ name: 'doc', id: MEMORY_ID, stage: 'write' });
       setBoot(r.ok ? 'ok' : 'memory');
     });
     return () => { live = false; };
@@ -33,7 +32,7 @@ export function App() {
   const wantId = route.name === 'doc' ? route.id : null;
   useEffect(() => {
     if (boot === 'pending' || wantId === null || wantId === openId) return;
-    if (boot === 'memory') { navigate({ name: 'home' }); return; }
+    if (boot === 'memory') { if (wantId !== MEMORY_ID) navigate({ name: 'home' }); return; }
     let live = true;
     void getDoc(wantId).then(rec => {
       if (!live) return;

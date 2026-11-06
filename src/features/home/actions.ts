@@ -1,19 +1,28 @@
 import { navigate } from '@/app/route';
 import { createDoc, type DocRecord } from '@/store/documents';
-import { openDocument, update } from '@/store/editor';
+import { openDocument, toast, update } from '@/store/editor';
 
 async function open(rec: DocRecord): Promise<void> {
   openDocument(rec);
   navigate({ name: 'doc', id: rec.id, stage: 'write' });
 }
 
+const CANT_CREATE = 'Nib can’t create documents on this device right now.';
+
+async function create(): Promise<DocRecord | null> {
+  try { return await createDoc({ title: 'Untitled' }); } catch { toast(CANT_CREATE); return null; }
+}
+
 export async function createAndOpen(): Promise<void> {
-  await open(await createDoc({ title: 'Untitled' }));
+  const rec = await create();
+  if (rec) await open(rec);
 }
 
 /** A new document, opened on Write, with the import dialog already showing this file. */
 export async function importIntoNewDoc(file: File): Promise<void> {
-  await open(await createDoc({ title: 'Untitled' }));
+  const rec = await create();
+  if (!rec) return;
+  await open(rec);
   update(s => { s.importOpen = true; s.importFile = file; }, { save: false, layout: false });
 }
 
