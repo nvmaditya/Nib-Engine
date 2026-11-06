@@ -1,10 +1,14 @@
 // Things people do to the document, ported from the handlers in Nib's earlier version, Longhand. The engine's boxes are called blocks in the interface.
 import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS, uid } from '@/engine/doc.js';
-import { boxSettings, clearMeasureCache, frameRange, framesOf, geom, snapX, snapY, splitAtFrame, textWithoutFrame } from '@/engine/core.js';
-import type { Box, Seg, Settings } from '@/engine/types';
-import { continuedName, newBlockName, nextColor } from '@/features/doc/blocks';
-import { docAction, selectedBox, snapshot, toast, undoTo, update, useEditor, type ToastAction } from '@/store/editor';
+import { boxSettings, clearMeasureCache, frameRange, framesOf, geom, snapY } from '@/engine/core.js';
+import type { BlockKind, Box, EngineDoc, HeaderKey, Seg, Settings } from '@/engine/types';
+import { newBlockName, nextColor } from '@/features/doc/blocks';
+import {
+  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage,
+  newBlock, newTextBlockAt, pageRefusal, removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, type Refused,
+} from '@/features/doc/model';
+import { docAction, selectedBox, snapshot, toast, undoTo, update, useEditor, type EditorState, type ToastAction, type UpdateOptions } from '@/store/editor';
 
 const get = useEditor.getState;
 const UI = { save: false, layout: false } as const;
@@ -54,73 +58,182 @@ export function newVariation(): void {
   else update(s => { s.S.seed = Math.floor(Math.random() * 1e9); }, { history: step('variation') });
 }
 
-export function deleteBox(id: string): void {
-  const snap = snapshot();
-  update(s => {
-    s.doc.boxes = s.doc.boxes.filter(b => b.id !== id);
-    if (s.selectedId === id) { s.selectedId = null; if (s.scope === 'box') s.scope = 'all'; }
-  }, { history: step('delete') });
-  toast('Block deleted.', undoTo(snap, id));
-}
+/* ---------- Restructuring (spec §4): one undo step each, and a message whose Undo puts it back ---------- */
 
-// Delete one page's part: only that page's text goes, and what follows moves up.
-export function deleteFrame(sg: Seg): void {
-  const box = sg.box;
-  if (framesOf(box).length < 2) { deleteBox(box.id); return; }
-  const snap = snapshot();
-  update(s => {
-    box.text = textWithoutFrame(box, sg.idx);
-    if (!box.text.trim()) { s.doc.boxes = s.doc.boxes.filter(b => b !== box); s.selectedId = null; }
-  }, { history: step('delete-part') });
-  toast(`Text on page ${sg.page + 1} deleted; what follows moves up.`, undoTo(snap, box.id));
-}
+const rule4 = (r: Refused): string => `Part ${r.part} of ${r.name} always follows the part before it. Split it off first to move it on its own.`;
+/** What a restructuring action can say: what it did (with Undo), why it won't (no Undo), or nothing. */
+type Said = string | { refused: string } | null;
+const refuse = (msg: string): Said => ({ refused: msg });
+const boxById = (id: string): Box | undefined => get().doc.boxes.find(b => b.id === id);
 
-// From this page's part on, the text becomes a block of its own.
-export function separateFrame(sg: Seg): void {
-  if (!sg.idx) return;
-  const snap = snapshot(), box = sg.box;
-  update(s => {
-    const nb: Box = { ...splitAtFrame(box, sg, uid()), kind: 'text', name: continuedName(box.name), color: nextColor(s.doc), from: box.id };
-    s.doc.boxes.splice(s.doc.boxes.indexOf(box) + 1, 0, nb);
-    s.selectedId = nb.id;
-  }, { history: step('separate') });
-  toast(`Page ${sg.page + 1} is now its own block.`, undoTo(snap, box.id));
+/** A selection on a block that is gone is cleared. */
+function keepSelection(s: EditorState): void {
+  if (!s.selectedId || s.doc.boxes.some(b => b.id === s.selectedId)) return;
+  s.selectedId = null;
+  if (s.scope === 'box') s.scope = 'all';
 }
 
 /**
- * A new, empty block at a point on a page. With `findFree`, it starts at the left margin and looks for
- * a free line near that point so it doesn't land on writing.
+ * Record the change just made in place to the open document as one step, or nothing at all when the
+ * document is the same as `before` (its snapshot). The store records a step from what it holds, so it
+ * holds a copy of the document from before while `update` records it, and then gets the changed one back.
  */
-export function addBoxAt(at: { page: number; x: number; y: number }, segs: Seg[], findFree = false): void {
-  const g = geom();
-  const w = Math.min(420, g.right - g.left);
-  const page = at.page;
-  const nx = snapX(findFree ? g.left : at.x, g, w);
-  let ny = snapY(at.y - get().S.gap * 0.6, g);
-  if (findFree) {
-    const busy = (yy: number) => segs.some(sg => sg.page === page && sg.x < nx + w && sg.x + sg.w > nx && sg.top < yy + g.gap * 1.3 && sg.bottom > yy + g.gap * 0.2);
-    for (let d = 0; d < 40; d++) {
-      const down = snapY(ny + d * g.gap, g), up = snapY(ny - d * g.gap, g);
-      if (!busy(down)) { ny = down; break; }
-      if (!busy(up)) { ny = up; break; }
-    }
+function commit(before: string, opts: UpdateOptions): boolean {
+  if (snapshot() === before) return false;
+  const s = get(), changed = s.doc;
+  s.doc = JSON.parse(before) as EngineDoc;
+  update(st => { st.doc = changed; keepSelection(st); }, opts);
+  return true;
+}
+
+/**
+ * One restructuring step: `run` changes the open document in place and says what it did. A change
+ * gets a message with Undo back to the document and selection from before; a refusal or an action
+ * that changed nothing records no step. (`run` moves the selection only once the change is made.)
+ */
+function restructure(kind: string, run: (s: EditorState) => Said): boolean {
+  const s = get(), before = snapshot(), sel = s.selectedId;
+  const said = run(s);
+  if (typeof said === 'string' && commit(before, { history: step(kind) })) {
+    toast(said, undoTo(before, sel));
+    return true;
   }
-  const doc = get().doc;
-  const box: Box = { id: uid(), page, x: nx, y: ny, w, text: '', style: {}, shuffle: 0, frames: {}, kind: 'text', name: newBlockName(doc, 'text'), color: nextColor(doc) };
-  update(s => { s.doc.boxes.push(box); s.doc.pageCount = Math.max(s.doc.pageCount, page + 1); }, { history: step('add-block') });
-  editBox(box.id);
+  if (said && typeof said === 'object') toast(said.refused);
+  return false;
 }
 
-export function addPage(pages: number): void {
-  update(s => { s.doc.pageCount = pages + 1; }, { history: step('add-page') });
+/** From part `idx` on, the block becomes a block of its own. On the first part ("Split from the rest") it splits where part 2 begins. */
+export function splitAt(boxId: string, idx: number): void {
+  restructure('split', s => {
+    const name = boxById(boxId)?.name, nb = splitBlock(s.S, s.doc, boxId, Math.max(1, idx));
+    if (!nb) return null;
+    s.selectedId = nb.id;
+    return `Split “${name}”: from page ${nb.page + 1} on, it’s a block of its own.`;
+  });
 }
 
-export function removePage(i: number, segs: Seg[]): void {
-  if (segs.some(sg => sg.page === i)) return;
-  update(s => {
-    for (const b of s.doc.boxes) if (b.page > i) b.page--;
-    s.doc.pageCount = Math.max(1, s.doc.pageCount - 1);
-  }, { history: step('remove-page') });
+export function joinBackBlock(boxId: string): void {
+  restructure('join', s => {
+    const name = boxById(boxId)?.name, t = joinBack(s.S, s.doc, boxId);
+    if (!t) return null;
+    s.selectedId = t.id;
+    return `Joined “${name}” back into “${t.name}”.`;
+  });
+}
+
+export function addToEndOf(boxId: string, targetId: string): void {
+  restructure('add-to-end', s => {
+    const name = boxById(boxId)?.name, t = appendToBlock(s.S, s.doc, boxId, targetId);
+    if (!t) return null;
+    s.selectedId = t.id;
+    return `Added “${name}” to the end of “${t.name}”.`;
+  });
+}
+
+/** Remove only the text part `idx` shows; the text after it moves up. A block's only part takes the block with it. */
+export function removePart(boxId: string, idx: number): void {
+  restructure('remove-part', s => {
+    const sg = layoutFor(s.S, s.doc).segs.find(x => x.box.id === boxId && x.idx === idx);
+    if (!sg) return null;
+    const name = sg.box.name, p = sg.page + 1, r = removeBlockPart(s.S, s.doc, boxId, idx);
+    if (r === 'part') return `Removed the page ${p} part of “${name}”. The text after it moves up.`;
+    return r === 'block' ? `Deleted “${name}”.` : null;
+  });
+}
+
+export function deleteBlock(boxId: string): void {
+  restructure('delete-block', s => { const b = removeBlock(s.doc, boxId); return b && `Deleted “${b.name}”.`; });
+}
+
+/** Move page `from` to position `to` (0-based); a page that only holds continuations is refused (rule 4). */
+export function movePageTo(from: number, to: number): void {
+  restructure('move-page', s => {
+    const r = movePage(s.S, s.doc, from, to);
+    if (!r.ok) return refuse(rule4(r));
+    const f = r.followed;
+    return `Moved page ${from + 1} to position ${to + 1}.`
+      + (f ? ` The rest of “${f.name}” followed it onto ${f.added ? 'a new page' : 'page'} ${f.page}.` : '');
+  });
+}
+
+/** Move a block's first part to another page, keeping its place there; a later part is refused (rule 4). */
+export function moveBlockTo(boxId: string, idx: number, page: number): void {
+  restructure('move-block', s => {
+    const b = boxById(boxId);
+    if (!b || (idx <= 0 && page >= layoutFor(s.S, s.doc).pages)) return null;
+    const r = moveBlockToPage(s.S, s.doc, boxId, idx, page);
+    return r.ok ? `Moved “${b.name}” to page ${page + 1}.` : refuse(rule4(r));
+  });
+}
+
+/** Merge page `i` into the page before; like moving it, a page that only holds continuations is refused. */
+export function mergeIntoPreviousPage(i: number): void {
+  restructure('merge-page', s => {
+    const no = pageRefusal(layoutFor(s.S, s.doc), s.doc, i);
+    if (no) return refuse(rule4(no));
+    const r = mergeIntoPrevious(s.S, s.doc, i);
+    return r && `Merged page ${i + 1} into page ${i}.` + (r.ranOn ? ' Text that runs on from it still continues on the next page.' : '');
+  });
+}
+
+export function deletePageAt(i: number): void {
+  restructure('delete-page', s => { deletePage(s.S, s.doc, i); return `Deleted page ${i + 1} and everything on it.`; });
+}
+
+/** A blank page at position `at` (0-based), or after the last page. */
+export function addPageAt(at?: number): void {
+  restructure('add-page', s => { insertPage(s.S, s.doc, at === undefined ? Infinity : Math.floor(at)); return 'Added a blank page.'; });
+}
+
+const ADDED: Record<BlockKind, string> = { text: 'Added a text block.', note: 'Added a margin note.', header: 'Added a header block.' };
+
+/** A new block, selected and ready to type in (a header is filled in through its fields). */
+export function addBlock(kind: BlockKind, page: number): void {
+  const added = restructure('add-block', s => {
+    const b = newBlock(s.S, s.doc, kind, page);
+    if (b === 'header-exists') return refuse('This document already has a header block.');
+    s.selectedId = b.id;
+    if (kind !== 'header') s.focusEditor++;
+    return ADDED[kind];
+  });
+  if (added) show('write', ['style', 'export']);
+}
+
+/** A new text block where the paper was double-clicked (page units). */
+export function addTextBlockAt(page: number, x: number, y: number): void {
+  restructure('add-block', s => {
+    const b = newTextBlockAt(s.S, s.doc, page, x, y);
+    s.selectedId = b.id; s.focusEditor++;
+    return ADDED.text;
+  });
+  show('write', ['style', 'export']);
+}
+
+/** Rename a block; an empty name keeps the old one. */
+export function renameBlock(boxId: string, name: string): void {
+  const b = boxById(boxId), n = name.trim().slice(0, 60).trim();
+  if (!b || !n) return;
+  const before = snapshot();
+  b.name = n;
+  commit(before, { history: step('rename'), layout: false });
+}
+
+/** Type into a header field: one undo step per burst of typing in that field. */
+export function setField(boxId: string, key: HeaderKey, value: string): void {
+  const b = boxById(boxId);
+  if (!b) return;
+  const before = snapshot();
+  setHeaderField(b, key, value);
+  commit(before, { history: 'field:' + boxId + ':' + key, layout: 'soon' });
+}
+
+/** Add or remove a header's Subject or Roll no. */
+export function showField(boxId: string, key: 'subject' | 'roll', on: boolean): void {
+  const b = boxById(boxId);
+  if (!b) return;
+  const before = snapshot();
+  showHeaderField(b, key, on);
+  commit(before, { history: step('field') });
 }
 
 // What the Style panel shows and edits: the selected block's own settings, or the document's.

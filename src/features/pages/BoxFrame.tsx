@@ -5,7 +5,7 @@ import { PAGE_W } from '@/engine/config.js';
 import { geom, segId, setFrame, snapX, snapY } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
 import { gesture, update } from '@/store/editor';
-import { deleteFrame, editFrame, select, separateFrame, shuffleBox, styleBox } from '@/features/doc/actions';
+import { deleteBlock, editFrame, removePart, select, shuffleBox, splitAt, styleBox } from '@/features/doc/actions';
 import { cn } from '@/lib/utils';
 import { drag } from './drag';
 
@@ -29,6 +29,10 @@ function scrollerOf(el: HTMLElement): HTMLElement | null {
 
 export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  // Delete takes only this page's part of a block on several pages, else the block. A header's text
+  // comes from its fields, so a header is deleted whole and never separated.
+  const header = sg.box.kind === 'header', byPart = multi && !header;
+  const del = () => (byPart ? removePart(sg.box.id, sg.idx) : deleteBlock(sg.box.id));
   const top = sg.top + gap * 0.1;
   useLayoutEffect(() => { if (!drag.active && ref.current) ref.current.style.transform = ''; });
 
@@ -115,7 +119,7 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
       case 'ArrowDown': return nudge({ y: snapY(sg.top + gap, g) });
       case 'ArrowLeft': return nudge({ x: snapX(sg.x - 4, g, sg.w) });
       case 'ArrowRight': return nudge({ x: snapX(sg.x + 4, g, sg.w) });
-      case 'Delete': case 'Backspace': e.preventDefault(); return deleteFrame(sg);
+      case 'Delete': case 'Backspace': e.preventDefault(); return del();
       case 'Enter': e.preventDefault(); return editFrame(sg);
       case 'Escape': select(null); ref.current?.blur(); return undefined;
       default: return undefined;
@@ -138,8 +142,8 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
         <button type="button" className="bt" onClick={() => editFrame(sg)}>Edit</button>
         <button type="button" className="bt" onClick={() => styleBox(sg.box.id)}>Style</button>
         <button type="button" className="bt" aria-label="New variation of this block" title="New variation of this block" onClick={() => shuffleBox(sg.box.id)}><Shuffle aria-hidden /></button>
-        {sg.idx > 0 && <button type="button" className="bt" title="Make this page’s part its own block" onClick={() => separateFrame(sg)}>Separate</button>}
-        <button type="button" className="bt danger" title={multi ? 'Delete the text on this page; the rest moves up' : 'Delete this block'} onClick={() => deleteFrame(sg)}>Delete</button>
+        {sg.idx > 0 && !header && <button type="button" className="bt" title="Make this page’s part its own block" onClick={() => splitAt(sg.box.id, sg.idx)}>Separate</button>}
+        <button type="button" className="bt danger" title={byPart ? 'Delete the text on this page; the rest moves up' : 'Delete this block'} onClick={del}>Delete</button>
       </div>
     </div>
   );
