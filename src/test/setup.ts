@@ -19,3 +19,7 @@ function makeContext() {
   });
 }
 HTMLCanvasElement.prototype.getContext = function () { return makeContext(); } as unknown as HTMLCanvasElement['getContext'];
+
+// jsdom has no ResizeObserver; Radix components and the page view observe sizes with it.
+class NoResizeObserver { observe() {} unobserve() {} disconnect() {} }
+if (typeof globalThis.ResizeObserver === 'undefined') globalThis.ResizeObserver = NoResizeObserver as unknown as typeof ResizeObserver;

@@ -20,7 +20,6 @@ export interface EditorState {
   fontTick: number;      // bumps when a font file arrives
   selectedId: string | null;
   scope: 'all' | 'box';  // the Style panel edits every block ('all') or only the selected one ('box')
-  tab: string;
   saving: 'saved' | 'saving' | 'unsaved';
   canUndo: boolean;
   canRedo: boolean;
@@ -42,7 +41,7 @@ const emptyDoc = (): EngineDoc => ({ pageCount: 1, boxes: [], fileName: '' });
 const longestBox = (doc: EngineDoc): Box | null =>
   doc.boxes.reduce<Box | null>((best, b) => (!best || b.text.length > best.text.length ? b : best), null);
 
-// Before any document is opened, show what the single-page version saved, so the old screen keeps working.
+// Until a document is opened the store holds what Longhand saved on this device (or the example); nothing shows it.
 const init = loadSaved();
 
 export const useEditor = create<EditorState>(() => ({
@@ -55,7 +54,6 @@ export const useEditor = create<EditorState>(() => ({
   fontTick: 0,
   selectedId: longestBox(init.doc)?.id ?? null,
   scope: 'all',
-  tab: 'write',
   saving: 'saved',
   canUndo: false,
   canRedo: false,
@@ -118,7 +116,7 @@ export function openDocument(rec: DocRecord): void {
   useEditor.setState({
     docId: rec.id, title: rec.title, S, doc,
     version: s.version + 1, layoutTick: s.layoutTick + 1,
-    selectedId: longestBox(doc)?.id ?? null, scope: 'all', tab: 'write', saving: 'saved',
+    selectedId: longestBox(doc)?.id ?? null, scope: 'all', saving: 'saved',
     importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null,
     ...historyFlags(),
   });
@@ -184,23 +182,3 @@ export const selectedBox = (): Box | null => {
   const s = get();
   return s.doc.boxes.find(b => b.id === s.selectedId) ?? null;
 };
-
-/** Compatibility for the components that still read `useStore()` and mutate the returned state. */
-export function useStore(): EditorState {
-  return useEditor(s => s);
-}
-
-/**
- * A live view of the current state: reads and writes go to whatever object the store holds now,
- * so code that does `state.doc = ...` or reads `state.selectedId` keeps working.
- */
-export const state: EditorState = new Proxy({} as EditorState, {
-  get: (_t, k) => Reflect.get(get(), k),
-  set: (_t, k, v) => Reflect.set(get(), k, v),
-  has: (_t, k) => k in get(),
-  ownKeys: () => Reflect.ownKeys(get()),
-  getOwnPropertyDescriptor: (_t, k) => {
-    const d = Reflect.getOwnPropertyDescriptor(get(), k);
-    return d && { ...d, configurable: true };
-  },
-});

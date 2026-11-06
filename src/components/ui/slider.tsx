@@ -2,7 +2,8 @@ import * as React from 'react';
 import { Slider as SliderPrimitive } from 'radix-ui';
 import { cn } from '@/lib/utils';
 
-function Slider({ className, defaultValue, value, min = 0, max = 100, ...props }: React.ComponentProps<typeof SliderPrimitive.Root>) {
+/** `thumbLabel` names the thumb (the element with the slider role) for assistive technology. */
+function Slider({ className, defaultValue, value, min = 0, max = 100, thumbLabel, ...props }: React.ComponentProps<typeof SliderPrimitive.Root> & { thumbLabel?: string }) {
   const thumbs = Array.isArray(value) ? value.length : Array.isArray(defaultValue) ? defaultValue.length : 1;
   return (
     <SliderPrimitive.Root
@@ -20,6 +21,7 @@ function Slider({ className, defaultValue, value, min = 0, max = 100, ...props }
       {Array.from({ length: thumbs }, (_, i) => (
         <SliderPrimitive.Thumb
           key={i}
+          aria-label={thumbLabel}
           data-slot="slider-thumb"
           className="block size-4 shrink-0 rounded-full border-2 border-primary bg-surface shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none"
         />

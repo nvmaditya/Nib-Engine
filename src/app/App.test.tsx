@@ -10,7 +10,6 @@ test('a missing document goes home with a message', async () => {
 
 test('blocked storage opens the document in memory and Home lists it', async () => {
   vi.resetModules();
-  vi.doMock('./LegacyDocument.jsx', () => ({ default: () => null }));
   vi.doMock('@/store/bootstrap', () => ({ bootstrapDocuments: async () => ({ ok: false }) }));
   const { App: Fresh } = await import('./App');
   location.hash = '';

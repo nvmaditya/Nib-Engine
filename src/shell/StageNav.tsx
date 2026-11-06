@@ -7,10 +7,10 @@ const ITEMS: { stage: Stage; label: string }[] = [
   { stage: 'export', label: '3 Export' },
 ];
 
-export function StageNav({ id, stage }: { id: string; stage: Stage }) {
+export function StageNav({ id, stage, className }: { id: string; stage: Stage; className?: string }) {
   const active: Stage = stage === 'outline' ? 'write' : stage;
   return (
-    <nav aria-label="Stages" className="flex items-center gap-1">
+    <nav aria-label="Stages" className={cn('flex items-center gap-1', className)}>
       {ITEMS.map(it => (
         <button
           key={it.stage}
@@ -18,7 +18,7 @@ export function StageNav({ id, stage }: { id: string; stage: Stage }) {
           aria-current={active === it.stage ? 'step' : undefined}
           onClick={() => navigate({ name: 'doc', id, stage: it.stage })}
           className={cn(
-            'h-8 rounded-md px-3 text-sm font-medium transition-colors',
+            'h-8 flex-1 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors md:flex-none',
             active === it.stage ? 'bg-primary-soft text-primary' : 'text-muted hover:bg-surface-2 hover:text-fg',
           )}
         >{it.label}</button>

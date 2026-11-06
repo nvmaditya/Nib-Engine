@@ -4,7 +4,6 @@ import { App } from './app/App';
 import { FONTS } from './engine/config.js';
 import '@fontsource-variable/figtree';
 import './styles/app.css';
-import './styles.css';
 import { initTheme } from './lib/theme';
 
 initTheme();

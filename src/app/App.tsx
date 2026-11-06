@@ -6,7 +6,7 @@ import { getDoc } from '@/store/documents';
 import { openDocument, toast, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { HomePage } from '@/features/home/HomePage';
-import LegacyDocument from './LegacyDocument.jsx';
+import { DocumentView } from '@/features/doc/DocumentView';
 import { MEMORY_ID, navigate, useRoute } from './route';
 
 export function App() {
@@ -52,7 +52,7 @@ export function App() {
         </div>
       )}
       <TopBar route={route} />
-      {route.name === 'home' ? <HomePage /> : openId === route.id ? <LegacyDocument /> : null}
+      {route.name === 'home' ? <HomePage /> : openId === route.id ? <DocumentView stage={route.stage} /> : null}
       <Toaster position="bottom-center" />
     </>
   );

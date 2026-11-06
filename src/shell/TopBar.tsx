@@ -29,23 +29,24 @@ function DocBar({ id, stage }: { id: string; stage: Extract<Route, { name: 'doc'
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-        className="h-8 w-40 border-transparent bg-transparent font-semibold shadow-none hover:border-line sm:w-56"
+        className="h-8 min-w-0 flex-1 border-transparent bg-transparent font-semibold shadow-none hover:border-line md:max-w-56"
       />
       <span className="hidden text-xs text-muted sm:inline" role="status">{saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : 'Not saved'}</span>
-      <div className="flex-1" />
-      <StageNav id={id} stage={stage} />
+      <div className="hidden flex-1 md:block" />
+      {/* Narrow screens: the stages get a full-width row of their own under the name. */}
+      <StageNav id={id} stage={stage} className="order-last w-full md:order-none md:w-auto" />
       <div className="flex items-center">
         <Button variant="ghost" size="icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!canUndo} onClick={undo}><Undo2 /></Button>
         <Button variant="ghost" size="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!canRedo} onClick={redo}><Redo2 /></Button>
       </div>
-      <Button onClick={() => navigate({ name: 'doc', id, stage: 'export' })}>Export</Button>
+      <Button className="hidden md:inline-flex" onClick={() => navigate({ name: 'doc', id, stage: 'export' })}>Export</Button>
     </>
   );
 }
 
 export function TopBar({ route }: { route: Route }) {
   return (
-    <header className="flex h-14 flex-none items-center gap-3 border-b border-line bg-surface px-4">
+    <header className="flex min-h-14 flex-none flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface px-4 py-2 md:h-14 md:flex-nowrap md:py-0">
       {route.name === 'home' ? (
         <>
           <a href="#/" className="flex items-center gap-2 text-xl"><Logo size={30} /><Wordmark /></a>
