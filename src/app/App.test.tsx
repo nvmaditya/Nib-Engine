@@ -5,6 +5,7 @@ import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { deleteBox } from '@/features/doc/actions';
 import { createDoc, getDoc } from '@/store/documents';
 import { flushSave, useEditor } from '@/store/editor';
+import { TopBar } from '@/shell/TopBar';
 import { App } from './App';
 import { parseHash } from './route';
 
@@ -111,4 +112,14 @@ test('blocked storage opens the document in memory and Home lists it', async () 
   location.hash = '#/';
   expect(await screen.findByText('The Water Cycle')).toBeInTheDocument();
   vi.doUnmock('@/store/bootstrap');
+});
+
+test('while a document opens its name field says Opening…', () => {
+  render(<TopBar route={{ name: 'doc', id: 'x', stage: 'write' }} ready={false} />);
+  const f = screen.getByRole('textbox', { name: 'Document name' });
+  expect(f).toBeDisabled();
+  expect(f).toHaveAttribute('placeholder', 'Opening…');
+  expect(f).toHaveValue('');
+  expect(screen.queryByText('Saved')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
 });

@@ -4,8 +4,8 @@ import { Move, Shuffle } from 'lucide-react';
 import { PAGE_W } from '@/engine/config.js';
 import { geom, segId, setFrame, snapX, snapY } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
-import { update } from '@/store/editor';
-import { deleteFrame, editFrame, select, separateFrame, shuffleBox, step, styleBox } from '@/features/doc/actions';
+import { gesture, update } from '@/store/editor';
+import { deleteFrame, editFrame, select, separateFrame, shuffleBox, styleBox } from '@/features/doc/actions';
 import { cn } from '@/lib/utils';
 import { drag } from './drag';
 
@@ -46,7 +46,7 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
     const st = { x: e.clientX, y: e.clientY, w: f0.w, moved: false };
     const grabDX = (e.clientX - r0.left) / s - f0.x, grabDY = (e.clientY - r0.top) / s - f0.y;
     const head = paperEl.querySelector<HTMLElement>(`.ink-layer canvas[data-id="${box.id}:${sg.idx}"]`);
-    const key = step(mode);
+    const edit = gesture(mode);
     let target = { page: f0.page, x: f0.x, y: f0.y }, raf = 0;
     try { el.setPointerCapture(e.pointerId); } catch { /* the pointer may already be gone */ }
     drag.active = mode === 'move';
@@ -59,7 +59,7 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
         const nw = Math.round(Math.max(60, Math.min(PAGE_W - f0.x - 6, f0.w + dx / s)));
         if (nw !== st.w) {
           st.w = nw;
-          if (!raf) raf = requestAnimationFrame(() => { raf = 0; update(() => setFrame(sg, { w: st.w }), { history: key }); });
+          if (!raf) raf = requestAnimationFrame(() => { raf = 0; edit(() => setFrame(sg, { w: st.w })); });
         }
         return;
       }
@@ -85,10 +85,10 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', end); el.removeEventListener('pointercancel', end);
       fig.classList.remove('dragging'); drag.active = false;
       if (raf) cancelAnimationFrame(raf);
-      if (st.moved) update(() => {
+      if (st.moved) edit(() => {
         if (mode === 'move' && ev.type === 'pointerup') setFrame(sg, cont ? { x: target.x, y: target.y } : target);
         if (mode === 'resize') setFrame(sg, { w: st.w });
-      }, { history: key });
+      });
       else { el.style.transform = ''; if (head) head.style.transform = ''; }
     };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);

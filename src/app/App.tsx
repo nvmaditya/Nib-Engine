@@ -3,7 +3,7 @@ import { Toaster } from 'sonner';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
 import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
-import { closeDocument, openDocument, toast, useEditor } from '@/store/editor';
+import { closeDocument, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { HomePage } from '@/features/home/HomePage';
 import { DocumentView } from '@/features/doc/DocumentView';
@@ -29,6 +29,8 @@ export function App() {
     return () => { live = false; };
   }, []);
 
+  useEffect(() => installFlushOnHide(), []);
+
   const wantId = route.name === 'doc' ? route.id : null;
   useEffect(() => {
     if (boot === 'pending' || wantId === null || wantId === openId) return;
@@ -53,7 +55,7 @@ export function App() {
           Nib can't save on this device right now. Your work stays until you close this tab.
         </div>
       )}
-      <TopBar route={route} />
+      <TopBar route={route} ready={route.name === 'doc' && openId === route.id} />
       {route.name === 'home' ? <HomePage /> : openId === route.id ? <DocumentView stage={route.stage} /> : null}
       <Toaster position="bottom-center" />
     </>
