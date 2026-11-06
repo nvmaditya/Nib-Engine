@@ -11,4 +11,4 @@ const faces = document.createElement('style');
 faces.textContent = FONTS.map(f => `@font-face{font-family:"LH ${f.id}";src:url("${base}fonts/${f.id}.woff") format("woff");font-weight:${f.weight};font-display:swap}`).join('\n');
 document.head.append(faces);
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')!).render(<App />);
