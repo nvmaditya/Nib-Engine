@@ -45,10 +45,12 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-fg: var(--fg);
+  /* Grey TEXT token. shadcn "muted" fill is secondary / surface-2 in Nib: never use bg-muted for fills. */
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
-  --color-accent: var(--accent);
+  --color-accent: var(--surface-2); /* shadcn accent = surface-2; the blue is primary */
+  --color-accent-foreground: var(--fg);
   --color-on-accent: var(--on-accent);
   --color-primary-soft: var(--accent-soft);
   --color-marker: var(--marker);
