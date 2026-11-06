@@ -1,0 +1,215 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`documents without collisions lay out as before 1`] = `
+[
+  [
+    [
+      "b2",
+      0,
+      0,
+      446,
+      320,
+      76,
+      3,
+      "0|110|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0Name:{}1Aarav{}1Mehta{}
+1|144|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0Class:{}18-B{}
+2|178|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0Date:{}129{}1October{}12026{}",
+    ],
+    [
+      "b1",
+      0,
+      0,
+      112,
+      630,
+      178,
+      17,
+      "0|212|1|{"size":38.64,"indent":0,"align":"center","marker":null,"quote":false,"headingUL":true,"level":1}|0The{}1Water{}1Cycle{}
+blank1:246
+2|280|1|{"size":32.568,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":true,"level":2}|0What{}1it{}1is{}
+3|314|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0The{}1water{}1cycle{}1is{}1the{}1continuous{"bold":true}1movement{"bold":true}1of{}1water{}1between{}1the{}1earth’s{}
+4|348|0|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0surface{}1and{}1the{}1atmosphere.{}1It{}1has{}1four{"ul":true}1main{"ul":true}1stages{"ul":true}.{}
+blank5:382
+6|416|1|{"size":27.6,"indent":34,"align":"left","marker":{"type":"text","text":"1."},"quote":false,"headingUL":false,"level":0}|0Evaporation:{}1the{}1sun{}1heats{}1water{}1in{}1oceans,{}1rivers{}1and{}1lakes.{}
+7|450|1|{"size":27.6,"indent":34,"align":"left","marker":{"type":"text","text":"2."},"quote":false,"headingUL":false,"level":0}|0Condensation:{}1water{}1vapour{}1cools{}1and{}1forms{}1clouds.{}
+8|484|1|{"size":27.6,"indent":34,"align":"left","marker":{"type":"text","text":"3."},"quote":false,"headingUL":false,"level":0}|0Precipitation:{}1water{}1falls{}1back{}1as{}1rain,{"hl":true}1snow{"hl":true}1or{"hl":true}1hail{"hl":true}.{}
+9|518|1|{"size":27.6,"indent":34,"align":"left","marker":{"type":"text","text":"4."},"quote":false,"headingUL":false,"level":0}|0Collection:{}1water{}1gathers{}1in{}1rivers,{}1lakes{}1and{}1underground.{}
+blank10:552
+11|586|1|{"size":27.6,"indent":26,"align":"left","marker":null,"quote":true,"headingUL":false,"level":0}|0The{}1same{}1water{}1has{}1been{}1moving{}1through{}1this{}1cycle{}1for{}1billions{}1of{}
+12|620|0|{"size":27.6,"indent":26,"align":"left","marker":null,"quote":true,"headingUL":false,"level":0}|0years.{}
+blank13:654
+14|688|1|{"size":32.568,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":true,"level":2}|0Why{}1it{}1matters{}
+15|722|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0Without{}1the{}1water{}1cycle,{}1plants{}1could{}1not{}1grow{}1and{}1rivers{"strike":true}1would{"strike":true}1fresh{}
+16|756|0|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0water{}1would{}1run{}1out.{}1It{}1also{}1helps{}1control{}1the{}1earth’s{}1temperature.{}",
+    ],
+  ],
+  [
+    [
+      "b1",
+      0,
+      0,
+      112,
+      630,
+      110,
+      28,
+      "0|144|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line1{}
+1|178|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line2{}
+2|212|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line3{}
+3|246|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line4{}
+4|280|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line5{}
+5|314|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line6{}
+6|348|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line7{}
+7|382|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line8{}
+8|416|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line9{}
+9|450|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line10{}
+10|484|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line11{}
+11|518|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line12{}
+12|552|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line13{}
+13|586|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line14{}
+14|620|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line15{}
+15|654|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line16{}
+16|688|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line17{}
+17|722|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line18{}
+18|756|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line19{}
+19|790|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line20{}
+20|824|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line21{}
+21|858|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line22{}
+22|892|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line23{}
+23|926|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line24{}
+24|960|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line25{}
+25|994|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line26{}
+26|1028|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line27{}
+27|1062|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line28{}",
+    ],
+    [
+      "b1",
+      1,
+      1,
+      112,
+      630,
+      110,
+      12,
+      "28|144|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line29{}
+29|178|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line30{}
+30|212|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line31{}
+31|246|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line32{}
+32|280|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line33{}
+33|314|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line34{}
+34|348|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line35{}
+35|382|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line36{}
+36|416|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line37{}
+37|450|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line38{}
+38|484|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line39{}
+39|518|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line40{}",
+    ],
+  ],
+  [
+    [
+      "b1",
+      0,
+      0,
+      112,
+      630,
+      1009,
+      2,
+      "0|1043|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}
+1|1077|0|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}",
+    ],
+    [
+      "b1",
+      1,
+      1,
+      112,
+      630,
+      110,
+      1,
+      "2|144|0|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}1word{}",
+    ],
+  ],
+  [
+    [
+      "b1",
+      0,
+      0,
+      112,
+      630,
+      110,
+      3,
+      "0|144|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line1{}
+1|178|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line2{}
+2|212|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line3{}",
+    ],
+    [
+      "b1",
+      1,
+      1,
+      112,
+      630,
+      110,
+      3,
+      "3|144|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line1{}
+4|178|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line2{}
+5|212|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line3{}",
+    ],
+  ],
+  [
+    [
+      "b1",
+      0,
+      0,
+      112,
+      630,
+      110,
+      28,
+      "0|144|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line1{}
+1|178|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line2{}
+2|212|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line3{}
+3|246|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line4{}
+4|280|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line5{}
+5|314|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line6{}
+6|348|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line7{}
+7|382|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line8{}
+8|416|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line9{}
+9|450|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line10{}
+10|484|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line11{}
+11|518|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line12{}
+12|552|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line13{}
+13|586|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line14{}
+14|620|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line15{}
+15|654|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line16{}
+16|688|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line17{}
+17|722|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line18{}
+18|756|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line19{}
+19|790|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line20{}
+20|824|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line21{}
+21|858|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line22{}
+22|892|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line23{}
+23|926|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line24{}
+24|960|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line25{}
+25|994|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line26{}
+26|1028|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line27{}
+27|1062|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line28{}",
+    ],
+    [
+      "b1",
+      1,
+      1,
+      200,
+      400,
+      178,
+      12,
+      "28|212|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line29{}
+29|246|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line30{}
+30|280|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line31{}
+31|314|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line32{}
+32|348|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line33{}
+33|382|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line34{}
+34|416|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line35{}
+35|450|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line36{}
+36|484|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line37{}
+37|518|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line38{}
+38|552|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line39{}
+39|586|1|{"size":27.6,"indent":0,"align":"left","marker":null,"quote":false,"headingUL":false,"level":0}|0line40{}",
+    ],
+  ],
+]
+`;
