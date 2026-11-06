@@ -12,6 +12,9 @@ import { History } from './history';
 
 export interface ToastAction { label: string; fn: () => void }
 
+/** A request to put the caret at a markup offset of a block; the editor showing that offset takes it. */
+export interface CaretRequest { boxId: string; offset: number; n: number }
+
 export interface EditorState {
   docId: string | null;
   title: string;
@@ -31,6 +34,7 @@ export interface EditorState {
   pendingSelect: [number, number] | null;
   touchedId: string | null;
   scrollToPage: number | null;
+  caret: CaretRequest | null;
 }
 
 export interface UpdateOptions {
@@ -65,6 +69,7 @@ export const useEditor = create<EditorState>(() => ({
   pendingSelect: null,
   touchedId: null,
   scrollToPage: null,
+  caret: null,
 }));
 use(init.S, init.doc);
 
@@ -150,7 +155,7 @@ export function openDocument(rec: DocRecord): void {
     docId: rec.id, title: rec.title, S, doc,
     version: s.version + 1, layoutTick: s.layoutTick + 1,
     selectedId: longestBox(doc)?.id ?? null, scope: 'all', saving: stored(rec.id) ? 'saved' : 'unsaved',
-    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null,
+    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null, caret: null,
     ...historyFlags(),
   });
 }
@@ -171,7 +176,7 @@ export function closeDocument(): Promise<void> {
   failing = null;
   useEditor.setState({
     docId: null, title: '', version: s.version + 1, selectedId: null, scope: 'all', saving: 'saved',
-    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null,
+    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null, caret: null,
     ...historyFlags(),
   });
   return saved;
@@ -252,6 +257,16 @@ export function docAction(label: string, fn: () => void): ToastAction {
 export const snapshot = (): string => JSON.stringify(get().doc);
 export const undoTo = (snap: string, sel: string | null): ToastAction =>
   docAction('Undo', () => update(s => { s.doc = cleanDoc(JSON.parse(snap)) ?? emptyDoc(); s.selectedId = sel; }, { history: 'undo-to' }));
+
+let caretSeq = 0;
+/** Ask for the caret at a markup offset of a block (a clicked word, the change an undo made). Also selects the block. */
+export function placeCaret(boxId: string, offset: number): void {
+  update(s => { s.caret = { boxId, offset, n: ++caretSeq }; s.selectedId = boxId; }, { save: false, layout: false });
+}
+/** An editor has placed the caret for request n: clear it, unless a newer request has come since. */
+export function consumeCaret(n: number): void {
+  if (get().caret?.n === n) useEditor.setState({ caret: null });
+}
 
 export const selectedBox = (): Box | null => {
   const s = get();

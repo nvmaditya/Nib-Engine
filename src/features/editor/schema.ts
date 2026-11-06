@@ -4,6 +4,7 @@ import { Blockquote } from '@tiptap/extension-blockquote';
 import { Highlight } from '@tiptap/extension-highlight';
 import { ListItem, OrderedList } from '@tiptap/extension-list';
 import StarterKit from '@tiptap/starter-kit';
+import { isBlankBackground } from './paste';
 
 const clampIndent = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.min(3, Math.trunc(n))) : 0);
 
@@ -52,25 +53,11 @@ const NibOrderedList = OrderedList.extend({
 // A note (quote) holds paragraphs only.
 const NibBlockquote = Blockquote.extend({ content: 'paragraph+' });
 
-/** Whether a CSS background value colours the text (not transparent, not white). */
-function isHighlightColor(value: string): boolean {
-  const v = value.trim().toLowerCase().replace(/\s*!important$/, '');
-  if (!v || /^(transparent|none|inherit|initial|unset|revert|auto|white|window|currentcolor)\b/.test(v) || v.startsWith('url(')) return false;
-  if (/^#(fff|ffff|ffffff|ffffffff)$/.test(v) || /^#([0-9a-f]{3}0|[0-9a-f]{6}00)$/.test(v)) return false;
-  const fn = /^(rgba?|hsla?)\((.*)\)$/.exec(v);
-  if (fn) {
-    const p = fn[2].split(/[\s,/]+/).filter(Boolean), alpha = p[3];
-    if (alpha != null && parseFloat(alpha) === 0) return false;
-    if (fn[1].startsWith('rgb') && p.slice(0, 3).every(x => x === '255' || x === '100%')) return false;
-    if (fn[1].startsWith('hsl') && p[2] === '100%') return false;
-  }
-  return true;
-}
-
-// Highlight also comes from pasted backgrounds (Google Docs, Word).
+// Highlight also comes from pasted backgrounds (Google Docs, Word): any but transparent, none or near white,
+// by the same rule pasting cleans with.
 const NibHighlight = Highlight.extend({
   parseHTML() {
-    const colour = (v: string) => (isHighlightColor(v) ? null : false);
+    const colour = (v: string) => (isBlankBackground(v) ? false : null);
     return [
       ...(this.parent?.() ?? []),
       { style: 'background-color', getAttrs: colour },
