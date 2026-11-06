@@ -1,14 +1,16 @@
 // Things people do to the document, ported from the handlers in Nib's earlier version, Longhand. The engine's boxes are called blocks in the interface.
 import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS, uid } from '@/engine/doc.js';
-import { boxSettings, clearMeasureCache, frameRange, framesOf, geom, snapY } from '@/engine/core.js';
+import { boxSettings, clearMeasureCache, frameRange, geom, snapY } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, HeaderKey, Seg, Settings } from '@/engine/types';
 import { newBlockName, nextColor } from '@/features/doc/blocks';
 import {
   appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage,
   newBlock, newTextBlockAt, pageRefusal, removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, type Refused,
 } from '@/features/doc/model';
-import { docAction, selectedBox, snapshot, toast, undoTo, update, useEditor, type EditorState, type ToastAction, type UpdateOptions } from '@/store/editor';
+import {
+  docAction, placeCaret, selectedBox, snapshot, toast, undoTo, update, useEditor, type EditorState, type ToastAction, type UpdateOptions,
+} from '@/store/editor';
 
 const get = useEditor.getState;
 const UI = { save: false, layout: false } as const;
@@ -29,16 +31,16 @@ export function select(id: string | null): void {
   update(s => { s.selectedId = id; if (!id && s.scope === 'box') s.scope = 'all'; }, UI);
 }
 
+/** Edit a block: the caret goes to the start of its text, in Write. */
 export function editBox(id: string): void {
-  update(s => { s.selectedId = id; s.focusEditor++; }, UI);
+  placeCaret(id, 0);
   show('write', ['style', 'export']);
 }
 
-// Edit one page's part: open the editor with just that page's text selected.
+/** Edit one page's part: the caret goes to where that page's text starts, in Write. */
 export function editFrame(sg: Seg): void {
   const box = sg.box;
-  const range = framesOf(box).length > 1 ? frameRange(box, sg.idx) : null;
-  update(s => { s.selectedId = box.id; s.focusEditor++; s.pendingSelect = range; }, UI);
+  placeCaret(box.id, frameRange(box, sg.idx)[0]);
   show('write', ['style', 'export']);
 }
 
@@ -60,7 +62,8 @@ export function newVariation(): void {
 
 /* ---------- Restructuring (spec §4): one undo step each, and a message whose Undo puts it back ---------- */
 
-const rule4 = (r: Refused): string => `Part ${r.part} of ${r.name} always follows the part before it. Split it off first to move it on its own.`;
+/** Why a later part can't move on its own (spec §4 rule 4). */
+export const rule4 = (r: Pick<Refused, 'part' | 'name'>): string => `Part ${r.part} of ${r.name} always follows the part before it. Split it off first to move it on its own.`;
 /** What a restructuring action can say: what it did (with Undo), why it won't (no Undo), or nothing. */
 type Said = string | { refused: string } | null;
 const refuse = (msg: string): Said => ({ refused: msg });
@@ -189,23 +192,27 @@ const ADDED: Record<BlockKind, string> = { text: 'Added a text block.', note: 'A
 
 /** A new block, selected and ready to type in (a header is filled in through its fields). */
 export function addBlock(kind: BlockKind, page: number): void {
+  let id = '';
   const added = restructure('add-block', s => {
     const b = newBlock(s.S, s.doc, kind, page);
     if (b === 'header-exists') return refuse('This document already has a header block.');
-    s.selectedId = b.id;
-    if (kind !== 'header') s.focusEditor++;
+    s.selectedId = id = b.id;
     return ADDED[kind];
   });
-  if (added) show('write', ['style', 'export']);
+  if (!added) return;
+  if (kind !== 'header') placeCaret(id, 0);
+  show('write', ['style', 'export']);
 }
 
 /** A new text block where the paper was double-clicked (page units). */
 export function addTextBlockAt(page: number, x: number, y: number): void {
-  restructure('add-block', s => {
+  let id = '';
+  const added = restructure('add-block', s => {
     const b = newTextBlockAt(s.S, s.doc, page, x, y);
-    s.selectedId = b.id; s.focusEditor++;
+    s.selectedId = id = b.id;
     return ADDED.text;
   });
+  if (added) placeCaret(id, 0);
   show('write', ['style', 'export']);
 }
 

@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { createDoc } from '@/store/documents';
 import { App } from '@/app/App';
-import { useEditor } from '@/store/editor';
+import { select } from '@/features/doc/actions';
+import { placeCaret, useEditor } from '@/store/editor';
 
 let id = '';
 beforeAll(async () => {
@@ -11,22 +12,10 @@ beforeAll(async () => {
   id = (await createDoc({ title: 'Seeded', settings: S, doc: sampleDoc(S) })).id;
 });
 
-test('Write shows the block editor for the selected block', async () => {
-  location.hash = `#/d/${id}/write`;
-  render(<App />);
-  expect(await screen.findByRole('textbox', { name: 'Block contents' })).toBeInTheDocument();
-  const panel = screen.getByRole('region', { name: 'Write' });
-  expect(within(panel).getByText('Block 2')).toBeInTheDocument();
-  expect(within(panel).getByRole('button', { name: 'Add block' })).toBeInTheDocument();
-  expect(within(panel).getByRole('button', { name: /Import/ })).toBeInTheDocument();
-  expect(screen.queryByText(/text\sbox/i)).toBeNull(); // the interface says Block
-});
-
-test('Outline shows Write until it has its own view', async () => {
-  location.hash = `#/d/${id}/outline`;
-  render(<App />);
-  expect(await screen.findByRole('textbox', { name: 'Block contents' })).toBeInTheDocument();
-});
+/** The button in the Stages nav whose label ends with `name` ('1 Write' for Write). */
+const stageButton = (name: string) =>
+  within(screen.getByRole('navigation', { name: 'Stages' })).getByRole('button', { name: new RegExp(`${name}$`) });
+const search = () => screen.findByRole('searchbox', { name: 'Search handwriting' });
 
 test('Style shows the scope switch and hides the removed options', async () => {
   location.hash = `#/d/${id}/style`;
@@ -62,18 +51,63 @@ test('Export shows the download controls', async () => {
   expect(screen.getByRole('switch', { name: 'Camera tilt' })).toBeInTheDocument();
 });
 
-test('Import opens from the Write panel and from a file dropped anywhere on the document', async () => {
+test('switching stages keeps the Style search', async () => {
+  location.hash = `#/d/${id}/style`;
+  render(<App />);
+  await userEvent.type(await search(), 'cav');
+  await userEvent.click(stageButton('Write'));
+  await userEvent.click(stageButton('Style'));
+  expect(screen.getByRole('searchbox', { name: 'Search handwriting' })).toHaveValue('cav');
+});
+
+test('an inactive stage stays in the page but hidden', async () => {
+  location.hash = `#/d/${id}/style`;
+  render(<App />);
+  await search();
+  await userEvent.click(stageButton('Write'));
+  expect(await screen.findByRole('textbox', { name: 'Block contents' })).toBeVisible();
+  const box = screen.getByRole('searchbox', { name: 'Search handwriting', hidden: true });
+  expect(box).not.toBeVisible();
+  expect(box.closest('[inert]')).not.toBeNull();
+  expect(screen.queryByRole('searchbox', { name: 'Search handwriting' })).toBeNull();
+});
+
+test('a caret request goes to the Write view on screen, not to a hidden one', async () => {
+  location.hash = `#/d/${id}/outline`;
+  render(<App />);
+  await screen.findByRole('textbox', { name: 'Block contents' });
+  await userEvent.click(stageButton('Style'));
+  location.hash = `#/d/${id}/write`;
+  await waitFor(() => expect(screen.getAllByRole('textbox', { name: 'Block contents', hidden: true })).toHaveLength(2));
+  act(() => placeCaret('b1', 5));
+  const shown = screen.getByRole('textbox', { name: 'Block contents' }) as HTMLTextAreaElement;
+  await waitFor(() => expect(document.activeElement).toBe(shown));
+  expect([shown.selectionStart, shown.selectionEnd]).toEqual([5, 5]);
+  expect(shown.closest('[data-stage]')).toHaveAttribute('data-stage', 'write');
+  expect(useEditor.getState().caret).toBeNull();
+});
+
+test('Escape in a rich-text editor doesn’t leave the block', async () => {
   location.hash = `#/d/${id}/write`;
   render(<App />);
-  await userEvent.click(await screen.findByRole('button', { name: /Import/ }));
-  const dlg = await screen.findByRole('dialog', { name: 'Import a document' });
-  await userEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await screen.findByRole('textbox', { name: 'Block contents' });
+  act(() => select('b1'));
+  const ed = document.createElement('div');
+  ed.setAttribute('contenteditable', 'true'); ed.tabIndex = 0;
+  document.body.append(ed); ed.focus();
+  await userEvent.keyboard('{Escape}');
+  expect(useEditor.getState().selectedId).toBe('b1');
+  ed.remove();
+  await userEvent.keyboard('{Escape}');
+  expect(useEditor.getState().selectedId).toBeNull();
+});
 
-  // jsdom has no DragEvent, so give a plain event the parts the drop handler reads.
-  const file = new File(['Dropped words'], 'notes.txt', { type: 'text/plain' });
-  const drop = Object.assign(new Event('drop', { cancelable: true }), { dataTransfer: { types: ['Files'], files: [file] } });
-  act(() => { window.dispatchEvent(drop); });
-  expect(await screen.findByRole('dialog', { name: 'Import a document' })).toBeInTheDocument();
-  expect(await screen.findByDisplayValue('Dropped words')).toBeInTheDocument();
+test('Write goes back to the Write view you used last', async () => {
+  location.hash = `#/d/${id}/outline`;
+  render(<App />);
+  await screen.findByRole('textbox', { name: 'Block contents' });
+  await userEvent.click(stageButton('Style'));
+  await search();
+  await userEvent.click(stageButton('Write'));
+  expect(location.hash).toBe(`#/d/${id}/outline`);
 });

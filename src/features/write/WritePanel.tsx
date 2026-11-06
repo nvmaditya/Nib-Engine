@@ -4,7 +4,8 @@ import { Bold, FileUp, Highlighter, Plus, Strikethrough, Underline } from 'lucid
 import { framesOf, hasOwnStyle } from '@/engine/core.js';
 import { Button } from '@/components/ui/button';
 import { openImport, pagesApi } from '@/features/doc/actions';
-import { selectedBox, update, useEditor } from '@/store/editor';
+import { useStageActive } from '@/features/doc/StageHost';
+import { consumeCaret, selectedBox, update, useEditor } from '@/store/editor';
 
 type Cmd = 'bold' | 'ul' | 'strike' | 'hl' | 'h1' | 'h2' | 'bullet' | 'num' | 'quote' | 'page';
 type Tool = { cmd: Cmd; body: ReactNode; title?: string; label?: string };
@@ -31,30 +32,25 @@ const HELP: [ReactNode, string][] = [
   [<code>\newpage</code>, 'Continue on the next page'],
 ];
 
-// The editor is focused when something asks for it (Edit on a block), not every time the panel appears.
-let focusHandled = 0;
-
 export function WritePanel() {
   const ta = useRef<HTMLTextAreaElement>(null);
-  const focusEditor = useEditor(s => s.focusEditor);
+  const active = useStageActive();
+  const caret = useEditor(s => s.caret);
   const boxes = useEditor(s => s.doc.boxes);
   useEditor(s => s.version);
   const box = selectedBox();
 
-  // Opening a block (or one page's part of it) focuses the editor and selects what was asked for.
+  // A caret request for the block shown here (a clicked word, Edit, a new block) focuses the editor
+  // there, but only in the view on screen: a hidden one leaves the request to the one shown.
+  const boxId = box?.id;
   useEffect(() => {
-    if (focusEditor === focusHandled || !ta.current) return;
-    focusHandled = focusEditor;
-    const el = ta.current, sel = useEditor.getState().pendingSelect;
-    const t = setTimeout(() => {
-      el.focus();
-      if (sel) {
-        el.setSelectionRange(sel[0], sel[0]); el.blur(); el.focus(); el.setSelectionRange(sel[0], sel[1], 'backward');
-        update(s => { s.pendingSelect = null; }, { save: false, layout: false });
-      }
-    }, 30);
-    return () => clearTimeout(t);
-  }, [focusEditor]);
+    const el = ta.current;
+    if (!active || !caret || !el || caret.boxId !== boxId) return;
+    consumeCaret(caret.n);
+    const at = Math.min(caret.offset, el.value.length);
+    el.focus();
+    el.setSelectionRange(at, at);
+  }, [active, caret, boxId]);
 
   const setText = (value: string) => {
     const b = selectedBox();

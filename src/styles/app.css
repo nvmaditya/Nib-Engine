@@ -119,8 +119,8 @@
 }
 
 /* ---------- The handwritten pages ----------
-   Canvases, block frames and the scan preview. The paper is always light, so the frames use fixed colours
-   (the light accent) in both themes. */
+   Canvases, block frames and the scan preview. The paper is always light, and block colours are the
+   same in both themes. */
 @layer components {
   .sheet {
     margin: 0;
@@ -132,6 +132,7 @@
   .paper {
     position: relative;
     border-radius: 1px;
+    background: #fbfbf8; /* until its canvas is drawn (a sheet far from view isn't) */
     box-shadow: var(--sheet-shadow);
   }
   .paper .paper-bg {
@@ -186,32 +187,33 @@
     filter: grayscale(1) brightness(1.22) contrast(2.6);
   }
 
-  /* A block's part on a page */
+  /* A block's part on a page: outline and name tag in the block's colour (--bc, set inline). A margin
+     note's frame turns with its writing through `rotate`; a drag moves it with `transform`. */
   .block-frame {
     position: absolute;
-    border: 1.5px dashed transparent;
-    border-radius: 5px;
-    cursor: move;
+    border: 1.5px dashed color-mix(in srgb, var(--bc) 36%, transparent);
+    border-radius: 3px;
+    cursor: grab;
     touch-action: pan-x pan-y;
     outline: none;
   }
-  .paper:hover .block-frame {
-    border-color: rgba(47, 67, 208, 0.28);
-  }
-  @media (hover: none) {
-    .block-frame {
-      border-color: rgba(47, 67, 208, 0.2);
-    }
+  .block-frame:hover {
+    border-style: solid;
+    border-color: color-mix(in srgb, var(--bc) 70%, transparent);
   }
   .block-frame.selected {
-    border: 1.5px solid #2f43d0;
-    background: rgba(47, 67, 208, 0.035);
+    border: 2px solid var(--bc);
+    background: color-mix(in srgb, var(--bc) 5%, transparent);
   }
   .block-frame.cont.selected {
     border-style: dashed;
   }
+  .sheet.dragging .block-frame.selected {
+    cursor: grabbing;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
   .block-frame:focus-visible {
-    box-shadow: 0 0 0 3px rgba(47, 67, 208, 0.35);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--bc) 40%, transparent);
   }
   .block-frame .ph {
     position: absolute;
@@ -236,7 +238,7 @@
     margin-top: -15px;
     border-radius: 7px;
     background: #fff;
-    border: 1.5px solid #2f43d0;
+    border: 1.5px solid var(--bc);
     cursor: ew-resize;
     display: none;
     touch-action: none;
@@ -249,58 +251,62 @@
   .block-frame.selected .rz {
     display: block;
   }
-  .block-tools {
+
+  /* The name tag: grip, name, part and (in Write) the block's menu. Shown on hover, focus or selection. */
+  .block-frame .tag {
     position: absolute;
-    right: -2px;
+    left: -2px;
     bottom: 100%;
     z-index: 3;
-    display: none;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 4px;
-    width: max-content;
-    max-width: min(470px, calc(100vw - 24px));
-    padding-bottom: 8px;
-  }
-  .block-frame.tools-below .block-tools {
-    bottom: auto;
-    top: 100%;
-    padding: 8px 0 0;
-  }
-  .block-frame.selected.touched .block-tools,
-  .block-frame.selected:hover .block-tools,
-  .block-frame.selected:focus-within .block-tools {
     display: flex;
-  }
-  .block-tools .bt {
-    display: inline-flex;
     align-items: center;
-    gap: 5px;
-    min-height: 32px;
-    padding: 4px 10px;
-    border-radius: 8px;
-    border: 1px solid #d2d2d8;
-    background: #fff;
-    color: #16161a;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
+    gap: 3px;
+    height: 20px;
+    padding: 0 6px 0 2px;
+    border-radius: 4px 4px 0 0;
+    background: var(--bc);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1;
     white-space: nowrap;
-    box-shadow: 0 2px 6px rgba(20, 25, 40, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
   }
-  .block-tools .bt:hover {
-    background: #f1f1f3;
+  .block-frame:hover .tag,
+  .block-frame:focus-within .tag,
+  .block-frame.selected .tag {
+    opacity: 1;
+    pointer-events: auto;
   }
-  .block-tools .bt svg {
-    width: 14px;
-    height: 14px;
-  }
-  .block-tools .bt.grip {
-    cursor: move;
+  .block-frame .tag .grip {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: none;
+    color: inherit;
+    opacity: 0.85;
+    cursor: grab;
     touch-action: none;
   }
-  .block-tools .bt.danger {
-    color: #d92d3a;
+  .block-frame .tag .grip svg {
+    width: 13px;
+    height: 13px;
+  }
+  .block-frame .tag-name {
+    font-weight: 600;
+  }
+  .block-frame .tag-sep,
+  .block-frame .tag-part {
+    font-weight: 500;
+    opacity: 0.85;
+  }
+  .block-frame .tag-menu {
+    display: contents;
   }
 
   /* Paper swatches in the Style panel (paper colours, the same in both themes) */
