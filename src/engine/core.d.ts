@@ -35,6 +35,12 @@ export function boxSettings(box: Box | null | undefined): Settings;
 export function hasOwnStyle(box: Box | null | undefined): boolean;
 export function withBox<T>(box: Box, fn: () => T): T;
 export function computeLayout(): Layout;
+/** A margin note's letter size, against the document's. */
+export const NOTE_SCALE: number;
+/** A part's tilt in radians: 0, or between −3° and −1° for a margin note. */
+export function segTilt(sg: Seg): number;
+/** The word under a point (page units) on a part, or null when the part has no rows. */
+export function hitWord(sg: Seg, x: number, y: number): RowSrc | null;
 export function renderSegment(canvas: HTMLCanvasElement, sg: Seg, scale: number): void;
 export function segBounds(sg: Seg): Bounds;
 export function paintPaper(canvas: HTMLCanvasElement, i: number, pxW: number): void;

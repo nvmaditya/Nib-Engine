@@ -24,9 +24,16 @@ export interface Box {
 
 export interface EngineDoc { pageCount: number; boxes: Box[]; fileName: string }
 
+/** One ruled line a part writes on; `src` is where its words start in the block's text (line, word). */
+export interface Row { kind: 'text' | 'blank' | 'hr'; ruleY: number; src: { li: number; tok: number } }
+
 export interface Seg {
   box: Box; page: number; idx: number; x: number; w: number; top: number; bottom: number;
-  rows: unknown[];
+  /** Where the part would go if nothing pushed it: the block's y for part 1, a later part's own y or the top line. */
+  storedTop: number;
+  /** A block above pushed it down, or onto a later page (spec §4 rule 2). */
+  pushed: boolean;
+  rows: Row[];
 }
 
 export interface Layout { segs: Seg[]; pages: number }
