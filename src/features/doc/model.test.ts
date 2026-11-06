@@ -14,12 +14,12 @@ const m = () => box({ id: 'm', name: 'Main text', text: lines(40) }); // pages 1
 test('split makes “Main text (continued)” from page 2 on', () => { const d = docOf(m()); const n = splitBlock(S, d, 'm', 1)!; expect([n.name, n.from, n.color, n.page, n.y, n.text.split('\n')[0]]).toEqual(['Main text (continued)', 'm', 1, 1, 110, 'line29']); expect(d.boxes[0].text).toBe(lines(28)); expect(d.boxes.map(b => b.id)).toEqual(['m', n.id]); });
 test('join back restores the text', () => { const d = docOf(m()); const n = splitBlock(S, d, 'm', 1)!; joinBack(S, d, n.id); expect(d.boxes).toHaveLength(1); expect(d.boxes[0].text).toBe(lines(40)); });
 test('add to the end of another block', () => { const d = docOf(m(), box({ id: 'n', page: 1, y: 600, text: 'extra' })); appendToBlock(S, d, 'n', 'm'); expect(d.boxes.map(b => b.id)).toEqual(['m']); expect(d.boxes[0].text).toBe(lines(40) + '\nextra'); });
-test('removing the page 2 part', () => { const d = docOf(m()); expect(removeBlockPart(S, d, 'm', 1)).toBe('part'); expect(d.boxes[0].text).toBe(lines(28) + '\n'); });
+test('removing the page 2 part', () => { const d = docOf(m()); expect(removeBlockPart(S, d, 'm', 1)).toBe('part'); expect(d.boxes[0].text).toBe(lines(28)); expect(layoutFor(S, d).pages).toBe(1); });
 test('rule 3: moving a page takes its blocks, and the rest follows onto a new page', () => { const d = docOf(m()); expect(movePage(S, d, 0, 1)).toEqual({ ok: true, followed: { name: 'Main text', page: 3, added: true } }); const L = layoutFor(S, d); expect(L.pages).toBe(3); expect(L.segs.filter(s => s.page === 0)).toHaveLength(0); expect(d.boxes[0].page).toBe(1); });
 test('a page that only holds a continuation can’t move', () => { const d = docOf(m()), before = JSON.stringify(d); expect(movePage(S, d, 1, 0)).toEqual({ ok: false, part: 2, name: 'Main text' }); expect(JSON.stringify(d)).toBe(before); });
 test('rule 4: a continuation can’t move to another page; a start can', () => { const d = docOf(m(), box({ id: 'n', y: 600, text: 'n' })); expect(moveBlockToPage(S, d, 'm', 1, 0)).toEqual({ ok: false, part: 2, name: 'Main text' }); expect(moveBlockToPage(S, d, 'n', 0, 1)).toEqual({ ok: true }); expect([d.boxes[1].page, d.boxes[1].y]).toEqual([1, 600]); });
 test('merge into the previous page', () => { const d = { ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1, y: 400 })), pageCount: 2 }; expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false }); expect([d.boxes[1].page, d.pageCount]).toEqual([0, 1]); const e = docOf(m(), box({ id: 'c', page: 1, y: 600 })); expect(mergeIntoPrevious(S, e, 1)).toEqual({ ranOn: true }); expect([e.boxes[1].page, e.boxes[1].y]).toEqual([0, 600]); expect(layoutFor(S, e).pages).toBe(2); });
-test('delete a page and what is on it', () => { const d = docOf(m(), box({ id: 'c', page: 1, y: 600 })); deletePage(S, d, 1); expect(d.boxes.map(b => b.id)).toEqual(['m']); expect(d.boxes[0].text).toBe(lines(28) + '\n'); expect(d.pageCount).toBe(1); });
+test('delete a page and what is on it', () => { const d = docOf(m(), box({ id: 'c', page: 1, y: 600 })); deletePage(S, d, 1); expect(d.boxes.map(b => b.id)).toEqual(['m']); expect(d.boxes[0].text).toBe(lines(28)); expect(d.pageCount).toBe(1); expect(layoutFor(S, d).pages).toBe(1); });
 test('insert a page', () => { const d = { ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1 })), pageCount: 2 }; insertPage(S, d, 1); expect([d.boxes[1].page, d.pageCount]).toEqual([2, 3]); });
 test('new blocks', () => { const d = docOf(); const t = newBlock(S, d, 'text', 0) as Box; expect([t.name, t.x, t.y, t.w]).toEqual(['Main text', 112, 110, 420]); const n = newBlock(S, d, 'note', 0) as Box; expect([n.kind, n.name, n.x, n.w]).toEqual(['note', 'Margin note', 522, 220]); const h = newBlock(S, d, 'header', 0) as Box; expect([h.page, h.x, h.y, h.w, h.text]).toEqual([0, 446, 76, 320, 'Name:\nClass:\nDate: ' + today()]); expect(newBlock(S, d, 'header', 0)).toBe('header-exists'); expect((newBlock(S, d, 'text', 0) as Box).name).toBe('Text block'); });
 test('today', () => expect(today(new Date(2026, 10, 6))).toBe('6 November 2026'));
@@ -65,6 +65,15 @@ test('removing the only part, or all that is left, removes the block', () => {
   expect(d.boxes).toHaveLength(0);
   expect(removeBlockPart(S, d, 'b', 0)).toBeNull();
 });
+test('removing a last part takes the line break before it, so no blank part is left', () => {
+  const d = docOf(box({ id: 'm', text: lines(28) + '\n' })); // page 2 holds only the blank last line
+  expect(layoutFor(S, d).pages).toBe(2);
+  expect(removeBlockPart(S, d, 'm', 1)).toBe('part');
+  expect([d.boxes[0].text, layoutFor(S, d).pages]).toEqual([lines(28), 1]);
+  const e = docOf(box({ id: 'm', text: lines(27) + '\n\n' + lines(3, 'x') })); // page 1 ends with a blank line of its own
+  removeBlockPart(S, e, 'm', 1);
+  expect([e.boxes[0].text, layoutFor(S, e).pages]).toEqual([lines(27) + '\n', 1]);
+});
 test('moving a page onto an existing page reports where the rest went', () => {
   const d = { ...docOf(m()), pageCount: 3 };
   expect(movePage(S, d, 0, 1)).toEqual({ ok: true, followed: { name: 'Main text', page: 3, added: false } });
@@ -102,7 +111,7 @@ test('deleting a page takes a block pushed onto it, not one pushed off it', () =
   expect(layoutFor(S, pushed()).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['a', 1], ['b', 1]]);
   const d = pushed();
   deletePage(S, d, 1);
-  expect(d.boxes.map(b => [b.id, b.text])).toEqual([['a', lines(28) + '\n']]);
+  expect(d.boxes.map(b => [b.id, b.text])).toEqual([['a', lines(28)]]);
   const e = pushed();
   deletePage(S, e, 0);
   expect(e.boxes.map(b => [b.id, b.page, b.y])).toEqual([['b', 0, 900]]);

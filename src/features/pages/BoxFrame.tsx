@@ -29,8 +29,10 @@ function scrollerOf(el: HTMLElement): HTMLElement | null {
 
 export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  // Delete takes only this page's part of a block on several pages, else the block.
-  const del = () => (multi ? removePart(sg.box.id, sg.idx) : deleteBlock(sg.box.id));
+  // Delete takes only this page's part of a block on several pages, else the block. A header's text
+  // comes from its fields, so a header is deleted whole and never separated.
+  const header = sg.box.kind === 'header', byPart = multi && !header;
+  const del = () => (byPart ? removePart(sg.box.id, sg.idx) : deleteBlock(sg.box.id));
   const top = sg.top + gap * 0.1;
   useLayoutEffect(() => { if (!drag.active && ref.current) ref.current.style.transform = ''; });
 
@@ -140,8 +142,8 @@ export function BoxFrame({ sg, s, gap, selected, touched, multi }: Props) {
         <button type="button" className="bt" onClick={() => editFrame(sg)}>Edit</button>
         <button type="button" className="bt" onClick={() => styleBox(sg.box.id)}>Style</button>
         <button type="button" className="bt" aria-label="New variation of this block" title="New variation of this block" onClick={() => shuffleBox(sg.box.id)}><Shuffle aria-hidden /></button>
-        {sg.idx > 0 && <button type="button" className="bt" title="Make this page’s part its own block" onClick={() => splitAt(sg.box.id, sg.idx)}>Separate</button>}
-        <button type="button" className="bt danger" title={multi ? 'Delete the text on this page; the rest moves up' : 'Delete this block'} onClick={del}>Delete</button>
+        {sg.idx > 0 && !header && <button type="button" className="bt" title="Make this page’s part its own block" onClick={() => splitAt(sg.box.id, sg.idx)}>Separate</button>}
+        <button type="button" className="bt danger" title={byPart ? 'Delete the text on this page; the rest moves up' : 'Delete this block'} onClick={del}>Delete</button>
       </div>
     </div>
   );

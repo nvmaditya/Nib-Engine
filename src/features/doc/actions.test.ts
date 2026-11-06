@@ -8,7 +8,7 @@ import {
   addBlock, addPageAt, addTextBlockAt, addToEndOf, deleteBlock, deletePageAt, joinBackBlock, mergeIntoPreviousPage,
   moveBlockTo, movePageTo, removePart, renameBlock, resetBoxStyle, select, setField, setV, showField, shuffleBox, splitAt, writeOut,
 } from './actions';
-import { today } from './model';
+import { layoutFor, today } from './model';
 
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
@@ -18,6 +18,7 @@ beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); });
 const m = () => box({ id: 'm', name: 'Main text', text: lines(40) }); // pages 1–2
 const long = (): EngineDoc => docOf(m());
 const json = () => JSON.stringify(get().doc);
+const pages = () => layoutFor(get().S, get().doc).pages;
 const toasts = () => vi.mocked(sonner).mock.calls.length;
 /** Press the Undo on the last message. */
 const clickUndo = () => (vi.mocked(sonner).mock.calls.at(-1)![1] as unknown as { action: { onClick: () => void } }).action.onClick();
@@ -25,7 +26,22 @@ const clickUndo = () => (vi.mocked(sonner).mock.calls.at(-1)![1] as unknown as {
 test('removing part 2 removes only that page’s text', () => {
   open(long());
   removePart('m', 1);
-  expect(get().doc.boxes[0].text).toBe(lines(28) + '\n');
+  expect(get().doc.boxes[0].text).toBe(lines(28));
+  expect(lastToast()).toBe('Removed the page 2 part of “Main text”. The text after it moves up.');
+  expect(pages()).toBe(1);
+});
+
+test('deleting page 2 of a two-page block leaves one page', () => {
+  open(long());
+  deletePageAt(1);
+  expect([get().doc.boxes[0].text, get().doc.pageCount, pages()]).toEqual([lines(28), 1, 1]);
+});
+
+test('removing a blank last part is a change of its own', () => {
+  open(docOf(box({ id: 'm', name: 'Main text', text: lines(28) + '\n' })));
+  expect(pages()).toBe(2);
+  removePart('m', 1);
+  expect([get().doc.boxes[0].text, pages(), get().canUndo]).toEqual([lines(28), 1, true]);
   expect(lastToast()).toBe('Removed the page 2 part of “Main text”. The text after it moves up.');
 });
 
@@ -222,6 +238,37 @@ test('actions that would change nothing record nothing and say nothing', () => {
   expect(json()).toBe(before);
   expect(get().canUndo).toBe(false);
   expect(toasts()).toBe(0);
+});
+
+test('repeating an action, or one with nothing to act on, records nothing and says nothing', () => {
+  open(withN()());
+  deleteBlock('n'); removePart('m', 1);
+  const after = json();
+  vi.mocked(sonner).mockClear();
+  deleteBlock('n'); removePart('n', 0); removePart('m', 1); deletePageAt(1); joinBackBlock('n');
+  expect(json()).toBe(after);
+  expect(toasts()).toBe(0);
+  undo(); undo(); undo();
+  expect(get().canUndo).toBe(false); // only the two real changes were steps
+  open(docOf()); // one empty page
+  deletePageAt(0); deletePageAt(0); mergeIntoPreviousPage(1); movePageTo(0, 1);
+  // A page that only shows a block pushed onto it from page 1: merging it changes nothing.
+  open(docOf(box({ id: 'a', text: lines(28) }), box({ id: 'b', y: 900, w: 300, text: 'b' })));
+  expect(layoutFor(get().S, get().doc).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['b', 1]]);
+  const pushed = json();
+  mergeIntoPreviousPage(1); setField('a', 'name', 'x'); showField('a', 'roll', true);
+  expect(json()).toBe(pushed);
+  expect(get().canUndo).toBe(false);
+  expect(toasts()).toBe(0);
+});
+
+test('a page that only holds a continuation can’t be merged either', () => {
+  open(long());
+  const before = json();
+  mergeIntoPreviousPage(1);
+  expect(lastToast()).toBe('Part 2 of Main text always follows the part before it. Split it off first to move it on its own.');
+  expect(vi.mocked(sonner).mock.calls.at(-1)![1]).toBeUndefined();
+  expect([json(), get().canUndo]).toEqual([before, false]);
 });
 
 test('Split from the rest on the first part splits where page 2 begins', () => {

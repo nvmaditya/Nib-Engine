@@ -5,7 +5,7 @@
 // A block "starts on" the page it is stored on (box.page). Pushing (layout rule 2) can show its first
 // part on a later page; page moves and merges go by the stored page, deleting a page goes by what it shows.
 import { headerText, uid } from '@/engine/doc.js';
-import { computeLayout, geom, snapX, snapY, splitAtFrame, textWithoutFrame, use } from '@/engine/core.js';
+import { computeLayout, frameRange, geom, snapX, snapY, splitAtFrame, textWithoutFrame, use } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, FrameRect, HeaderKey, Layout, Seg, Settings } from '@/engine/types';
 import { continuedName, newBlockName, nextColor } from './blocks';
 
@@ -23,6 +23,7 @@ export const joinable = (b: Box | null | undefined): b is Box => !!b && (b.kind 
 
 /** Take a block out. Blocks split from it no longer come from anywhere, or now come from `into`. */
 function drop(doc: EngineDoc, gone: Set<Box>, into?: Box): void {
+  if (!gone.size) return;
   doc.boxes = doc.boxes.filter(b => !gone.has(b));
   const ids = new Set([...gone].map(b => b.id));
   for (const b of doc.boxes) {
@@ -59,6 +60,15 @@ export function joinBack(S: Settings, doc: EngineDoc, boxId: string): Box | null
   return box?.from ? appendToBlock(S, doc, boxId, box.from) : null;
 }
 
+/**
+ * The block's text without what part `idx` shows (laid out just before). When that part ran to the end
+ * of the text, the line break before it goes too, so no blank part is left on its page.
+ */
+function cutPart(box: Box, idx: number): string {
+  const text = textWithoutFrame(box, idx);
+  return frameRange(box, idx)[1] >= box.text.length ? text.replace(/\n$/, '') : text;
+}
+
 /** Remove only the text part `idx` shows; what follows moves up. With nothing left, the block goes. */
 export function removeBlockPart(S: Settings, doc: EngineDoc, boxId: string, idx: number): 'part' | 'block' | null {
   const box = find(doc, boxId);
@@ -67,7 +77,7 @@ export function removeBlockPart(S: Settings, doc: EngineDoc, boxId: string, idx:
   if (!partOf(L, box, idx)) return null;
   const parts = L.segs.filter(s => s.box === box).length;
   if (parts > 1 && box.kind === 'header') return null;
-  if (parts > 1) box.text = textWithoutFrame(box, idx);
+  if (parts > 1) box.text = cutPart(box, idx);
   if (parts > 1 && box.text.trim()) return 'part';
   drop(doc, new Set([box]));
   return 'block';
@@ -78,6 +88,11 @@ export function removeBlock(doc: EngineDoc, boxId: string): Box | null {
   if (box) drop(doc, new Set([box]));
   return box ?? null;
 }
+
+// Two notions of a block's page. Its stored page (box.page) is where the person put it; layout rule 2
+// can push its first part onto a later page without changing that. Moving, merging and inserting pages
+// go by the stored page (a pushed block belongs to the page it was put on). Deleting a page goes by
+// what the page shows (deletePage), since it promises to take everything on it.
 
 /** A page with no block of its own can't move on its own: its first continuation always follows its start. */
 export function pageRefusal(L: Layout, doc: EngineDoc, page: number): Refused | null {
@@ -151,7 +166,7 @@ export function deletePage(S: Settings, doc: EngineDoc, i: number): void {
   if (i < 0 || i >= L.pages) return;
   const here = L.segs.filter(s => s.page === i);
   const gone = new Set(here.filter(s => s.idx === 0).map(s => s.box));
-  const cuts = here.filter(s => s.idx > 0).map(s => ({ box: s.box, idx: s.idx, text: textWithoutFrame(s.box, s.idx) }));
+  const cuts = here.filter(s => s.idx > 0).map(s => ({ box: s.box, idx: s.idx, text: cutPart(s.box, s.idx) }));
   for (const { box, idx, text } of cuts) {
     box.text = text;
     box.frames = framesWithout(box.frames, idx);
