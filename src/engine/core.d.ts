@@ -47,3 +47,11 @@ export function snapX(x: number, g: Geom, w: number): number;
 export function snapY(y: number, g: Geom): number;
 export function rng(...parts: unknown[]): () => number;
 export type { InkLayer, PaperCfg };
+
+export interface InlinePiece { text: string; style: { bold?: true; ul?: true; strike?: true; hl?: true } }
+export function parseInline(t: string): InlinePiece[];
+export type LineKind = 'newpage' | 'blank' | 'hr' | 'heading' | 'bullet' | 'number' | 'quote' | 'text';
+export interface LineInfo { kind: LineKind; level: 0 | 1 | 2 | 3; depth: number; marker: string; content: string; prefix: number }
+export function parseLine(raw: string): LineInfo;
+export interface RowSrc { li: number; tok: number }
+export function srcOffset(text: string, src: RowSrc): number;
