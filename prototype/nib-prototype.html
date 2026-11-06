@@ -1,0 +1,1178 @@
+<title>Nib Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Caveat:wght@500&family=Cedarville+Cursive&family=Dawning+of+a+New+Day&family=Gloria+Hallelujah&family=Homemade+Apple&family=Indie+Flower&family=Kalam:wght@300&family=La+Belle+Aurore&family=Nothing+You+Could+Do&family=Patrick+Hand&family=Playwrite+GB+S&family=Reenie+Beanie&family=Shadows+Into+Light&family=Zeyada&display=swap">
+<style>
+/* PROTOTYPE v3, throwaway. Studio look, Figtree, ink-blue accent matching the ink-page logo.
+   Screens: Home, then Write (Pages or Outline view) → Style → Export. The handwritten page is the only colourful thing. */
+:root{
+  --bg:#F7F7F8; --surface:#FFFFFF; --surface-2:#F1F1F3; --fg:#16161A; --muted:#6C6C76; --line:#E6E6EA; --line-strong:#D2D2D8;
+  --accent:#2F43D0; --on-accent:#FFFFFF; --accent-soft:#ECEFFF; --marker:#FFE266; --desk:#ECECEF; --danger:#D92D3A;
+  --pop:0 12px 32px rgba(16,16,24,.16);
+  --f-ui:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --paper:#FBFBF7; --rule:#A7C1E2; --margin-line:#E58C8C; --pen:#20389A; --hl:#FFE36B; --logo-ink:#1E2B7C;
+  --bar-bg:#121318; --bar-fg:#F2F3F7; --bar-muted:#9BA1B4;
+  --page-shadow:0 1px 1px rgba(20,26,45,.12), 0 8px 24px rgba(20,26,45,.12);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E0E11; --surface:#16161A; --surface-2:#1F1F25; --fg:#EDEDF1; --muted:#9A9AA6; --line:#27272E; --line-strong:#36363F;
+    --accent:#8E9CFF; --on-accent:#0B0C1C; --accent-soft:#1E2246; --marker:#E6CD55; --desk:#08080A; --danger:#FF7B84;
+    --pop:0 12px 32px rgba(0,0,0,.55); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E0E11; --surface:#16161A; --surface-2:#1F1F25; --fg:#EDEDF1; --muted:#9A9AA6; --line:#27272E; --line-strong:#36363F;
+  --accent:#8E9CFF; --on-accent:#0B0C1C; --accent-soft:#1E2246; --marker:#E6CD55; --desk:#08080A; --danger:#FF7B84;
+  --pop:0 12px 32px rgba(0,0,0,.55); color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg); color:var(--fg); font-family:var(--f-ui); font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased}
+body::before{content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:10; background:var(--bg)}
+button,input,select{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+h1,h2,h3{text-wrap:balance}
+svg{flex:none}
+#app{height:100%; display:flex; flex-direction:column; gap:10px; padding-block:10px; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px))}
+
+/* Top bar */
+.top{flex:none; display:flex; align-items:center; gap:12px; min-height:46px; flex-wrap:wrap}
+.brand{display:flex; align-items:center; gap:9px; text-decoration:none; color:var(--fg); border-radius:8px}
+.wordmark{font-weight:700; font-size:21px; letter-spacing:-.045em; line-height:1}
+.doc{display:flex; align-items:baseline; gap:8px; padding-left:12px; border-left:1px solid var(--line); min-width:0}
+.doc input{font-weight:600; border:0; background:none; padding:3px 6px; margin-left:-6px; border-radius:7px; width:15ch; min-width:0}
+.doc input:hover{background:var(--surface-2)}
+.doc small{color:var(--muted); font-size:12px; white-space:nowrap}
+.stages{display:flex; align-items:center; gap:2px; padding:3px; background:var(--surface-2); border-radius:10px; margin-inline:auto}
+.stage{display:flex; align-items:center; gap:6px; border:0; background:none; padding:6px 14px; border-radius:8px; font-weight:500; font-size:13.5px; color:var(--muted); cursor:pointer}
+.stage .n{font-size:11.5px; font-variant-numeric:tabular-nums; opacity:.7}
+.stage[aria-current="step"]{background:var(--surface); color:var(--fg); box-shadow:0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.06)}
+.acts{display:flex; gap:4px; align-items:center}
+.ibtn{display:grid; place-items:center; width:36px; height:36px; border:0; border-radius:9px; background:none; cursor:pointer; color:var(--muted)}
+.ibtn:hover{background:var(--surface-2); color:var(--fg)}
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:6px 14px; border-radius:9px; border:1px solid var(--line); background:var(--surface); font-weight:500; font-size:13.5px; cursor:pointer; white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent); color:var(--on-accent); border-color:transparent; font-weight:600}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+.btn.ghost{background:none; border-color:transparent}
+.btn.ghost:hover{background:var(--surface-2)}
+.grow{flex:1}
+.proto{font:600 10px/1 system-ui, sans-serif; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); border:1px dashed var(--line-strong); padding:5px 7px; border-radius:6px; margin-right:6px}
+.home-only{display:none}
+body[data-screen="home"] .doc, body[data-screen="home"] .stages, body[data-screen="home"] .ibtn, body[data-screen="home"] #topexport,
+body[data-screen="brand"] .doc, body[data-screen="brand"] .stages, body[data-screen="brand"] .ibtn, body[data-screen="brand"] #topexport{display:none}
+body[data-screen="home"] .home-only, body[data-screen="brand"] .home-only{display:inline-flex}
+body[data-screen="home"] .acts, body[data-screen="brand"] .acts{margin-left:auto}
+
+/* Workspace */
+#main{flex:1; min-height:0; display:flex; flex-direction:column}
+.ws{flex:1; min-height:0; display:grid; gap:10px; padding-bottom:62px}
+.ws.v-pages{grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr)}
+.ws.v-outline{grid-template-columns:260px minmax(0,1fr) minmax(320px,380px); grid-template-rows:auto minmax(0,1fr)}
+.ws.v-style, .ws.v-export{grid-template-columns:minmax(0,1fr) minmax(330px,390px)}
+.wbar{grid-column:1 / -1; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.seg{display:inline-flex; padding:3px; gap:2px; background:var(--surface-2); border-radius:10px}
+.seg button{display:inline-flex; align-items:center; justify-content:center; gap:6px; border:0; background:none; padding:5px 11px; border-radius:7px; font-weight:500; font-size:13px; color:var(--muted); cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--fg); box-shadow:0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.06)}
+.pane{background:var(--surface); border:1px solid var(--line); border-radius:12px; min-height:0; min-width:0; display:flex; flex-direction:column; overflow:hidden}
+.pane-h{flex:none; display:flex; align-items:center; gap:8px; min-height:48px; padding:6px 10px 6px 16px; border-bottom:1px solid var(--line); font-weight:600; font-size:14px}
+.count{color:var(--muted); font-weight:400}
+.scroll{flex:1; min-height:0; overflow:auto}
+.desk{background:var(--desk); border-radius:12px; min-height:0; min-width:0; overflow:auto; padding:22px 18px 40px; display:flex; flex-direction:column; align-items:center; gap:22px}
+
+/* Toolbar */
+.tb{display:inline-flex; align-items:center; gap:1px; padding:3px; background:var(--surface); border:1px solid var(--line); border-radius:10px; flex-wrap:wrap}
+.tb button{display:grid; place-items:center; width:32px; height:30px; border:0; border-radius:7px; background:none; cursor:pointer; font-size:14px; color:var(--fg)}
+.tb button:hover, .tb select:hover{background:var(--surface-2)}
+.tb .sep{width:1px; height:18px; background:var(--line); margin:0 4px}
+.tb select{height:30px; border:0; background:none; font-weight:500; font-size:13px; padding:0 4px 0 8px; border-radius:7px; cursor:pointer}
+.tb .hlx{background:linear-gradient(transparent 40%, var(--marker) 40% 92%, transparent 92%); padding:0 3px; font-weight:600}
+#insp .tb{display:flex; border:0; border-bottom:1px solid var(--line); border-radius:0; padding:5px 8px}
+
+/* Pages (everything inside is in em; 26em = page width) */
+.prow{width:100%; max-width:940px; display:flex; flex-direction:column; gap:8px; border-radius:12px; padding:6px}
+.prow-h{display:flex; align-items:center; gap:6px; padding:0 2px; font-size:13px}
+.prow-h b{font-weight:600}
+.grip{display:inline-grid; place-items:center; width:26px; height:26px; border-radius:7px; color:var(--muted); cursor:grab}
+.grip:hover{background:var(--surface); color:var(--fg)}
+.mini{display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:7px; background:none; cursor:pointer; color:var(--muted); flex:none}
+.mini:hover{background:var(--surface-2); color:var(--fg)}
+.prow-h .mini:hover{background:var(--surface)}
+.meta{color:var(--muted); font-size:12.5px; font-weight:400}
+.pair{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:18px}
+.pair.one{grid-template-columns:minmax(0,500px); justify-content:center}
+.pagewrap{width:min(500px,100%); container-type:inline-size; flex:none}
+.pair .pagewrap{width:100%}
+.pagecap{font-size:12px; font-weight:500; color:var(--muted); margin-bottom:6px}
+.page{--L:1.4; position:relative; width:100%; aspect-ratio:210/297; background:var(--paper); box-shadow:var(--page-shadow); font-size:calc(100cqw / 26); border-radius:2px; overflow:hidden}
+.page .rules{position:absolute; inset:2.8em 0 0; background:repeating-linear-gradient(180deg, transparent 0 calc(var(--L) * 1em - 1px), var(--rule) calc(var(--L) * 1em - 1px) calc(var(--L) * 1em))}
+.page .mline{position:absolute; top:0; bottom:0; left:3.1em; width:1.5px; background:var(--margin-line)}
+.paper-yellow{background:#F9EEAA; --rule:#8AA4BF}
+.paper-yellow .mline{box-shadow:.25em 0 0 var(--margin-line)}
+.paper-grid{background:#FAFAF6}
+.paper-grid .rules{inset:0; background:repeating-linear-gradient(180deg, transparent 0 calc(var(--L) * .5em - 1px), #B9CCE3 calc(var(--L) * .5em - 1px) calc(var(--L) * .5em)), repeating-linear-gradient(90deg, transparent 0 calc(var(--L) * .5em - 1px), #B9CCE3 calc(var(--L) * .5em - 1px) calc(var(--L) * .5em))}
+.paper-grid .mline, .paper-plain .mline, .paper-plain .rules{display:none}
+.paper-plain{background:#F9F9F6}
+.spiral{position:absolute; left:.35em; top:0; bottom:0; width:1em; background:radial-gradient(circle, #CFD2DA 0 .26em, transparent .3em) 0 .5em / 1em 1.4em repeat-y}
+.hole{position:absolute; left:1.1em; width:.85em; height:.85em; border-radius:50%; background:#CFD2DA; box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.fx-light::after{content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(120% 70% at 15% 0%, rgba(255,255,255,.35), transparent 60%), linear-gradient(180deg, transparent 55%, rgba(40,30,10,.06))}
+.crease{position:absolute; left:0; right:0; top:50%; height:.25em; background:linear-gradient(180deg, rgba(0,0,0,.07), rgba(255,255,255,.7)); pointer-events:none}
+.ghost{position:absolute; left:4em; right:2em; top:9em; font-family:"La Belle Aurore", cursive; font-size:1em; line-height:1.4em; color:#20389A; opacity:.06; transform:scaleX(-1); pointer-events:none}
+.blank{position:absolute; left:0; right:0; top:44%; text-align:center; font:500 12px/1.4 var(--f-ui); color:#8B8F9C; margin:0; padding:0 2em}
+.typed .blank{color:var(--muted)}
+.pbox{position:absolute; border:1.5px dashed color-mix(in srgb, var(--bc) 36%, transparent); border-radius:3px; padding:0 .2em; cursor:grab; touch-action:none}
+.pbox:hover, .pbox.hover{border-style:solid; border-color:color-mix(in srgb, var(--bc) 70%, transparent)}
+.pbox.is-sel{border:2px solid var(--bc); background:color-mix(in srgb, var(--bc) 5%, transparent)}
+.pbox.moving{cursor:grabbing; box-shadow:0 6px 18px rgba(0,0,0,.18); z-index:5}
+.pbox.clean, .pbox.clean:hover, .pbox.clean.is-sel{border-color:transparent; background:none; cursor:default}
+.tag{position:absolute; left:-2px; bottom:100%; font:600 10.5px/1.7 var(--f-ui); color:#fff; background:var(--bc); padding:0 7px; border-radius:4px 4px 0 0; white-space:nowrap; opacity:0; transition:opacity .12s; pointer-events:none}
+.pbox:hover .tag, .pbox.hover .tag, .pbox.is-sel .tag, .pbox.moving .tag{opacity:1}
+.hw{--k:1; font-family:var(--hf, "La Belle Aurore"), cursive; font-weight:var(--hw, 400); font-size:calc(var(--k) * 1em); line-height:calc(var(--L) * 1em / var(--k)); color:var(--pen); text-shadow:var(--psh, none); opacity:var(--palpha, 1); letter-spacing:var(--ls, 0); word-spacing:var(--ws, 0)}
+.hw *{margin:0}
+.hw h1{font-size:1.3em; line-height:calc(var(--L) * 2em / (var(--k) * 1.3)); text-align:center; font-weight:inherit; text-decoration:underline double; text-underline-offset:.15em}
+.hw h2{font-size:1.1em; line-height:calc(var(--L) * 1em / (var(--k) * 1.1)); font-weight:inherit; text-decoration:underline; text-underline-offset:.15em; margin-top:calc(var(--L) * 1em / (var(--k) * 1.1))}
+.hw h1 + h2{margin-top:0}
+.hw ol, .hw ul{padding-left:1.3em}
+.hw b, .hw strong{font-weight:inherit; text-shadow:var(--psh, 0 0 0 transparent), .35px 0 0 currentColor, -.25px 0 0 currentColor}
+.hw mark, .hw [style*="background"]{background:linear-gradient(transparent 28%, var(--hl) 28% 86%, transparent 86%) !important; color:inherit}
+.hw s, .hw strike{text-decoration-thickness:1.5px}
+.hw blockquote{border-left:2px solid currentColor; padding-left:.5em}
+.page.typed{background:var(--surface); box-shadow:none; border:1px solid var(--line)}
+.typed .pbox{border-style:solid; border-color:color-mix(in srgb, var(--bc) 50%, transparent); cursor:text; padding:.3em .45em}
+.typed .tag{opacity:1; pointer-events:auto; display:flex; align-items:center; gap:3px; height:20px; padding:0 2px 0 3px; cursor:grab; touch-action:none}
+.tag .gi{display:grid; place-items:center; opacity:.85}
+.tpart{font-weight:500; opacity:.85}
+.tagbtn{display:grid; place-items:center; width:18px; height:18px; border:0; border-radius:4px; background:none; color:inherit; cursor:pointer; padding:0}
+.tagbtn:hover{background:rgba(255,255,255,.25)}
+.typed .rt{font-size:.62em; line-height:1.5; color:var(--fg)}
+.typed .rt h1{font-size:1.4em; text-align:center} .typed .rt h2{font-size:1.12em; margin:.5em 0 .2em}
+.typed .rt p, .typed .rt ol, .typed .rt ul{margin-bottom:.35em}
+.tfields{display:flex; flex-direction:column; gap:.15em; font-size:.6em}
+.tfields label{display:flex; gap:.4em; align-items:center; color:var(--muted); font-weight:500}
+.tfields input{flex:1; min-width:0; border:0; border-bottom:1px solid var(--line); background:none; padding:.1em .2em; color:var(--fg)}
+.addpage{align-self:center}
+.drop-before{box-shadow:inset 0 3px 0 var(--accent)}
+.drop-after{box-shadow:inset 0 -3px 0 var(--accent)}
+.drop-on{background:var(--accent-soft); outline:2px dashed var(--accent); outline-offset:-2px}
+
+/* Rich text (stands in for TipTap) */
+.rt{outline:none; font-size:15px; line-height:1.6; min-height:1.6em; caret-color:var(--accent); overflow-wrap:anywhere}
+.rt h1{font-size:20px; font-weight:600; line-height:1.3; margin:0 0 6px; letter-spacing:-.01em}
+.rt h2{font-size:16px; font-weight:600; margin:12px 0 4px}
+.rt h1 + h2{margin-top:4px}
+.rt p{margin:0 0 6px}
+.rt ol,.rt ul{margin:0 0 6px; padding-left:22px}
+.rt b, .rt strong{font-weight:650}
+.rt mark,.rt [style*="background"]{background:var(--marker) !important; color:#121212; border-radius:2px; padding:0 2px}
+.rt blockquote{margin:0 0 6px; padding-left:10px; border-left:3px solid var(--line-strong); color:var(--muted)}
+
+/* Outline */
+.ol{padding:6px 8px 18px}
+.ol-sec{border-radius:10px; padding:2px 0 6px}
+.ol-page{display:flex; align-items:center; gap:4px; padding:4px 2px 4px 0; font-size:12px; font-weight:600; color:var(--muted); cursor:grab; border-radius:8px; letter-spacing:.02em}
+.ol-page:hover{background:var(--surface-2)}
+.ol-item{display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:1px 9px; align-items:center; padding:7px 8px; margin-left:12px; border-radius:9px; cursor:grab; border:1px solid transparent}
+.ol-item.cont{cursor:pointer}
+.ol-item:hover,.ol-item.hover{background:var(--surface-2)}
+.ol-item.is-sel{background:color-mix(in srgb, var(--bc) 10%, var(--surface)); border-color:color-mix(in srgb, var(--bc) 45%, transparent)}
+.ol-item .name{font-weight:600; font-size:13px}
+.ol-item .snip{grid-column:2 / 4; font-size:12px; color:var(--muted); overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.dot{display:inline-block; width:9px; height:9px; border-radius:3px; background:var(--bc); flex:none}
+.badge{font-size:11px; font-weight:500; padding:1px 7px; border-radius:999px; background:var(--surface-2); color:var(--muted); white-space:nowrap}
+.ol-empty{margin:2px 0 0 12px; padding:10px; border:1px dashed var(--line-strong); border-radius:9px; font-size:12px; color:var(--muted); text-align:center}
+.ol-tip{font-size:12px; color:var(--muted); margin:14px 8px 0}
+.insp-h{flex:none; display:flex; align-items:center; gap:8px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--line)}
+.insp-h input{font-weight:600; font-size:14px; border:0; background:none; padding:4px 6px; border-radius:7px; min-width:0; flex:1}
+.insp-h input:hover{background:var(--surface-2)}
+.joinbar{display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--accent-soft); font-size:12.5px; border-bottom:1px solid var(--line)}
+.insp-body{padding:14px 16px 20px}
+.empty{padding:28px 20px; color:var(--muted); text-align:center}
+.pbreak{display:flex; align-items:center; gap:8px; margin:14px 0; font-size:12px; color:var(--muted)}
+.pbreak .pb-l{font-weight:600; white-space:nowrap}
+.pbreak .rule{flex:1; border-top:1px dashed var(--line-strong)}
+.pb-acts{display:flex; gap:4px}
+.pb-acts button{border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:3px 8px; font-weight:500; font-size:12px; cursor:pointer; white-space:nowrap}
+.pb-acts button:hover{background:var(--surface-2)}
+.fields{display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px 12px; align-items:center}
+.fields label{font-size:13px; color:var(--muted); font-weight:500}
+.fields input{padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); min-width:0}
+.hint{font-size:12.5px; color:var(--muted); margin:10px 0 0}
+
+/* Style and Export panels */
+.sp{padding:0 0 24px}
+.sg{padding:14px 16px 16px; border-bottom:1px solid var(--line)}
+.sg:last-child{border-bottom:0}
+.sg h3{margin:0 0 10px; font-size:13px; font-weight:600; display:flex; align-items:baseline; gap:8px}
+.sg h3 + h3, .sg * + h3{margin-top:16px}
+.scopebar{flex:none; padding:10px 16px 12px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:8px; font-size:12.5px; color:var(--muted)}
+.scopebar .seg{display:flex}
+.scopebar .seg button{flex:1; min-width:0}
+.scopebar .seg button span.t{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.scopebar .row{display:flex; align-items:center; gap:8px}
+.looks{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px}
+.lookc{display:flex; flex-direction:column; gap:6px; padding:5px 5px 7px; border:1px solid var(--line); border-radius:10px; background:var(--surface); cursor:pointer; text-align:left; font-size:12px; font-weight:500; min-width:0}
+.lookc[aria-pressed="true"]{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent)}
+.lookc .lsw{height:44px; border-radius:6px; display:flex; align-items:center; padding:0 8px; font-size:22px; overflow:hidden; white-space:nowrap; box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.lookc span.n{padding:0 3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.link{border:0; background:none; color:var(--accent); font-weight:500; font-size:13px; cursor:pointer; padding:0}
+.link:hover{text-decoration:underline}
+.handcur{display:flex; align-items:center; gap:12px; width:100%; padding:6px 12px 6px 6px; border:1px solid var(--line); border-radius:10px; background:var(--surface); cursor:pointer; text-align:left}
+.handcur .hs{flex:1; min-width:0; font-size:24px; line-height:1.4; color:var(--pen); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:var(--paper); border-radius:6px; padding:2px 10px}
+.handcur .chg{font-size:13px; font-weight:500; color:var(--accent)}
+.handcur + .meta{display:block; margin-top:6px}
+.pens{display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:6px}
+.pen{display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px 6px; border:1px solid var(--line); border-radius:10px; background:var(--surface); cursor:pointer; font-size:11.5px; font-weight:500; min-width:0}
+.pen svg{width:100%; height:12px}
+.pen small{color:var(--muted); font-weight:400; font-size:10.5px}
+.pen[aria-pressed="true"], .paperc[aria-pressed="true"], .lk[aria-pressed="true"]{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent)}
+.inks{display:flex; gap:10px; flex-wrap:wrap}
+.ink{width:30px; height:30px; border-radius:50%; border:3px solid var(--surface); background:var(--c); box-shadow:0 0 0 1px var(--line-strong); cursor:pointer; padding:0}
+.ink[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent)}
+.ink.custom{background:conic-gradient(#e74c3c,#f1c40f,#2ecc71,#3498db,#9b59b6,#e74c3c); position:relative; overflow:hidden}
+.ink.custom input{position:absolute; inset:-4px; opacity:0; cursor:pointer}
+.papers{display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:6px}
+.paperc{display:flex; flex-direction:column; align-items:center; gap:5px; padding:6px 4px; border:1px solid var(--line); border-radius:10px; background:var(--surface); cursor:pointer; font-size:11.5px; font-weight:500; min-width:0}
+.pv{width:100%; aspect-ratio:3/4; border-radius:2px; box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.pv-ruled{background:linear-gradient(90deg, transparent 24%, #de7f80 24%, #de7f80 calc(24% + 1px), transparent calc(24% + 1px)), repeating-linear-gradient(180deg, #fbfbf7 0 6px, #8fb1d9 6px 7px)}
+.pv-spiral{background:radial-gradient(circle, #CFD2DA 0 1.7px, transparent 2.2px) 2px 1px / 6px 7px repeat-y, linear-gradient(90deg, transparent 26%, #de7f80 26%, #de7f80 calc(26% + 1px), transparent calc(26% + 1px)), repeating-linear-gradient(180deg, #fafaf5 0 6px, #8fb1d9 6px 7px)}
+.pv-yellow{background:linear-gradient(90deg, transparent 24%, #d36c6c 24%, #d36c6c calc(24% + 1px), transparent calc(24% + 1px), transparent calc(24% + 3px), #d36c6c calc(24% + 3px), #d36c6c calc(24% + 4px), transparent calc(24% + 4px)), repeating-linear-gradient(180deg, #f9eeaa 0 6px, #8aa4bf 6px 7px)}
+.pv-grid{background-color:#fafaf6; background-image:repeating-linear-gradient(0deg, #a9c0dc 0 1px, transparent 1px 5px), repeating-linear-gradient(90deg, #a9c0dc 0 1px, transparent 1px 5px)}
+.pv-plain{background:#f9f9f6}
+details.more{margin-top:12px}
+details.more summary{cursor:pointer; font-size:13px; font-weight:500; color:var(--muted); list-style:none; display:flex; align-items:center; gap:6px; width:max-content}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::before{content:"›"; display:inline-block; transition:transform .15s; font-size:15px}
+details.more[open] summary::before{transform:rotate(90deg)}
+.toggles{display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; margin-top:10px}
+.toggles label, .tgl{display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer}
+.toggles input, .tgl input, .radio input, .inc input{accent-color:var(--accent); width:16px; height:16px; margin:0; flex:none}
+.tgl{align-items:flex-start; margin-top:14px; font-weight:500}
+.tgl small{display:block; color:var(--muted); font-weight:400; font-size:12px}
+.slider{display:grid; grid-template-columns:1fr auto; gap:0 8px; margin-top:12px}
+.slider label{font-size:13px; font-weight:500}
+.slider output{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+.slider input{grid-column:1 / -1; width:100%; accent-color:var(--accent); margin:4px 0 0}
+.seg.full{display:flex} .seg.full button{flex:1}
+.radio{display:flex; flex-direction:column; gap:8px}
+.radio label{display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer}
+.lookcards{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px}
+.lk{display:flex; align-items:center; gap:10px; padding:7px; border:1px solid var(--line); border-radius:10px; background:var(--surface); cursor:pointer; text-align:left; font-size:13px; font-weight:500; min-width:0}
+.lk .th{width:30px; height:40px; border-radius:2px; flex:none; background:linear-gradient(90deg, transparent 24%, #de7f80 24%, #de7f80 calc(24% + 1px), transparent calc(24% + 1px)), repeating-linear-gradient(180deg, #fbfbf7 0 5px, #8fb1d9 5px 6px); position:relative; box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.lk .th::after{content:""; position:absolute; left:30%; right:12%; top:30%; height:40%; background:repeating-linear-gradient(180deg, #2a3f9e 0 1.5px, transparent 1.5px 6px)}
+.lk.look-scan .th{filter:contrast(1.1) brightness(1.04) saturate(.8)}
+.lk.look-gray .th{filter:grayscale(1) contrast(1.15)}
+.lk.look-bw .th{filter:grayscale(1) contrast(3)}
+.fname{display:flex; align-items:center; border:1px solid var(--line); border-radius:9px; background:var(--surface); overflow:hidden}
+.fname input{flex:1; min-width:0; border:0; background:none; padding:8px 10px}
+.fname span{padding:0 10px; color:var(--muted); font-size:13px}
+.exp-f{flex:none; padding:12px 16px 14px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:8px}
+.exp-f .row{display:flex; gap:8px}
+.btn.big{min-height:44px; font-size:14.5px; flex:1; justify-content:space-between; padding-inline:16px}
+.btn.big .sz{font-weight:500; opacity:.85; font-size:13px}
+.shotwrap{width:min(460px,100%); container-type:inline-size; flex:none; transition:opacity .15s}
+.shot{overflow:hidden; box-shadow:var(--page-shadow); border-radius:2px}
+.shot .page{box-shadow:none; border-radius:0}
+.look-scan .page{filter:contrast(1.08) brightness(1.04) saturate(.85)}
+.look-gray .page{filter:grayscale(1) contrast(1.12) brightness(1.03)}
+.look-bw .page{filter:grayscale(1) contrast(2.4) brightness(1.15)}
+.shot.tilt .page{transform:rotate(-.7deg) scale(1.03)}
+.excluded{opacity:.35}
+.inc{display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:500; margin-bottom:6px; cursor:pointer; width:max-content}
+
+/* Handwriting picker */
+.sheet-back{position:fixed; inset:0; background:rgba(10,10,15,.3); z-index:80}
+.sheet{position:fixed; z-index:81; right:max(16px, env(safe-area-inset-right,0px)); top:64px; bottom:calc(76px + env(safe-area-inset-bottom,0px)); width:min(440px, calc(100vw - 32px)); background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--pop); display:flex; flex-direction:column; overflow:hidden}
+.sheet-h{display:flex; align-items:center; gap:8px; padding:12px 10px 8px 16px}
+.sheet-h h2{margin:0; font-size:15px; font-weight:600; flex:1}
+.sheet .search{margin:0 16px; padding:8px 12px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2)}
+.chips{display:flex; gap:6px; flex-wrap:wrap; padding:10px 16px 8px}
+.chip{border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:4px 11px; font-size:12.5px; font-weight:500; cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--fg); color:var(--bg); border-color:var(--fg)}
+.ptxt{display:flex; align-items:center; gap:8px; padding:2px 16px 10px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line)}
+.ptxt input{flex:1; min-width:0; border:0; border-bottom:1px dashed var(--line-strong); background:none; padding:3px 2px; font-size:12.5px; color:var(--fg)}
+.hlist{flex:1; overflow:auto; padding:6px 8px 12px}
+.hrow{display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:2px 6px; padding:6px 8px 6px 2px; border-radius:10px; cursor:pointer; border:1px solid transparent}
+.hrow:hover{background:var(--surface-2)}
+.hrow[aria-selected="true"]{border-color:var(--accent); background:var(--accent-soft)}
+.hrow .smp{font-size:24px; line-height:1.45; color:var(--pen); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:var(--paper); border-radius:6px; padding:0 10px}
+.hrow .hn{grid-column:2; font-size:12px; color:var(--muted); padding-left:2px}
+.star{grid-row:1 / span 2; border:0; background:none; cursor:pointer; color:var(--line-strong); font-size:18px; padding:4px 6px}
+.star[aria-pressed="true"]{color:#E3A008}
+.sheet-f{flex:none; padding:10px 16px; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--muted)}
+.upl{position:relative; overflow:hidden}
+.upl input{position:absolute; inset:0; opacity:0; cursor:pointer}
+
+/* Home */
+.home{flex:1; min-height:0; overflow:auto; padding-bottom:90px}
+.hv{max-width:1080px; margin:0 auto; display:flex; flex-direction:column; gap:26px; padding-top:12px}
+.hh{display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap}
+.hh h1{margin:0; font-size:24px; font-weight:600; letter-spacing:-.02em}
+.hh h2{margin:0; font-size:16px; font-weight:600}
+.tpls{display:grid; grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:16px}
+.tpl{display:flex; flex-direction:column; gap:6px; border:0; background:none; padding:0; cursor:pointer; text-align:left; min-width:0; border-radius:6px}
+.tpl .pagewrap{width:100%}
+.tpl .page{transition:transform .15s}
+.tpl:hover .page, .tpl:focus-visible .page{transform:translateY(-3px)}
+.tpl b{font-size:13.5px; font-weight:600}
+.dz{aspect-ratio:210/297; border:1.5px dashed var(--line-strong); border-radius:4px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; color:var(--muted); font-size:12.5px; padding:12px; background:var(--surface)}
+.recent{display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.rrow{display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:14px; align-items:center; padding:10px 8px 10px 14px; border-bottom:1px solid var(--line); cursor:pointer}
+.rrow:last-child{border-bottom:0}
+.rrow:hover{background:var(--surface-2)}
+.rrow .pagewrap{width:40px}
+.rrow .page{box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.rrow b{font-weight:600; display:block}
+.foot{font-size:12.5px; color:var(--muted); text-align:center; margin:0}
+
+/* Menus, toast, try-card, switcher */
+.menu{z-index:90; min-width:230px; max-width:300px; background:var(--surface); border:1px solid var(--line); border-radius:11px; box-shadow:var(--pop); padding:5px; font-family:var(--f-ui)}
+.menu button.mi{display:flex; flex-direction:column; width:100%; gap:1px; border:0; background:none; padding:7px 10px; border-radius:7px; text-align:left; cursor:pointer; font-size:13.5px; font-weight:500}
+.menu button.mi small{font-weight:400; color:var(--muted); font-size:12px}
+.menu button.mi:hover, .menu button.mi:focus-visible{background:var(--surface-2); outline:none}
+.menu button.mi:disabled{opacity:.45; cursor:default; background:none}
+.menu .danger{color:var(--danger)}
+.menu hr{border:0; border-top:1px solid var(--line); margin:4px 0}
+.menu .mh{font-size:11.5px; color:var(--muted); padding:6px 10px 2px; font-weight:500}
+.ren{display:flex; flex-direction:column; gap:8px; padding:8px}
+.ren label{font-size:12px; color:var(--muted); font-weight:500}
+.ren input{padding:7px 10px; border:1px solid var(--line-strong); border-radius:8px; background:var(--surface)}
+.toast{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(76px + env(safe-area-inset-bottom,0px)); z-index:95; background:var(--fg); color:var(--bg); padding:10px 10px 10px 16px; border-radius:12px; display:flex; gap:12px; align-items:center; font-weight:500; font-size:13.5px; box-shadow:0 8px 24px rgba(0,0,0,.25); width:max-content; max-width:min(560px, calc(100vw - 32px))}
+.toast button{background:none; border:0; color:inherit; text-decoration:underline; font-weight:600; cursor:pointer; padding:4px 6px}
+.try{position:fixed; left:max(16px, env(safe-area-inset-left,0px)); bottom:calc(72px + env(safe-area-inset-bottom,0px)); z-index:45; width:290px; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--pop); padding:12px 14px; font-size:13px}
+.try h3{margin:0 0 6px; font-size:13.5px; font-weight:600; display:flex; align-items:center}
+.try ol{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:5px; color:var(--muted)}
+.try b{color:var(--fg); font-weight:600}
+.switch{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + env(safe-area-inset-bottom,0px)); z-index:50; display:flex; align-items:center; gap:4px; padding:5px; background:var(--bar-bg); color:var(--bar-fg); border:1px solid rgba(255,255,255,.14); border-radius:13px; box-shadow:0 8px 30px rgba(0,0,0,.35); font:500 12.5px/1.2 system-ui, -apple-system, sans-serif; width:max-content; max-width:calc(100vw - 24px); flex-wrap:wrap; justify-content:center}
+.switch button{border:0; background:none; color:inherit; cursor:pointer; border-radius:8px; padding:7px 10px; font:inherit}
+.switch button:hover{background:rgba(255,255,255,.1)}
+.switch button[aria-current="page"]{background:var(--bar-fg); color:var(--bar-bg)}
+.switch .divider{width:1px; align-self:stretch; background:rgba(255,255,255,.16); margin:4px 2px}
+.switch .tagp{color:var(--bar-muted); padding:0 6px}
+
+/* Brand board */
+.brandview{flex:1; min-height:0; overflow:auto; padding-bottom:96px}
+.bv{max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:32px; padding-top:6px}
+.hero{display:grid; grid-template-columns:auto minmax(0,1fr); gap:28px; align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:28px}
+.hero h1{font-size:clamp(56px, 9vw, 92px); font-weight:700; letter-spacing:-.06em; line-height:.9; margin:0}
+.hero p{margin:10px 0 0; font-size:17px; color:var(--muted); max-width:46ch}
+.tagline{display:inline-block; margin-top:14px; font-family:"La Belle Aurore", cursive; color:var(--pen); background:var(--paper); padding:4px 12px; border-radius:3px; font-size:20px; box-shadow:var(--page-shadow)}
+.sec h2{font-size:19px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em}
+.sec > p{margin:0 0 14px; color:var(--muted); max-width:72ch}
+.cards2{display:grid; grid-template-columns:repeat(auto-fit, minmax(300px,1fr)); gap:14px}
+.lcard{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:12px}
+.lcard.rec{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent)}
+.lcard .show{display:grid; place-items:center; height:150px; border-radius:10px; background:var(--surface-2)}
+.lrow{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.lockup{display:flex; align-items:center; gap:9px}
+.lcard h3{margin:0; font-size:14.5px; font-weight:600; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.pill{font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--accent); color:var(--on-accent)}
+.lcard p{margin:0; font-size:13px; color:var(--muted)}
+.tile{display:grid; place-items:center; width:64px; height:64px; border-radius:10px}
+.tile.light{background:#FFFFFF; border:1px solid #E4E4E8}
+.tile.dark{background:#18181C}
+.sizes{display:flex; align-items:flex-end; gap:8px}
+.tabsmock{display:flex; flex-wrap:wrap; gap:4px; padding:6px 6px 0; border-radius:10px 10px 0 0}
+.tabsmock.light{background:#DFE1E5}
+.tabsmock.dark{background:#202124}
+.tabm{display:flex; align-items:center; gap:8px; padding:8px 14px 9px 10px; border-radius:8px 8px 0 0; font:12px/1 system-ui, -apple-system, sans-serif}
+.tabsmock.light .tabm{background:#FFFFFF; color:#202124}
+.tabsmock.dark .tabm{background:#35363A; color:#E8EAED}
+.swatches{display:grid; grid-template-columns:repeat(auto-fit, minmax(120px,1fr)); gap:10px}
+.swc{border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--surface); font-size:12px}
+.swc span{display:block; height:44px}
+.swc div{padding:6px 8px}
+
+@media (max-width: 860px){
+  .doc small, .proto{display:none}
+  .stages{order:3; width:100%; margin:0}
+  .stage{flex:1; justify-content:center}
+  .ws{display:flex; flex-direction:column; overflow:auto; padding-bottom:150px}
+  .ws > *{flex:none}
+  .ws .pane, .ws .scroll{overflow:visible}
+  .ws.v-outline .desk, .ws.v-style .desk, .ws.v-export .desk{max-height:58vh}
+  .pair{grid-template-columns:minmax(0,500px); justify-content:center}
+  .try{display:none}
+  .toast{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
+  .hero{grid-template-columns:1fr; padding:20px}
+  .brandview, .home{padding-bottom:150px}
+  .sheet{top:auto; bottom:0; right:0; left:0; width:auto; height:78vh; border-radius:16px 16px 0 0}
+  .looks{grid-template-columns:repeat(2, minmax(0,1fr))}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important; scroll-behavior:auto !important} }
+</style>
+
+<div id="app">
+  <header class="top">
+    <a class="brand" href="#home" aria-label="Nib home"><span id="toplogo"></span><span class="wordmark">nib</span></a>
+    <div class="doc"><input id="doctitle" value="The Water Cycle" aria-label="Document name"><small id="saved">Saved</small></div>
+    <nav class="stages" aria-label="Stages">
+      <button class="stage" type="button" data-goto="write"><span class="n">1</span>Write</button>
+      <button class="stage" type="button" data-goto="style"><span class="n">2</span>Style</button>
+      <button class="stage" type="button" data-goto="export"><span class="n">3</span>Export</button>
+    </nav>
+    <div class="acts">
+      <span class="proto">Prototype</span>
+      <button class="ibtn" type="button" id="undo-btn" aria-label="Undo" title="Undo (Ctrl+Z)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button class="ibtn" type="button" id="redo-btn" aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <button class="btn primary" type="button" id="topexport" data-goto="export">Export</button>
+      <button class="btn home-only" type="button" data-import>Import a file</button>
+      <button class="btn primary home-only" type="button" data-tpl="blank">New document</button>
+    </div>
+  </header>
+  <div id="main"></div>
+</div>
+<div id="sheet"></div>
+<aside class="try" id="try" aria-label="Things to try"></aside>
+<div class="switch" id="switch" role="region" aria-label="Prototype controls"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/* ================= Data ================= */
+const PALETTE = ['#7A4DF0', '#0B8F8A', '#D9661F', '#D6336C', '#2F6FDB', '#5C8A1E'];
+const LABEL = { name:'Name', class:'Class', date:'Date' };
+const HANDS = [
+  { id:'labelle', name:'La Belle Aurore', css:"'La Belle Aurore'", tags:['cursive', 'real'], k:1 },
+  { id:'apple', name:'Homemade Apple', css:"'Homemade Apple'", tags:['cursive', 'real'], k:.74 },
+  { id:'cedar', name:'Cedarville Cursive', css:"'Cedarville Cursive'", tags:['cursive', 'real'], k:.95 },
+  { id:'dawning', name:'Dawning of a New Day', css:"'Dawning of a New Day'", tags:['cursive', 'real', 'messy'], k:1.12 },
+  { id:'zeyada', name:'Zeyada', css:"'Zeyada'", tags:['print', 'real', 'messy'], k:1.15 },
+  { id:'nothing', name:'Nothing You Could Do', css:"'Nothing You Could Do'", tags:['print', 'real'], k:.88 },
+  { id:'shadows', name:'Shadows Into Light', css:"'Shadows Into Light'", tags:['print', 'real'], k:1 },
+  { id:'reenie', name:'Reenie Beanie', css:"'Reenie Beanie'", tags:['print', 'real', 'messy'], k:1.22 },
+  { id:'caveat', name:'Caveat', css:"'Caveat'", tags:['print', 'neat'], k:1.15, w:500 },
+  { id:'kalam', name:'Kalam', css:"'Kalam'", tags:['print', 'neat'], k:.88, w:300 },
+  { id:'patrick', name:'Patrick Hand', css:"'Patrick Hand'", tags:['print', 'neat'], k:1.02 },
+  { id:'playwrite', name:'School cursive', css:"'Playwrite GB S'", tags:['cursive', 'neat'], k:.74 },
+  { id:'indie', name:'Indie Flower', css:"'Indie Flower'", tags:['print', 'fun'], k:.95 },
+  { id:'gloria', name:'Gloria Hallelujah', css:"'Gloria Hallelujah'", tags:['print', 'fun'], k:.8 },
+];
+const HFILTERS = [['all', 'All'], ['cursive', 'Joined-up'], ['print', 'Print'], ['neat', 'Neat'], ['messy', 'Messy'], ['fun', 'Fun'], ['fav', '★ Favourites']];
+const PENS = [
+  { id:'fine', name:'Fineliner', note:'0.4 mm', w:1.3, sh:'0 0 0 transparent', a:1 },
+  { id:'ball', name:'Ballpoint', note:'0.7 mm', w:1.9, sh:'.25px 0 0 currentColor', a:.95 },
+  { id:'gel', name:'Gel pen', note:'1.0 mm', w:2.5, sh:'.45px 0 0 currentColor, -.25px 0 0 currentColor', a:1 },
+  { id:'felt', name:'Felt tip', note:'1.5 mm', w:3.4, sh:'.7px 0 0 currentColor, -.4px 0 0 currentColor, 0 0 .6px currentColor', a:.97 },
+  { id:'pencil', name:'Pencil', note:'HB', w:1.7, sh:'0 0 .4px currentColor', a:.8 },
+];
+const INKS = [
+  { id:'blue', name:'Blue', c:'#20389A' }, { id:'blueblack', name:'Blue-black', c:'#1C2448' }, { id:'black', name:'Black', c:'#232427' },
+  { id:'red', name:'Red', c:'#B4262D' }, { id:'green', name:'Green', c:'#1E6B40' }, { id:'purple', name:'Purple', c:'#4B2A8C' },
+];
+const PAPERS = [['ruled', 'Ruled'], ['spiral', 'Spiral'], ['yellow', 'Yellow pad'], ['grid', 'Grid'], ['plain', 'Plain']];
+const REALISM = { neat:{ mess:15, wobble:12, variety:35, flow:30 }, natural:{ mess:45, wobble:30, variety:60, flow:55 }, hurried:{ mess:72, wobble:50, variety:75, flow:70 }, messy:{ mess:100, wobble:80, variety:95, flow:90 } };
+const LOOKS = [
+  { id:'exam', name:'Exam answer', v:{ font:'labelle', pen:'ball', ink:'blue', paper:'ruled', ...REALISM.natural } },
+  { id:'notes', name:'Neat notes', v:{ font:'patrick', pen:'gel', ink:'blueblack', paper:'ruled', ...REALISM.neat } },
+  { id:'letter', name:'Letter', v:{ font:'cedar', pen:'fine', ink:'black', paper:'plain', ...REALISM.natural } },
+  { id:'scribble', name:'Quick scribble', v:{ font:'reenie', pen:'pencil', ink:'black', paper:'grid', ...REALISM.hurried } },
+  { id:'journal', name:'Journal', v:{ font:'caveat', pen:'felt', ink:'purple', paper:'yellow', ...REALISM.natural } },
+  { id:'school', name:'School copy', v:{ font:'playwrite', pen:'ball', ink:'blue', paper:'spiral', ...REALISM.neat } },
+];
+const BLOCK_KEYS = ['font', 'pen', 'ink', 'customInk', 'size', 'mess', 'wobble', 'variety', 'flow', 'mistakes', 'track', 'words'];
+const TEMPLATES = [
+  { id:'blank', name:'Blank page', note:'Ruled, nothing on it yet', look:'exam', html:'' },
+  { id:'assign', name:'Assignment', note:'Header, title and headings', look:'exam', head:true, html:'<h1>Photosynthesis</h1><h2>Introduction</h2><p>Plants make their own food using sunlight, water and air.</p>' },
+  { id:'notes', name:'Class notes', note:'Grid paper and lists', look:'notes', paper:'grid', html:'<h2>Ch. 3 · Light</h2><ul><li>Light travels in straight lines</li><li>Angle in = angle out</li><li>Shadows form behind objects</li></ul>' },
+  { id:'letter', name:'Letter', note:'Plain paper, joined-up', look:'letter', html:'<p>Dear Nani,</p><p>Thank you for the lovely sweater. It keeps me warm every morning on the way to school.</p>' },
+  { id:'journal', name:'Journal page', note:'Yellow pad, relaxed', look:'journal', html:'<p>6 November</p><p>Today was a good day. We finally finished the model of the solar system.</p>' },
+  { id:'card', name:'Card', note:'One big message', look:'letter', card:true, html:'<h1>Happy birthday!</h1>' },
+];
+const RECENT = [
+  { id:'water', name:'The Water Cycle', meta:'2 pages · Exam answer · Edited today', tpl:'assign' },
+  { id:'nani', name:'Letter to Nani', meta:'1 page · Letter · Yesterday', tpl:'letter' },
+  { id:'phy', name:'Physics notes, chapter 3', meta:'4 pages · Neat notes · Last week', tpl:'notes' },
+];
+const TRY = {
+  home:['Open <b>The Water Cycle</b> under Recent.', 'Hover the <b>templates</b>: each starts with its own look.', 'Use <b>⋯</b> on a recent document.'],
+  write:['<b>Drag Page 1 below Page 2</b> by its ⠿ grip. The rest of “Main text” follows it onto a new page.', 'Open ⋯ on <b>Main text · 2 of 2</b> and split it off. Then use <b>Join back</b> on the new block.', 'Use a page’s ⋯ to <b>Merge into previous page</b>.', 'Drag a block by its name tag, or anywhere on the handwritten page.', 'Switch to <b>Outline</b> and drag “Margin note” onto Page 1.'],
+  outline:['Drag <b>Margin note</b> onto Page 1.', 'Drag <b>Page 2</b> above Page 1.', 'On “Page 2 starts here”, try <b>Split here</b>, then <b>Join back</b>.'],
+  style:['Pick a <b>Look</b> and watch both pages change.', '<b>Change</b> the handwriting: filter, star a favourite, type your own preview text.', 'Click <b>Margin note</b> on the page, choose <b>Only “Margin note”</b>, and give it red ink.', 'Open <b>Fine-tune</b> under How natural.'],
+  export:['Switch the look to <b>Black and white</b> and toggle <b>camera tilt</b>.', 'Pick <b>PNG</b>, then <b>Choose pages</b> and click a page to leave it out.', 'Watch the <b>size</b> on the Download button change.'],
+  brand:[],
+};
+
+/* ================= State ================= */
+const S = {
+  screen:'home', cmode:'side', sel:'main', scope:'doc', seq:10, hist:[], future:[], favs:['labelle', 'caveat'], tryOpen:true,
+  open:{}, hp:null, myLooks:[],
+  blocks:{
+    head:{ name:'Header', kind:'fields', color:0, keys:['fields'] },
+    main:{ name:'Main text', kind:'text', color:1, keys:['main1', 'main2'] },
+    note:{ name:'Margin note', kind:'text', color:2, keys:['note'], style:{ ink:'red' } },
+  },
+  pages:[
+    { id:'p1', segs:[ { b:'head', k:'fields', x:13.6, y:2.8, w:11.6 }, { b:'main', k:'main1', x:3.5, y:8.4, w:21.6 } ] },
+    { id:'p2', segs:[ { b:'main', k:'main2', x:3.5, y:2.8, w:21.6 }, { b:'note', k:'note', x:15.4, y:18.2, w:9.2, tilt:-2.5 } ] },
+  ],
+  fields:{ name:'Aarav Mehta', class:'8-B', date:'6 November 2026' },
+  html:{
+    main1:'<h1>The Water Cycle</h1><h2>What it is</h2><p>The water cycle is the <b>continuous movement</b> of water between the earth’s surface and the atmosphere. It has <u>four main stages</u>.</p><ol><li>Evaporation: the sun heats water in oceans, rivers and lakes.</li><li>Condensation: water vapour cools and forms clouds.</li><li>Precipitation: water falls back as <mark>rain, snow or hail</mark>.</li></ol>',
+    main2:'<ol start="4"><li>Collection: water gathers in rivers, lakes and underground.</li></ol><h2>Why it matters</h2><p>Without the water cycle, plants could not grow and <s>rivers would</s> fresh water would run out. It also helps control the earth’s temperature.</p>',
+    note:'<p>Revise this for Friday’s test!</p>',
+  },
+  style:{ font:'labelle', pen:'ball', ink:'blue', customInk:'#7A2E8C', paper:'ruled', size:1, spacing:1.4, ...REALISM.natural, mistakes:0, track:0, words:0, seed:0, light:true, ghost:true, crease:false, holes:false },
+  exp:{ format:'pdf', pages:'all', sel:[0, 1], look:'scan', tilt:true, quality:'standard', zip:true, name:'the-water-cycle' },
+};
+
+/* ================= Helpers ================= */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+const sv = (inner, w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const ICON = {
+  dots:'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>',
+  grip:'<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">' + [6, 12, 18].map(y => `<circle cx="9" cy="${y}" r="1.7" fill="currentColor"/><circle cx="15" cy="${y}" r="1.7" fill="currentColor"/>`).join('') + '</svg>',
+  plus:sv('<path d="M12 5v14M5 12h14"/>', 16),
+  bullets:sv('<path d="M10 6h10M10 12h10M10 18h10"/><circle cx="5" cy="6" r="1" fill="currentColor"/><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="5" cy="18" r="1" fill="currentColor"/>'),
+  numbers:sv('<path d="M11 6h9M11 12h9M11 18h9"/><path d="M4 4.5 5.5 4v4.5" stroke-width="1.6"/><path d="M4 14c.2-1 2.6-1.3 2.6.3 0 1-2.6 2.2-2.6 3.2h2.7" stroke-width="1.6"/>'),
+  pagebreak:sv('<path d="M6 3v5h12V3M6 21v-5h12v5"/><path d="M3 12h2M9 12h2M15 12h2M21 12h0"/>'),
+  pages:sv('<rect x="4" y="3" width="11" height="15" rx="1.5"/><path d="M9 21h9a2 2 0 0 0 2-2V8"/>', 15),
+  outline:sv('<path d="M4 6h3M4 12h3M4 18h3M10 6h10M12 12h8M12 18h8"/>', 15),
+  reroll:sv('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>', 16),
+  close:sv('<path d="M6 6l12 12M18 6 6 18"/>', 16),
+  upload:sv('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/>', 20),
+};
+
+/* Logo: the ink page with a joined-up n written by a nib */
+const NIB_PATH = 'M32 56 L22 35 C20.6 31.5 21 27.5 23.5 24.5 L27 20.5 V10 H37 V20.5 L40.5 24.5 C43 27.5 43.4 31.5 42 35 Z';
+function logo(s, ink = true){
+  const bg = ink ? 'var(--logo-ink)' : 'var(--paper)', rule = ink ? 'rgba(255,255,255,.28)' : 'var(--rule)', margin = ink ? '#FF9B9B' : 'var(--margin-line)';
+  const pen = ink ? '#FFFFFF' : 'var(--pen)', cut = ink ? 'var(--logo-ink)' : 'var(--paper)', border = ink ? 'none' : 'rgba(0,0,0,.12)';
+  return `<svg width="${s}" height="${s}" viewBox="0 0 64 64" role="img" aria-label="Nib logo"><rect x=".5" y=".5" width="63" height="63" rx="15" style="fill:${bg};stroke:${border};stroke-width:1"/>
+    <path d="M5 20.5H59M5 32.5H59M5 44.5H59" style="stroke:${rule};stroke-width:1.5"/><path d="M14 5V59" style="stroke:${margin};stroke-width:1.8"/>
+    <path d="M17 44 C19.5 42 21 38.5 22.5 35 C22.6 38.5 22.3 41.5 22 44 C23.4 38.8 26.2 35.2 29.2 35.2 C32.2 35.2 31.9 39.6 31.4 42.4 C31 45.2 33.6 46 36.6 44 L40.2 41.4" style="fill:none;stroke:${pen};stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round"/>
+    <g transform="translate(40.6 41) rotate(45) scale(.44) translate(-32 -56)"><path d="${NIB_PATH}" style="fill:${pen}"/><path d="M32 54 V38" style="fill:none;stroke:${cut};stroke-width:2.6"/><circle cx="32" cy="34.2" r="3.1" style="fill:${cut}"/></g></svg>`;
+}
+
+/* Model */
+const col = b => PALETTE[S.blocks[b].color % PALETTE.length];
+function findSeg(k){ for (let pi = 0; pi < S.pages.length; pi++) { const si = S.pages[pi].segs.findIndex(s => s.k === k); if (si >= 0) return { pi, si, seg:S.pages[pi].segs[si] }; } return null; }
+const pagesOf = b => S.blocks[b].keys.map(findSeg).filter(Boolean).map(f => f.pi + 1);
+function pagesLabel(b){ const p = pagesOf(b); if (!p.length) return 'Not on a page'; if (p.length === 1) return `Page ${p[0]}`; return p.every((v, i) => !i || v === p[i - 1] + 1) ? `Pages ${p[0]}–${p[p.length - 1]}` : `Pages ${p.join(', ')}`; }
+function partText(k){ const f = findSeg(k); const b = S.blocks[f.seg.b]; return b.keys.length > 1 ? `${b.keys.indexOf(k) + 1} of ${b.keys.length}` : ''; }
+const isCont = k => { const f = findSeg(k); return !!f && S.blocks[f.seg.b].keys.indexOf(k) > 0; };
+const blockOrder = () => { const seen = []; S.pages.forEach(p => p.segs.forEach(s => { if (!seen.includes(s.b)) seen.push(s.b); })); return seen; };
+const nextColor = () => Math.max(-1, ...Object.values(S.blocks).map(b => b.color)) + 1;
+function snippet(k){
+  if (k === 'fields') return `${S.fields.name} · ${S.fields.class} · ${S.fields.date}`;
+  const d = document.createElement('div'); d.innerHTML = S.html[k].replace(/<\/(h1|h2|p|li|blockquote)>/g, '$& ');
+  return d.textContent.replace(/\s+/g, ' ').trim().slice(0, 70);
+}
+const snap = () => JSON.stringify({ blocks:S.blocks, pages:S.pages, html:S.html, fields:S.fields, seq:S.seq, style:S.style });
+function load(j){ Object.assign(S, JSON.parse(j)); if (!S.blocks[S.sel]) S.sel = blockOrder()[0] || null; }
+const hand = id => HANDS.find(h => h.id === id) || HANDS[0];
+const inkOf = st => st.ink === 'custom' ? st.customInk : (INKS.find(i => i.id === st.ink) || INKS[0]).c;
+const eff = b => ({ ...S.style, ...((S.blocks[b] && S.blocks[b].style) || {}) });
+const hasOwn = b => !!(S.blocks[b] && S.blocks[b].style && Object.keys(S.blocks[b].style).length);
+function handVars(st){
+  const h = hand(st.font), pen = PENS.find(p => p.id === st.pen) || PENS[1];
+  return `--hf:${h.css};--hw:${h.w || 400};--k:${(h.k * st.size).toFixed(3)};--pen:${st.pen === 'pencil' ? '#55575F' : inkOf(st)};--psh:${pen.sh};--palpha:${pen.a};--ls:${(st.track * .02).toFixed(2)}em;--ws:${(st.words / 100 + (st.mess > 70 ? .12 : 0)).toFixed(2)}em;`;
+}
+const rotOf = (s, st) => (s.tilt || 0) - st.mess * .008 + (((S.style.seed * 7 + s.k.length * 3) % 5) - 2) * .12 * (st.mess / 50);
+
+/* ================= Structural changes ================= */
+// A block's later parts always sit on the pages right after its first part; pages are added when needed.
+function reflow(){
+  const moved = [];
+  for (const id of Object.keys(S.blocks)) {
+    const b = S.blocks[id]; if (b.keys.length < 2) continue;
+    const start = findSeg(b.keys[0]).pi;
+    for (let i = 1; i < b.keys.length; i++) {
+      const want = start + i, f = findSeg(b.keys[i]);
+      if (f.pi === want) continue;
+      let added = false;
+      while (S.pages.length <= want) { S.pages.push({ id:'p' + (++S.seq), segs:[] }); added = true; }
+      S.pages[f.pi].segs.splice(f.si, 1); S.pages[want].segs.push(f.seg);
+      moved.push({ name:b.name, page:want + 1, added });
+    }
+  }
+  return moved;
+}
+function change(msg, fn){
+  closeMenu();
+  const before = snap(); if (fn() === false) return;
+  const moved = reflow();
+  S.hist.push(before); S.future = [];
+  if (!S.blocks[S.sel]) S.sel = blockOrder()[0] || null;
+  render(); setSaved();
+  const m = moved[0];
+  toast(msg + (m ? ` The rest of “${m.name}” followed it onto ${m.added ? 'a new ' : ''}page ${m.page}.` : ''), true);
+}
+function undo(){ const j = S.hist.pop(); if (!j) return toast('Nothing to undo.'); S.future.push(snap()); load(j); render(); toast('Undone.'); }
+function redo(){ const j = S.future.pop(); if (!j) return toast('Nothing to redo.'); S.hist.push(snap()); load(j); render(); toast('Redone.'); }
+function removeKey(k){ const f = findSeg(k); if (!f) return; S.pages[f.pi].segs.splice(f.si, 1); const b = S.blocks[f.seg.b]; b.keys = b.keys.filter(x => x !== k); if (!b.keys.length) delete S.blocks[f.seg.b]; }
+function splitBlock(id, k){
+  const b = S.blocks[id], i = b.keys.indexOf(k); if (i < 1) return null;
+  const tail = b.keys.slice(i); b.keys = b.keys.slice(0, i);
+  const nid = 'b' + (++S.seq);
+  S.blocks[nid] = { name:b.name.replace(/ \(continued\)$/, '') + ' (continued)', kind:'text', color:nextColor(), keys:tail, from:id, style:b.style ? { ...b.style } : undefined };
+  tail.forEach(t => { findSeg(t).seg.b = nid; });
+  return nid;
+}
+function joinInto(id, target){
+  const b = S.blocks[id], into = S.blocks[target];
+  change(`Joined “${b.name}” back into “${into.name}”.`, () => {
+    into.keys.push(...b.keys); b.keys.forEach(k => { findSeg(k).seg.b = target; }); delete S.blocks[id]; S.sel = target;
+  });
+}
+function movePage(i, to){
+  if (to === i || to < 0 || to >= S.pages.length) return;
+  change(`Moved page ${i + 1} to position ${to + 1}.`, () => { const [p] = S.pages.splice(i, 1); S.pages.splice(to, 0, p); });
+}
+function moveSeg(k, pj){
+  const f = findSeg(k); if (!f || f.pi === pj) return;
+  const b = S.blocks[f.seg.b];
+  if (isCont(k)) return toast(`Part ${b.keys.indexOf(k) + 1} of “${b.name}” always follows the part before it. Split it off first (⋯ → Split) to move it on its own.`);
+  change(`Moved “${b.name}” to page ${pj + 1}.`, () => { S.pages[f.pi].segs.splice(f.si, 1); S.pages[pj].segs.push(f.seg); });
+}
+const ACTIONS = {
+  delete:id => change(`Deleted “${S.blocks[id].name}”.`, () => { [...S.blocks[id].keys].forEach(removeKey); }),
+  split:k => { const f = findSeg(k), b = S.blocks[f.seg.b], at = b.keys.indexOf(k) === 0 ? b.keys[1] : k, pn = findSeg(at).pi + 1;
+    change(`Split “${b.name}”: from page ${pn} on, it’s a block of its own.`, () => { S.sel = splitBlock(f.seg.b, at); }); },
+  rmpart:k => { const f = findSeg(k), b = S.blocks[f.seg.b];
+    change(`Removed the page ${f.pi + 1} part of “${b.name}”. In the real app, the text after it moves up.`, () => removeKey(k)); },
+  join:id => joinInto(id, S.blocks[id].from),
+  addpage:i => change('Added a blank page.', () => { S.pages.splice(i == null ? S.pages.length : i, 0, { id:'p' + (++S.seq), segs:[] }); }),
+  pgup:i => movePage(i, i - 1),
+  pgdown:i => movePage(i, i + 1),
+  pgmerge:i => change(`Merged page ${i + 1} into page ${i}.${S.pages[i].segs.some(s => isCont(s.k)) ? ' Text that runs on from it still continues on the next page.' : ''}`, () => {
+    const conts = S.pages[i].segs.filter(s => isCont(s.k)), others = S.pages[i].segs.filter(s => !isCont(s.k));
+    others.forEach(s => S.pages[i - 1].segs.push(s));
+    S.pages[i].segs = conts;
+    if (!conts.length) S.pages.splice(i, 1);
+  }),
+  pgdel:i => change(`Deleted page ${i + 1} and everything on it.`, () => {
+    [...S.pages[i].segs].forEach(s => removeKey(s.k)); S.pages.splice(i, 1);
+    if (!S.pages.length) S.pages.push({ id:'p' + (++S.seq), segs:[] });
+  }),
+};
+function addBlock(kind){
+  if (kind === 'head' && S.blocks.head) return toast('This document already has a header block.');
+  change(kind === 'note' ? 'Added a margin note.' : kind === 'head' ? 'Added a header block.' : 'Added a text block.', () => {
+    if (kind === 'head') { S.blocks.head = { name:'Header', kind:'fields', color:0, keys:['fields'] }; S.pages[0].segs.unshift({ b:'head', k:'fields', x:13.6, y:2.8, w:11.6 }); S.sel = 'head'; return; }
+    const pi = S.pages.length - 1, k = 'k' + (++S.seq), id = 'b' + (++S.seq);
+    S.html[k] = kind === 'note' ? '<p>A note to self.</p>' : '<p>New block. Start typing here.</p>';
+    S.blocks[id] = { name:kind === 'note' ? 'Margin note' : 'Text block', kind:'text', color:nextColor(), keys:[k] };
+    S.pages[pi].segs.push(kind === 'note' ? { b:id, k, x:15.4, y:28, w:9.2, tilt:-2 } : { b:id, k, x:3.5, y:S.pages[pi].segs.length ? 25.2 : 2.8, w:21.6 });
+    S.sel = id;
+  });
+}
+
+/* ================= Pages ================= */
+const fieldsHand = () => ['name', 'class', 'date'].map(k => `<div>${LABEL[k]}: <span data-fview="${k}">${esc(S.fields[k])}</span></div>`).join('');
+const nameSpan = b => `<span data-name="${b}">${esc(S.blocks[b].name)}</span>`;
+function paperBits(){
+  const st = S.style, p = st.paper;
+  return (p !== 'plain' ? '<div class="rules"></div><div class="mline"></div>' : '') + (p === 'spiral' ? '<div class="spiral"></div>' : '')
+    + (st.holes && p !== 'spiral' ? [16, 50, 84].map(t => `<i class="hole" style="top:${t}%"></i>`).join('') : '')
+    + (st.crease ? '<div class="crease"></div>' : '');
+}
+function pageEl(pi, { clean = false } = {}){
+  const p = S.pages[pi], st = S.style;
+  const ghost = st.ghost ? `<div class="ghost">Without the water cycle, plants could not grow and fresh water would run out.</div>` : '';
+  return `<div class="page paper-${st.paper}${st.light ? ' fx-light' : ''}" style="--L:${st.spacing}" aria-label="Handwritten page ${pi + 1}">${paperBits()}${ghost}
+    ${p.segs.map(s => { const e = eff(s.b);
+      return `<div class="pbox hw${clean ? ' clean' : ''}" data-block="${s.b}" data-seg="${s.k}" ${clean ? '' : `data-dragseg="${s.k}"`} style="--bc:${col(s.b)};${handVars(e)}left:${s.x}em;top:${s.y}em;width:${s.w}em;transform:rotate(${rotOf(s, e).toFixed(2)}deg)">
+        ${clean ? '' : `<span class="tag">${nameSpan(s.b)}${partText(s.k) ? ` · ${partText(s.k)}` : ''}</span>`}
+        <div data-view="${s.k}">${s.k === 'fields' ? fieldsHand() : S.html[s.k]}</div></div>`; }).join('')}
+    ${p.segs.length || clean ? '' : '<p class="blank">Empty page</p>'}</div>`;
+}
+const handPage = (pi, cap) => `<div class="pagewrap"><div class="pagecap">${cap}</div>${pageEl(pi)}</div>`;
+function typedPage(pi, cap){
+  const p = S.pages[pi];
+  return `<div class="pagewrap"><div class="pagecap">${cap}</div><div class="page typed">
+    ${p.segs.map(s => `<div class="pbox" data-block="${s.b}" data-seg="${s.k}" style="--bc:${col(s.b)};left:${s.x}em;top:${s.y}em;width:${s.w}em">
+      <div class="tag" data-dragseg="${s.k}" title="Drag to move"><span class="gi">${ICON.grip}</span>${nameSpan(s.b)}${partText(s.k) ? `<span class="tpart">· ${partText(s.k)}</span>` : ''}<button type="button" class="tagbtn" data-segmenu="${s.k}" aria-label="Options for this block">${ICON.dots}</button></div>
+      ${s.k === 'fields'
+        ? `<div class="tfields">${['name', 'class', 'date'].map(k => `<label>${LABEL[k]} <input id="t-${k}" data-field="${k}" value="${esc(S.fields[k])}"></label>`).join('')}</div>`
+        : `<div class="rt" contenteditable="true" data-edit="${s.k}" aria-label="${esc(S.blocks[s.b].name)} text">${S.html[s.k]}</div>`}</div>`).join('')}
+    ${p.segs.length ? '' : '<p class="blank">Empty page. Use + Add, or drag a block here in Outline.</p>'}</div></div>`;
+}
+
+/* ================= Write ================= */
+const TB = `<div class="tb" role="toolbar" aria-label="Formatting">
+  <select data-style aria-label="Text style"><option value="p">Normal</option><option value="h1">Title</option><option value="h2">Heading</option><option value="blockquote">Note</option></select>
+  <span class="sep"></span>
+  <button type="button" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold"><b>B</b></button>
+  <button type="button" data-cmd="underline" title="Underline (Ctrl+U)" aria-label="Underline"><u>U</u></button>
+  <button type="button" data-cmd="strikeThrough" title="Cross out" aria-label="Cross out"><s>S</s></button>
+  <button type="button" data-cmd="hilite" title="Highlight" aria-label="Highlight"><span class="hlx">H</span></button>
+  <span class="sep"></span>
+  <button type="button" data-cmd="ul" title="Bulleted list" aria-label="Bulleted list">${ICON.bullets}</button>
+  <button type="button" data-cmd="ol" title="Numbered list" aria-label="Numbered list">${ICON.numbers}</button>
+  <span class="sep"></span>
+  <button type="button" data-cmd="break" title="Page break" aria-label="Page break">${ICON.pagebreak}</button></div>`;
+const viewSwitch = () => `<div class="seg" role="group" aria-label="Write view">
+  <button type="button" data-goto="write" aria-pressed="${S.screen === 'write'}">${ICON.pages}Pages</button>
+  <button type="button" data-goto="outline" aria-pressed="${S.screen === 'outline'}">${ICON.outline}Outline</button></div>`;
+const addBtn = `<button class="btn ghost" type="button" data-add>${ICON.plus}Add</button>`;
+function renderWrite(){
+  const modes = [['side', 'Side by side'], ['typed', 'Typed'], ['hand', 'Handwritten']];
+  return `<div class="ws v-pages">
+    <div class="wbar">${viewSwitch()}<div class="seg" role="group" aria-label="Show">${modes.map(([k, l]) => `<button type="button" data-cmode="${k}" aria-pressed="${S.cmode === k}">${l}</button>`).join('')}</div>
+      <span class="grow"></span>${TB}<span class="grow"></span>${addBtn}</div>
+    <section class="desk" aria-label="Pages">${S.pages.map((p, pi) => `<div class="prow" data-droppage="${pi}">
+      <div class="prow-h"><span class="grip" draggable="true" data-dragpage="${pi}" title="Drag to move this page" role="img" aria-label="Drag to move page ${pi + 1}">${ICON.grip}</span><b>Page ${pi + 1}</b><span class="meta">· ${p.segs.length} block${p.segs.length === 1 ? '' : 's'}</span><span class="grow"></span>
+        <button class="mini" type="button" data-pagemenu="${pi}" aria-label="Options for page ${pi + 1}">${ICON.dots}</button></div>
+      <div class="pair${S.cmode !== 'side' ? ' one' : ''}">${S.cmode !== 'hand' ? typedPage(pi, 'Typed · edit here') : ''}${S.cmode !== 'typed' ? handPage(pi, 'Handwritten') : ''}</div></div>`).join('')}
+      <button class="btn ghost addpage" type="button" data-act="addpage">${ICON.plus}Add page</button></section></div>`;
+}
+function olItem(s){
+  const b = S.blocks[s.b], cont = isCont(s.k);
+  return `<div class="ol-item${S.sel === s.b ? ' is-sel' : ''}${cont ? ' cont' : ''}" ${cont ? '' : 'draggable="true"'} data-dragol="${s.k}" data-block="${s.b}" style="--bc:${col(s.b)}" tabindex="0" ${cont ? `title="Follows the part before it"` : ''}>
+    <span class="dot"></span><span class="name">${nameSpan(s.b)}${partText(s.k) ? ` <span class="meta">${partText(s.k)}</span>` : ''}</span>${hasOwn(s.b) ? '<span class="badge">Own style</span>' : '<span></span>'}
+    <span class="snip" data-snip="${s.k}">${esc(snippet(s.k))}</span></div>`;
+}
+function editorFor(id){
+  const b = S.blocks[id];
+  if (b.kind === 'fields') return `<div class="fields">${['name', 'class', 'date'].map(k => `<label for="f-${k}">${LABEL[k]}</label><input id="f-${k}" data-field="${k}" value="${esc(S.fields[k])}">`).join('')}</div><p class="hint">New documents fill in today’s date. Add Subject or Roll no. from ⋯.</p>`;
+  return b.keys.map((k, i) => {
+    const pn = findSeg(k).pi + 1;
+    return (i ? `<div class="pbreak"><span class="pb-l">Page ${pn} starts here</span><span class="rule"></span><span class="pb-acts"><button type="button" data-act="split" data-k="${k}">Split here</button><button type="button" data-act="rmpart" data-k="${k}">Remove page ${pn} part</button></span></div>` : '')
+      + `<div class="rt" contenteditable="true" data-edit="${k}" aria-label="${esc(b.name)}, page ${pn}">${S.html[k]}</div>`;
+  }).join('');
+}
+function inspector(){
+  const id = S.sel, b = S.blocks[id];
+  if (!b) return '<p class="empty">Select a block on the page or in the outline.</p>';
+  const from = b.from && S.blocks[b.from];
+  return `<div class="insp-h" style="--bc:${col(id)}"><span class="dot"></span><input id="blockname" value="${esc(b.name)}" aria-label="Block name"><span class="meta">${pagesLabel(id)}</span><button class="mini" type="button" data-menu="${id}" aria-label="Options for ${esc(b.name)}">${ICON.dots}</button></div>
+    ${from ? `<div class="joinbar">Split from “${esc(from.name)}”<span class="grow"></span><button class="link" type="button" data-act="join" data-id="${id}">Join back</button></div>` : ''}
+    ${b.kind === 'text' ? TB : ''}<div class="scroll insp-body" data-block="${id}">${editorFor(id)}</div>`;
+}
+function renderOutline(){
+  return `<div class="ws v-outline">
+    <div class="wbar">${viewSwitch()}<span class="grow"></span>${addBtn}</div>
+    <section class="pane" aria-label="Outline"><div class="pane-h">Pages <span class="count">${S.pages.length}</span></div>
+      <div class="scroll ol">${S.pages.map((p, pi) => `<div class="ol-sec" data-droppage="${pi}">
+        <div class="ol-page" draggable="true" data-dragpage="${pi}"><span class="grip">${ICON.grip}</span>PAGE ${pi + 1}<span class="grow"></span><button class="mini" type="button" data-pagemenu="${pi}" aria-label="Options for page ${pi + 1}">${ICON.dots}</button></div>
+        ${p.segs.map(olItem).join('') || '<p class="ol-empty">Drop a block here</p>'}</div>`).join('')}
+        <button class="btn ghost" type="button" data-act="addpage" style="margin:8px 4px 0">${ICON.plus}Add page</button>
+        <p class="ol-tip">Drag a page to reorder; anything that runs on from it follows. Drag a block onto another page to move it.</p></div></section>
+    <section class="desk" aria-label="Pages">${S.pages.map((p, pi) => handPage(pi, `Page ${pi + 1}`)).join('')}</section>
+    <section class="pane" id="insp" aria-label="Selected block">${inspector()}</section></div>`;
+}
+
+/* ================= Style ================= */
+const curStyle = () => S.scope === 'block' && S.blocks[S.sel] ? eff(S.sel) : S.style;
+const slider = (id, label, min, max, step, val, fmt = v => v) => `<div class="slider"><label for="s-${id}">${label}</label><output id="o-${id}">${fmt(val)}</output><input type="range" id="s-${id}" data-slider="${id}" data-fmt="${id}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
+const FMT = { size:v => Math.round(v * 100) + '%', spacing:v => ({ 1.2:'Tight', 1.3:'Snug', 1.4:'Normal', 1.5:'Roomy', 1.6:'Wide', 1.7:'Wider', 1.8:'Widest' }[(+v).toFixed(1)] || v), track:v => (v > 0 ? '+' : '') + v, words:v => (v > 0 ? '+' : '') + v + '%' };
+const realismOf = st => Object.keys(REALISM).find(k => Object.entries(REALISM[k]).every(([kk, vv]) => st[kk] === vv)) || 'custom';
+const lookOf = st => [...LOOKS, ...S.myLooks].find(L => ['font', 'pen', 'ink', 'paper'].every(k => L.v[k] === (k === 'paper' ? S.style.paper : st[k])) && realismOf(st) === realismOf(L.v));
+function scopeBar(){
+  const b = S.blocks[S.sel];
+  if (!b) return `<div class="scopebar">Changes apply to the whole document. Click a block on the page to style it on its own.</div>`;
+  const own = hasOwn(S.sel);
+  return `<div class="scopebar"><div class="seg" role="group" aria-label="Apply changes to">
+      <button type="button" data-scope="doc" aria-pressed="${S.scope !== 'block'}">Whole document</button>
+      <button type="button" data-scope="block" aria-pressed="${S.scope === 'block'}"><span class="dot" style="--bc:${col(S.sel)}"></span><span class="t">Only “${esc(b.name)}”</span></button></div>
+    ${S.scope === 'block'
+      ? `<div class="row">${own ? 'This block has its own style.' : 'Changes here affect only this block.'}<span class="grow"></span>${own ? '<button class="link" type="button" data-matchdoc>Match document</button>' : ''}</div>`
+      : `<div class="row">${Object.keys(S.blocks).filter(hasOwn).length ? `${Object.keys(S.blocks).filter(hasOwn).map(x => `“${esc(S.blocks[x].name)}”`).join(', ')} keeps its own style.` : 'Click a block on the page to style it on its own.'}</div>`}</div>`;
+}
+function stylePanel(){
+  const st = curStyle(), h = hand(st.font), look = lookOf(st), real = realismOf(st), blockScope = S.scope === 'block' && S.blocks[S.sel];
+  const lookCard = L => { const v = { ...S.style, ...L.v };
+    return `<button type="button" class="lookc" data-look="${L.id}" aria-pressed="${look && look.id === L.id}"><span class="lsw paper-${L.v.paper || 'ruled'}" style="background:${{ yellow:'#F9EEAA', grid:'#FAFAF6', plain:'#F9F9F6' }[L.v.paper] || 'var(--paper)'};font-family:${hand(v.font).css}, cursive;color:${v.pen === 'pencil' ? '#55575F' : inkOf(v)};font-size:${Math.round(22 * hand(v.font).k)}px">Homework</span><span class="n">${esc(L.name)}</span></button>`; };
+  return `<div class="pane-h">Style<span class="grow"></span><button class="btn ghost" type="button" data-variation title="Draw every letter again with new random shapes">${ICON.reroll}New variation</button></div>
+    ${scopeBar()}
+    <div class="scroll sp" id="sp">
+      <section class="sg"><h3>Looks <span class="meta">hand, pen, ink, paper and realism in one tap</span></h3><div class="looks">${[...LOOKS, ...S.myLooks].map(lookCard).join('')}</div>
+        <p class="hint" style="margin-top:10px"><button class="link" type="button" data-savelook>+ Save the current style as a look</button></p></section>
+      <section class="sg"><h3>Handwriting</h3><button type="button" class="handcur" data-openhands><span class="hs" style="font-family:${h.css}, cursive;font-weight:${h.w || 400};color:${st.pen === 'pencil' ? '#55575F' : inkOf(st)};font-size:${Math.round(24 * h.k)}px">The water cycle is</span><span class="chg">Change</span></button><span class="meta">${esc(h.name)} · ${h.tags.includes('cursive') ? 'joined-up' : 'print'}</span></section>
+      <section class="sg"><h3>Pen</h3><div class="pens">${PENS.map(p => `<button type="button" class="pen" data-pen="${p.id}" aria-pressed="${st.pen === p.id}"><svg viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><path d="M3 7 C 25 1, 45 12, 65 5 S 90 4, 97 6" fill="none" stroke="currentColor" stroke-width="${p.w}" stroke-linecap="round" ${p.id === 'pencil' ? 'opacity=".6" stroke-dasharray="7 1.2"' : ''}/></svg>${p.name}<small>${p.note}</small></button>`).join('')}</div>
+        <h3>Ink <span class="meta">${st.ink === 'custom' ? 'Your colour' : (INKS.find(i => i.id === st.ink) || INKS[0]).name}</span></h3><div class="inks">${INKS.map(i => `<button type="button" class="ink" data-ink="${i.id}" style="--c:${i.c}" aria-pressed="${st.ink === i.id}" aria-label="${i.name} ink" title="${i.name}"></button>`).join('')}<label class="ink custom" title="Any colour" aria-pressed="${st.ink === 'custom'}"><input type="color" data-custom-ink value="${st.customInk}" aria-label="Pick any ink colour"></label></div></section>
+      <section class="sg"><h3>Paper ${blockScope ? '<span class="meta">shared by every page</span>' : ''}</h3><div class="papers">${PAPERS.map(([id, n]) => `<button type="button" class="paperc" data-paper="${id}" aria-pressed="${S.style.paper === id}"><span class="pv pv-${id}" aria-hidden="true"></span>${n}</button>`).join('')}</div>
+        <details class="more" data-det="fx" ${S.open.fx ? 'open' : ''}><summary>Paper effects</summary><div class="toggles">${[['light', 'Room lighting'], ['ghost', 'Show-through'], ['crease', 'Fold crease'], ['holes', 'Punch holes']].map(([k, l]) => `<label><input type="checkbox" data-fx="${k}" ${S.style[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div></details></section>
+      <section class="sg"><h3>How natural</h3><div class="seg full" role="group" aria-label="How natural">${[['neat', 'Neat'], ['natural', 'Natural'], ['hurried', 'Hurried'], ['messy', 'Messy']].map(([k, l]) => `<button type="button" data-realism="${k}" aria-pressed="${real === k}">${l}</button>`).join('')}</div>
+        ${real === 'custom' ? '<p class="hint">Fine-tuned by you.</p>' : ''}
+        <details class="more" data-det="fine" ${S.open.fine ? 'open' : ''}><summary>Fine-tune</summary>
+          ${slider('mess', 'Natural movement', 0, 100, 1, st.mess)}${slider('variety', 'Vary each letter', 0, 100, 1, st.variety)}${slider('wobble', 'Letter wobble', 0, 100, 1, st.wobble)}${slider('flow', 'Ink flow', 0, 100, 1, st.flow)}${slider('mistakes', 'Mistakes', 0, 100, 1, st.mistakes)}
+          <p class="hint">The real engine draws these letter by letter. The prototype only hints at them.</p></details></section>
+      <section class="sg"><h3>Size and spacing</h3>${slider('size', 'Letter size', .8, 1.25, .05, st.size, FMT.size)}${slider('spacing', 'Line spacing', 1.2, 1.8, .1, S.style.spacing, FMT.spacing)}
+        <details class="more" data-det="space" ${S.open.space ? 'open' : ''}><summary>Letter and word spacing</summary>${slider('track', 'Letter spacing', -3, 8, .5, st.track, FMT.track)}${slider('words', 'Word spacing', -50, 150, 5, st.words, FMT.words)}</details></section>
+    </div>`;
+}
+function renderStyle(){
+  return `<div class="ws v-style"><section class="desk" id="sdesk" aria-label="Pages">${S.pages.map((p, pi) => handPage(pi, `Page ${pi + 1}`)).join('')}</section>
+    <section class="pane" id="spanel" aria-label="Style">${stylePanel()}</section></div>`;
+}
+function refreshPanel(){ const sc = $('#sp'), top = sc ? sc.scrollTop : 0; const el = $('#spanel'); if (!el) return; el.innerHTML = stylePanel(); const n = $('#sp'); if (n) n.scrollTop = top; }
+function refreshDesk(){ const d = $('#sdesk'); if (d) d.innerHTML = S.pages.map((p, pi) => handPage(pi, `Page ${pi + 1}`)).join(''); paintSel(); }
+function applyStyle(obj){
+  const target = S.scope === 'block' && S.blocks[S.sel] ? (S.blocks[S.sel].style ||= {}) : S.style;
+  for (const [k, v] of Object.entries(obj)) { if (BLOCK_KEYS.includes(k)) target[k] = v; else S.style[k] = v; }
+}
+function styleChange(obj){
+  S.hist.push(snap()); S.future = [];
+  applyStyle(obj); refreshDesk(); refreshPanel(); if (S.hp) renderHandList(); setSaved();
+}
+
+/* Handwriting picker */
+function openHands(){ S.hp = S.hp || { q:'', f:'all', t:'The water cycle is the continuous movement' }; renderSheet(); }
+function closeHands(){ S.hp = null; $('#sheet').innerHTML = ''; }
+function renderSheet(){
+  $('#sheet').innerHTML = `<div class="sheet-back" data-closehands></div><div class="sheet" role="dialog" aria-label="Choose handwriting">
+    <div class="sheet-h"><h2>Handwriting${S.scope === 'block' && S.blocks[S.sel] ? ` <span class="meta">for “${esc(S.blocks[S.sel].name)}”</span>` : ''}</h2><button class="mini" type="button" data-closehands aria-label="Close">${ICON.close}</button></div>
+    <input class="search" type="search" id="hq" placeholder="Search ${HANDS.length} hands" aria-label="Search handwriting" value="${esc(S.hp.q)}">
+    <div class="chips" role="group" aria-label="Filter">${HFILTERS.map(([k, l]) => `<button type="button" class="chip" data-hfilter="${k}" aria-pressed="${S.hp.f === k}">${l}</button>`).join('')}</div>
+    <label class="ptxt" for="ht">Preview <input id="ht" value="${esc(S.hp.t)}"></label>
+    <div class="hlist" role="listbox" aria-label="Handwriting" id="hlist"></div>
+    <div class="sheet-f"><label class="btn upl">${ICON.upload}Use your own font<input type="file" accept=".ttf,.otf,.woff,.woff2" data-upload></label><span>TTF, OTF or WOFF. It’s remembered on this device.</span></div></div>`;
+  renderHandList();
+}
+function renderHandList(){
+  const el = $('#hlist'); if (!el) return;
+  const st = curStyle(), q = S.hp.q.trim().toLowerCase(), f = S.hp.f;
+  const list = HANDS.filter(h => (!q || h.name.toLowerCase().includes(q)) && (f === 'all' || (f === 'fav' ? S.favs.includes(h.id) : h.tags.includes(f))));
+  el.innerHTML = list.map(h => `<div class="hrow" role="option" aria-selected="${st.font === h.id}" data-hand="${h.id}" tabindex="0">
+      <button type="button" class="star" data-star="${h.id}" aria-pressed="${S.favs.includes(h.id)}" aria-label="${S.favs.includes(h.id) ? 'Remove from' : 'Add to'} favourites">★</button>
+      <span class="smp" style="font-family:${h.css}, cursive;font-weight:${h.w || 400};font-size:${Math.round(24 * h.k)}px;color:${st.pen === 'pencil' ? '#55575F' : inkOf(st)}">${esc(S.hp.t || h.name)}</span>
+      <span class="hn">${esc(h.name)} · ${h.tags.filter(t => t !== 'real').map(t => ({ cursive:'joined-up' }[t] || t)).join(', ')}</span></div>`).join('')
+    || `<p class="empty">${f === 'fav' ? 'No favourites yet. Tap ★ on any hand.' : 'No handwriting matches that.'}</p>`;
+}
+
+/* ================= Export ================= */
+function estimate(){
+  const n = S.exp.pages === 'all' ? S.pages.length : S.exp.sel.filter(i => i < S.pages.length).length;
+  const per = { pdf:[.9, 2.3], png:[1.6, 3.8], jpg:[.6, 1.4] }[S.exp.format][S.exp.quality === 'high' ? 1 : 0] * (S.exp.look === 'bw' ? .55 : 1);
+  return { n, mb:n * per };
+}
+function exportPanel(){
+  const { n, mb } = estimate(), F = S.exp.format.toUpperCase(), multi = n > 1, zip = S.exp.format !== 'pdf' && multi && S.exp.zip;
+  const label = !n ? 'Choose at least one page' : S.exp.format === 'pdf' ? 'Download PDF' : multi ? (zip ? `Download ZIP · ${n} ${F}s` : `Download ${n} ${F}s`) : `Download ${F}`;
+  const ext = S.exp.format === 'pdf' ? '.pdf' : zip ? '.zip' : multi ? '-page-1.' + S.exp.format : '.' + S.exp.format;
+  const looks = [['none', 'As written'], ['scan', 'Scanned'], ['gray', 'Greyscale scan'], ['bw', 'Black and white']];
+  return `<div class="pane-h">Export</div><div class="scroll sp" id="sp">
+    <section class="sg"><h3>Format</h3><div class="seg full" role="group" aria-label="Format">${[['pdf', 'PDF'], ['png', 'PNG'], ['jpg', 'JPG']].map(([k, l]) => `<button type="button" data-expfmt="${k}" aria-pressed="${S.exp.format === k}">${l}</button>`).join('')}</div>
+      ${S.exp.format !== 'pdf' && multi ? `<label class="tgl"><input type="checkbox" id="exp-zip" ${S.exp.zip ? 'checked' : ''}><span>Put the images in one ZIP<small>One file to send or upload, instead of ${n}.</small></span></label>` : ''}</section>
+    <section class="sg"><h3>Pages</h3><div class="radio" role="radiogroup" aria-label="Pages">
+      <label><input type="radio" name="exp-pages" data-exppages="all" ${S.exp.pages === 'all' ? 'checked' : ''}> All pages (${S.pages.length})</label>
+      <label><input type="radio" name="exp-pages" data-exppages="choose" ${S.exp.pages === 'choose' ? 'checked' : ''}> Choose pages</label></div>
+      ${S.exp.pages === 'choose' ? `<p class="hint">Click a page on the left to leave it out or put it back. ${n} of ${S.pages.length} chosen.</p>` : ''}</section>
+    <section class="sg"><h3>How it looks</h3><div class="lookcards">${looks.map(([k, l]) => `<button type="button" class="lk look-${k}" data-explook="${k}" aria-pressed="${S.exp.look === k}"><span class="th" aria-hidden="true"></span>${l}</button>`).join('')}</div>
+      <label class="tgl"><input type="checkbox" id="exp-tilt" ${S.exp.tilt ? 'checked' : ''}><span>Slight camera tilt<small>Turned a fraction of a degree and cropped a little unevenly, like a quick photo.</small></span></label></section>
+    <section class="sg"><h3>Quality</h3><div class="seg full" role="group" aria-label="Quality">${[['standard', 'Standard'], ['high', 'Print quality']].map(([k, l]) => `<button type="button" data-expq="${k}" aria-pressed="${S.exp.quality === k}">${l}</button>`).join('')}</div></section>
+    <section class="sg"><h3>File name</h3><div class="fname"><input id="exp-name" value="${esc(S.exp.name)}" aria-label="File name"><span>${ext}</span></div></section>
+  </div>
+  <div class="exp-f"><div class="row"><button class="btn primary big" type="button" data-download ${n ? '' : 'disabled'}><span>${label}</span><span class="sz">${n ? '~' + mb.toFixed(1) + ' MB' : ''}</span></button>
+    <button class="btn" type="button" data-share ${n ? '' : 'disabled'}>Share…</button></div><p class="hint" style="margin:0">Made on this device. Nothing is uploaded.</p></div>`;
+}
+function renderExport(){
+  const pages = S.pages.map((p, pi) => { const inc = S.exp.pages === 'all' || S.exp.sel.includes(pi);
+    return `<div class="shotwrap${inc ? '' : ' excluded'}" ${S.exp.pages === 'choose' ? `data-incpage="${pi}" role="button" tabindex="0" aria-pressed="${inc}" aria-label="Page ${pi + 1}, ${inc ? 'included' : 'left out'}"` : ''}>
+      <div class="pagecap">Page ${pi + 1}${S.exp.pages === 'choose' ? (inc ? ' · included' : ' · left out') : ''}</div>
+      <div class="shot look-${S.exp.look}${S.exp.tilt ? ' tilt' : ''}">${pageEl(pi, { clean:true })}</div></div>`; }).join('');
+  return `<div class="ws v-export"><section class="desk" aria-label="Pages as they will download">${pages}</section><section class="pane" id="epanel" aria-label="Export">${exportPanel()}</section></div>`;
+}
+function refreshExport(){ const sc = $('#sp'), top = sc ? sc.scrollTop : 0; $('#main').innerHTML = renderExport(); const n = $('#sp'); if (n) n.scrollTop = top; }
+
+/* ================= Home ================= */
+function miniPage(t){
+  const L = LOOKS.find(l => l.id === t.look), v = { ...S.style, ...L.v, paper:t.paper || L.v.paper };
+  const paper = v.paper, bits = (paper !== 'plain' ? '<div class="rules"></div><div class="mline"></div>' : '') + (paper === 'spiral' ? '<div class="spiral"></div>' : '');
+  const head = t.head ? `<div class="pbox hw clean" style="${handVars(v)}left:13.6em;top:2.8em;width:11.6em"><div>Name: Aarav</div><div>Class: 8-B</div><div>Date: 6 Nov</div></div>` : '';
+  const body = t.html ? `<div class="pbox hw clean" style="${handVars(v)}left:${t.card ? '2em' : '3.5em'};top:${t.card ? '14em' : t.head ? '8.4em' : '2.8em'};width:${t.card ? '22em' : '21.6em'}${t.card ? ';--k:' + (hand(v.font).k * 1.15).toFixed(2) : ''}">${t.html}</div>` : '';
+  return `<div class="pagewrap"><div class="page paper-${paper}" style="--L:1.4">${bits}${head}${body}</div></div>`;
+}
+function renderHome(){
+  return `<div class="home"><div class="hv">
+    <section><div class="hh"><h1>Start something new</h1></div><p class="meta" style="margin:4px 0 14px">Each template starts with its own look. You can change everything later.</p>
+      <div class="tpls">${TEMPLATES.map(t => `<button type="button" class="tpl" data-tpl="${t.id}">${miniPage(t)}<b>${t.name}</b><span class="meta">${t.note}</span></button>`).join('')}
+        <button type="button" class="tpl" data-import><div class="dz">${ICON.upload}<span>Import a PDF, Word or text file</span><span class="meta">or drop it anywhere</span></div><b>Import</b><span class="meta">Headings, lists and bold come across</span></button></div></section>
+    <section><div class="hh"><h2>Recent</h2></div><div class="recent" style="margin-top:12px">${RECENT.map(r => `<div class="rrow" data-recent="${r.id}" role="button" tabindex="0">${miniPage(TEMPLATES.find(t => t.id === r.tpl))}<div><b>${esc(r.name)}</b><span class="meta">${r.meta}</span></div><button class="mini" type="button" data-docmenu="${r.id}" aria-label="Options for ${esc(r.name)}">${ICON.dots}</button></div>`).join('')}</div></section>
+    <p class="foot">Everything is saved on this device. Nothing is uploaded.</p></div></div>`;
+}
+
+/* ================= Brand ================= */
+function renderBrand(){
+  const tabs = cls => `<div class="tabsmock ${cls}"><div class="tabm">${logo(16)}<span>The Water Cycle · Nib</span></div><div class="tabm">${logo(16)}<span>Letter to Nani · Nib</span></div></div>`;
+  const card = (ink, name, why, rec) => `<article class="lcard${rec ? ' rec' : ''}"><div class="show">${logo(104, ink)}</div>
+    <div class="lrow"><div class="tile light">${logo(44, ink)}</div><div class="tile dark">${logo(44, ink)}</div><span class="grow"></span><div class="sizes">${logo(32, ink)}${logo(16, ink)}</div></div>
+    <div class="lockup">${logo(30, ink)}<span class="wordmark">nib</span></div><h3>${name}${rec ? '<span class="pill">Chosen</span>' : ''}</h3><p>${why}</p></article>`;
+  const sw = [['--logo-ink', 'Ink', 'Logo, brand'], ['--accent', 'Accent', 'Buttons, focus'], ['--fg', 'Text', ''], ['--bg', 'Background', ''], ['--marker', 'Marker', 'Highlights'], ['--margin-line', 'Margin red', 'Paper only']];
+  return `<div class="brandview"><div class="bv">
+    <section class="hero">${logo(124)}<div><h1>nib</h1><p>Type it, and Nib writes it out by hand: real pens, real paper, ready to download or share.</p><span class="tagline">Your words, handwritten.</span></div></section>
+    <section class="sec"><h2>Logo</h2><p>The ink page is the logo everywhere: app icon, browser tab, the top bar and social previews. The paper version stays in the drawer for print and for very dark backgrounds.</p><div class="cards2">
+      ${card(true, 'Ink page', 'A joined-up n written by a nib on ink-blue ruled paper. Reads at 16 px on light and dark tabs.', true)}
+      ${card(false, 'Paper page (alternate)', 'Same drawing on white paper. For printed material and places where the ink version would sink into a dark background.')}</div></section>
+    <section class="sec"><h2>In a browser tab</h2>${tabs('light')}${tabs('dark')}</section>
+    <section class="sec"><h2>Colour and type</h2><p>The interface stays quiet so the page carries the colour. The accent is the logo’s ink blue, a step brighter so buttons read clearly. Interface type is Figtree: regular for text, medium for controls, semibold for names and titles.</p>
+      <div class="swatches">${sw.map(([t, n, u]) => `<div class="swc"><span style="background:var(${t})"></span><div><b>${n}</b><br><span class="meta">${u || '&nbsp;'}</span></div></div>`).join('')}</div></section>
+  </div></div>`;
+}
+
+/* ================= Render and routing ================= */
+const SCREENS = ['home', 'write', 'outline', 'style', 'export', 'brand'];
+function render(){
+  document.body.dataset.screen = S.screen;
+  $('#toplogo').innerHTML = logo(30);
+  $$('.stage').forEach(b => { const g = b.dataset.goto; b.setAttribute('aria-current', g === S.screen || (g === 'write' && S.screen === 'outline') ? 'step' : 'false'); });
+  const R = { home:renderHome, write:renderWrite, outline:renderOutline, style:renderStyle, export:renderExport, brand:renderBrand };
+  $('#main').innerHTML = R[S.screen]();
+  if (S.screen !== 'style') closeHands();
+  renderSwitch(); renderTry(); paintSel();
+}
+function renderSwitch(){
+  const nav = [['home', 'Home'], ['write', 'Write'], ['style', 'Style'], ['export', 'Export']];
+  $('#switch').innerHTML = `<span class="tagp">Prototype</span>${nav.map(([k, l]) => `<button type="button" data-goto="${k}" ${S.screen === k || (k === 'write' && S.screen === 'outline') ? 'aria-current="page"' : ''}>${l}</button>`).join('')}<span class="divider"></span>
+    <button type="button" data-opentry>Things to try</button><button type="button" data-goto="brand" ${S.screen === 'brand' ? 'aria-current="page"' : ''}>Brand</button>`;
+}
+function renderTry(){
+  const items = TRY[S.screen] || [], el = $('#try');
+  el.hidden = !S.tryOpen || !items.length || matchMedia('(max-width: 860px)').matches;
+  el.innerHTML = `<h3>Things to try<span class="grow"></span><button class="mini" type="button" data-closetry aria-label="Close">${ICON.close}</button></h3><ol>${items.map(i => `<li>${i}</li>`).join('')}</ol>`;
+}
+function paintSel(){ $$('[data-block]').forEach(n => n.classList.toggle('is-sel', n.dataset.block === S.sel && S.screen !== 'export')); }
+function select(id){
+  if (!id || !S.blocks[id]) return;
+  const changed = S.sel !== id; S.sel = id;
+  if (changed && S.screen === 'outline') $('#insp').innerHTML = inspector();
+  if (changed && S.screen === 'style') { refreshPanel(); if (S.hp) renderSheet(); }
+  paintSel();
+}
+function fromHash(){ const h = location.hash.slice(1); S.screen = SCREENS.includes(h) ? h : 'home'; }
+function go(h){ closeMenu(); if (location.hash.slice(1) === h) { fromHash(); render(); } else location.hash = h; }
+window.addEventListener('hashchange', () => { closeMenu(); fromHash(); render(); });
+
+/* ================= Text sync ================= */
+let lastEditor = null, savedT = 0;
+function setSaved(){ const el = $('#saved'); el.textContent = 'Saving…'; clearTimeout(savedT); savedT = setTimeout(() => { el.textContent = 'Saved'; }, 600); }
+document.addEventListener('focusin', e => { const ed = e.target.closest && e.target.closest('[data-edit]'); if (ed) lastEditor = ed; });
+function syncFrom(ed){
+  const k = ed.dataset.edit; S.html[k] = ed.innerHTML;
+  $$(`[data-view="${k}"]`).forEach(n => { n.innerHTML = ed.innerHTML; });
+  $$(`[data-edit="${k}"]`).forEach(n => { if (n !== ed) n.innerHTML = ed.innerHTML; });
+  $$(`[data-snip="${k}"]`).forEach(n => { n.textContent = snippet(k); });
+  setSaved();
+}
+let sliderSnap = null;
+document.addEventListener('input', e => {
+  const t = e.target;
+  const ed = t.closest && t.closest('[data-edit]'); if (ed) return syncFrom(ed);
+  if (t.dataset && t.dataset.field) {
+    const k = t.dataset.field; S.fields[k] = t.value;
+    $$(`[data-fview="${k}"]`).forEach(n => { n.textContent = t.value; });
+    $$(`[data-field="${k}"]`).forEach(n => { if (n !== t) n.value = t.value; });
+    $$('[data-snip="fields"]').forEach(n => { n.textContent = snippet('fields'); });
+    return setSaved();
+  }
+  if (t.id === 'blockname' && S.blocks[S.sel]) { S.blocks[S.sel].name = t.value; $$(`[data-name="${S.sel}"]`).forEach(n => { n.textContent = t.value; }); return; }
+  if (t.dataset && t.dataset.slider) {
+    if (!sliderSnap) sliderSnap = snap();
+    const id = t.dataset.slider, v = Number(t.value); applyStyle({ [id]:v });
+    const o = $('#o-' + id); if (o) o.textContent = (FMT[id] || (x => x))(v);
+    refreshDesk(); return;
+  }
+  if (t.dataset && 'customInk' in t.dataset) { applyStyle({ customInk:t.value, ink:'custom' }); refreshDesk(); return; }
+  if (t.id === 'hq') { S.hp.q = t.value; return renderHandList(); }
+  if (t.id === 'ht') { S.hp.t = t.value; return renderHandList(); }
+  if (t.id === 'exp-name') { S.exp.name = t.value; return; }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.matches('[data-style]')) { runCmd('fmt:' + t.value); t.value = 'p'; return; }
+  if (t.dataset.slider) { if (sliderSnap) { S.hist.push(sliderSnap); S.future = []; sliderSnap = null; } refreshPanel(); setSaved(); return; }
+  if (t.dataset && 'customInk' in t.dataset) { S.hist.push(snap()); refreshPanel(); return; }
+  if (t.dataset.fx) return styleChange({ [t.dataset.fx]:t.checked });
+  if (t.id === 'exp-tilt') { S.exp.tilt = t.checked; return refreshExport(); }
+  if (t.id === 'exp-zip') { S.exp.zip = t.checked; return refreshExport(); }
+  if (t.dataset.exppages) { S.exp.pages = t.dataset.exppages; return refreshExport(); }
+  if (t.dataset.upload != null && t.files && t.files[0]) { toast(`Added “${t.files[0].name}”. In the app it joins the list under Your fonts and is remembered on this device.`); t.value = ''; }
+});
+document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.det) S.open[d.dataset.det] = d.open; }, true);
+function runCmd(c){
+  const ed = lastEditor && document.contains(lastEditor) ? lastEditor : null;
+  if (!ed) return toast('Click into some text first, then format it.');
+  if (c === 'break') return toast('A page break sends everything after it to the next page.');
+  ed.focus();
+  if (c === 'hilite') document.execCommand('hiliteColor', false, '#FFE36B');
+  else if (c.startsWith('fmt:')) document.execCommand('formatBlock', false, `<${c.slice(4)}>`);
+  else if (c === 'ul') document.execCommand('insertUnorderedList');
+  else if (c === 'ol') document.execCommand('insertOrderedList');
+  else document.execCommand(c);
+  syncFrom(ed);
+}
+
+/* ================= Menus ================= */
+let openM = null;
+function closeMenu(){ if (openM) { openM.remove(); openM = null; } }
+function popup(anchor, html){
+  closeMenu();
+  const m = document.createElement('div'); m.className = 'menu'; m.setAttribute('role', 'menu'); m.innerHTML = html;
+  document.body.append(m); openM = m; m.anchor = anchor;
+  const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  const left = Math.max(12, Math.min(r.right - w, innerWidth - w - 12));
+  const top = r.bottom + h + 8 > innerHeight ? Math.max(12, r.top - h - 6) : r.bottom + 6;
+  Object.assign(m.style, { position:'fixed', left:left + 'px', top:top + 'px' });
+  const f = m.querySelector('input, button:not(:disabled)'); if (f) { f.focus(); if (f.select) f.select(); }
+}
+const mi = (attrs, label, sub = '', cls = '') => `<button type="button" role="menuitem" class="mi ${cls}" ${attrs}>${label}${sub ? `<small>${sub}</small>` : ''}</button>`;
+function blockMenu(anchor, id, k){
+  const b = S.blocks[id], multi = b.keys.length > 1, from = b.from && S.blocks[b.from];
+  let h = mi(`data-act="rename" data-id="${id}"`, 'Rename', 'Call it “Answers”, “Diagram label”…');
+  if (from) h += mi(`data-act="join" data-id="${id}"`, `Join back into “${esc(from.name)}”`, 'It flows on from there again');
+  if (multi && k) {
+    const first = b.keys.indexOf(k) === 0, pn = findSeg(k).pi + 1;
+    h += mi(`data-act="split" data-k="${k}"`, first ? 'Split from the rest' : 'Split into its own block', first ? `Page ${pn} part becomes a separate block` : `Page ${pn} on becomes a separate block`);
+    h += mi(`data-act="rmpart" data-k="${k}"`, `Remove the page ${pn} part`, 'Deletes only the text on this page');
+  }
+  const others = Object.keys(S.blocks).filter(x => x !== id && x !== b.from && S.blocks[x].kind === 'text' && b.kind === 'text');
+  if (others.length) h += `<div class="mh">Add to the end of…</div>` + others.map(x => mi(`data-mergeinto="${x}" data-id="${id}"`, `“${esc(S.blocks[x].name)}”`)).join('');
+  h += mi(`data-act="ownstyle" data-id="${id}"`, 'Give it its own style', 'Opens Style with “Only this block” on');
+  h += `<hr>` + mi(`data-act="delete" data-id="${id}"`, 'Delete block', multi ? 'Every part, on every page' : '', 'danger');
+  popup(anchor, h);
+}
+function pageMenu(anchor, i){
+  const n = S.pages.length;
+  popup(anchor, mi(`data-act="pgup" data-i="${i}"${i === 0 ? ' disabled' : ''}`, 'Move up') + mi(`data-act="pgdown" data-i="${i}"${i === n - 1 ? ' disabled' : ''}`, 'Move down')
+    + mi(`data-act="pgmerge" data-i="${i}"${i === 0 ? ' disabled' : ''}`, 'Merge into previous page', 'Its blocks move onto the page before; text that runs on keeps flowing')
+    + mi(`data-act="addpage" data-i="${i + 1}"`, 'Add a page after this one') + '<hr>' + mi(`data-act="pgdel" data-i="${i}"`, 'Delete page', 'And every block on it', 'danger'));
+}
+function addMenu(anchor){
+  popup(anchor, mi('data-addkind="text"', 'Text block', 'Anywhere on a page') + mi('data-addkind="note"', 'Margin note', 'Small and tilted, on the side')
+    + mi('data-addkind="head"', 'Header', 'Name, class, subject, date') + '<hr>' + mi('data-act="addpage"', 'Page', 'A blank page at the end'));
+}
+function formMenu(anchor, kind, id, label, value){
+  popup(anchor, `<form class="ren" data-form="${kind}" data-id="${id || ''}"><label for="ren-in">${label}</label><input id="ren-in" value="${esc(value)}"><button class="btn primary" type="submit">Save</button></form>`);
+}
+document.addEventListener('submit', e => {
+  const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
+  const v = f.querySelector('input').value.trim(), kind = f.dataset.form, id = f.dataset.id;
+  if (kind === 'rename') { const name = v || S.blocks[id].name; change(`Renamed to “${name}”.`, () => { S.blocks[id].name = name; }); }
+  if (kind === 'look') { const L = { id:'my' + (++S.seq), name:v || 'My look', v:{ ...curStyle(), paper:S.style.paper } }; S.myLooks.push(L); closeMenu(); refreshPanel(); toast(`Saved “${L.name}”. It’s in Looks on every document.`); }
+});
+
+/* ================= Toast ================= */
+let toastT = 0;
+function toast(msg, withUndo){
+  const t = $('#toast'); t.hidden = false;
+  t.innerHTML = `<span>${esc(msg)}</span>${withUndo ? '<button type="button" data-undo>Undo</button>' : ''}`;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, withUndo ? 7000 : 3800);
+}
+
+/* ================= Clicks ================= */
+let suppressClick = false;
+document.addEventListener('mousedown', e => { if (e.target.closest && e.target.closest('.tb button')) e.preventDefault(); });
+document.addEventListener('click', e => {
+  const t = e.target; if (!t.closest) return;
+  if (suppressClick) { suppressClick = false; return; }
+  const q = s => t.closest(s); let el;
+  if ((el = q('[data-undo]'))) { $('#toast').hidden = true; return undo(); }
+  if (q('#undo-btn')) return undo();
+  if (q('#redo-btn')) return redo();
+  if ((el = q('[data-goto]'))) return go(el.dataset.goto);
+  if (q('[data-opentry]')) { S.tryOpen = !S.tryOpen; return renderTry(); }
+  if (q('[data-closetry]')) { S.tryOpen = false; return renderTry(); }
+  if ((el = q('[data-closehands]'))) return closeHands();
+  if ((el = q('[data-star]'))) { const id = el.dataset.star; S.favs = S.favs.includes(id) ? S.favs.filter(x => x !== id) : [...S.favs, id]; return renderHandList(); }
+  if ((el = q('[data-hfilter]'))) { S.hp.f = el.dataset.hfilter; return renderSheet(); }
+  if ((el = q('[data-hand]'))) return styleChange({ font:el.dataset.hand });
+  if ((el = q('[data-cmode]'))) { S.cmode = el.dataset.cmode; return render(); }
+  if ((el = q('.tb [data-cmd]'))) return runCmd(el.dataset.cmd);
+  if ((el = q('[data-segmenu]'))) { const k = el.dataset.segmenu; select(findSeg(k).seg.b); return blockMenu(el, findSeg(k).seg.b, k); }
+  if ((el = q('[data-menu]'))) return blockMenu(el, el.dataset.menu, null);
+  if ((el = q('[data-pagemenu]'))) return pageMenu(el, +el.dataset.pagemenu);
+  if ((el = q('[data-docmenu]'))) { e.stopPropagation(); return popup(el, mi('data-soon="Rename it here or from its title at the top."', 'Rename') + mi('data-soon="Makes a copy with “(copy)” on the end."', 'Duplicate') + '<hr>' + mi('data-soon="Asks first, then keeps it in Recently deleted for 30 days."', 'Delete', '', 'danger')); }
+  if ((el = q('[data-addkind]'))) return addBlock(el.dataset.addkind);
+  if ((el = q('[data-mergeinto]'))) return joinInto(el.dataset.id, el.dataset.mergeinto);
+  if ((el = q('[data-act]'))) {
+    if (el.disabled) return;
+    const a = el.dataset.act;
+    if (a === 'rename') return formMenu(openM && openM.anchor || el, 'rename', el.dataset.id, 'Block name', S.blocks[el.dataset.id].name);
+    if (a === 'ownstyle') { S.sel = el.dataset.id; S.scope = 'block'; return go('style'); }
+    if (a === 'delete' || a === 'join') return ACTIONS[a](el.dataset.id);
+    if (a === 'split' || a === 'rmpart') return ACTIONS[a](el.dataset.k);
+    return ACTIONS[a](el.dataset.i == null ? undefined : +el.dataset.i);
+  }
+  if ((el = q('[data-add]'))) return addMenu(el);
+  if ((el = q('[data-scope]'))) { S.scope = el.dataset.scope; refreshPanel(); if (S.hp) renderSheet(); return; }
+  if (q('[data-matchdoc]')) { S.hist.push(snap()); delete S.blocks[S.sel].style; refreshDesk(); refreshPanel(); return toast(`“${S.blocks[S.sel].name}” matches the document again.`); }
+  if ((el = q('[data-look]'))) { const L = [...LOOKS, ...S.myLooks].find(x => x.id === el.dataset.look); const v = { ...L.v }; if (S.scope === 'block') delete v.paper; return styleChange(v); }
+  if ((el = q('[data-savelook]'))) return formMenu(el, 'look', '', 'Name this look', 'My look');
+  if (q('[data-openhands]')) return openHands();
+  if ((el = q('[data-pen]'))) return styleChange({ pen:el.dataset.pen });
+  if ((el = q('[data-ink]'))) return styleChange({ ink:el.dataset.ink });
+  if ((el = q('[data-paper]'))) { if (S.scope === 'block') toast('Paper is shared by every page, so this changed the whole document.'); return styleChange({ paper:el.dataset.paper }); }
+  if ((el = q('[data-realism]'))) return styleChange({ ...REALISM[el.dataset.realism] });
+  if (q('[data-variation]')) { styleChange({ seed:S.style.seed + 1 }); return toast('Drew every letter again with new random shapes.'); }
+  if ((el = q('[data-expfmt]'))) { S.exp.format = el.dataset.expfmt; return refreshExport(); }
+  if ((el = q('[data-explook]'))) { S.exp.look = el.dataset.explook; return refreshExport(); }
+  if ((el = q('[data-expq]'))) { S.exp.quality = el.dataset.expq; return refreshExport(); }
+  if ((el = q('[data-incpage]'))) { const i = +el.dataset.incpage; S.exp.sel = S.exp.sel.includes(i) ? S.exp.sel.filter(x => x !== i) : [...S.exp.sel, i].sort(); return refreshExport(); }
+  if (q('[data-download]')) { const { mb } = estimate(); return toast(`In the app this saves ${S.exp.name || 'the-water-cycle'}${$('.fname span').textContent} (~${mb.toFixed(1)} MB). Downloads are blocked in this preview.`); }
+  if (q('[data-share]')) return toast('On a phone this opens the share sheet: WhatsApp, Drive, Mail and so on.');
+  if ((el = q('[data-tpl]'))) { const T = TEMPLATES.find(x => x.id === el.dataset.tpl); return toast(`Would start a new “${T.name}” document. The prototype only has The Water Cycle, so open it from Recent.`); }
+  if ((el = q('[data-recent]'))) { if (el.dataset.recent === 'water') return go('write'); return toast('The prototype only has The Water Cycle.'); }
+  if (q('[data-import]')) return toast('Opens a file picker for PDF, Word or text. Dropping a file anywhere does the same.');
+  if ((el = q('[data-soon]'))) { closeMenu(); return toast(el.dataset.soon); }
+  if (!q('.menu')) closeMenu();
+  if ((el = q('[data-block]'))) select(el.dataset.block);
+});
+let hoverId = null;
+document.addEventListener('pointerover', e => {
+  const b = e.target.closest && e.target.closest('[data-block]'); const id = b ? b.dataset.block : null;
+  if (id === hoverId) return; hoverId = id;
+  $$('[data-block]').forEach(n => n.classList.toggle('hover', !!id && n.dataset.block === id));
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if (openM) return closeMenu(); if (S.hp) return closeHands(); }
+  const t = e.target, typing = t.closest && t.closest('input, textarea, select, [contenteditable="true"]');
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
+  if ((e.key === 'Enter' || e.key === ' ') && t.matches && t.matches('.ol-item, .hrow, .rrow, [data-incpage]') && !e.target.closest('button')) { e.preventDefault(); t.click(); }
+});
+
+/* ================= Drag a block on the page (snaps to lines) ================= */
+let drag = null;
+document.addEventListener('pointerdown', e => {
+  const h = e.target.closest && e.target.closest('[data-dragseg]');
+  if (!h || e.button !== 0 || e.target.closest('button, input, [contenteditable="true"]')) return;
+  const page = h.closest('.page'), f = findSeg(h.dataset.dragseg); if (!page || !f) return;
+  e.preventDefault();
+  drag = { k:f.seg.k, sx:e.clientX, sy:e.clientY, x0:f.seg.x, y0:f.seg.y, em:parseFloat(getComputedStyle(page).fontSize), moved:false, before:snap(), L:S.style.spacing };
+  try { h.setPointerCapture(e.pointerId); } catch (err) {}
+});
+document.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+  const f = findSeg(drag.k); if (!f) return;
+  if (!drag.moved) { drag.moved = true; S.hist.push(drag.before); S.future = []; }
+  const s = f.seg, L = drag.L;
+  s.x = Math.round(Math.min(26 - s.w, Math.max(0, drag.x0 + (e.clientX - drag.sx) / drag.em)) * 10) / 10;
+  s.y = Math.round((2.8 + Math.round((Math.min(33, Math.max(0, drag.y0 + (e.clientY - drag.sy) / drag.em)) - 2.8) / L) * L) * 10) / 10;
+  $$(`[data-seg="${drag.k}"]`).forEach(n => { n.style.left = s.x + 'em'; n.style.top = s.y + 'em'; n.classList.add('moving'); });
+});
+document.addEventListener('pointerup', () => {
+  if (!drag) return;
+  if (drag.moved) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); $$('.moving').forEach(n => n.classList.remove('moving')); setSaved(); select(findSeg(drag.k).seg.b); }
+  drag = null;
+});
+
+/* ================= Drag pages and blocks between pages ================= */
+let dnd = null;
+const clearDrop = () => $$('.drop-before, .drop-after, .drop-on').forEach(n => n.classList.remove('drop-before', 'drop-after', 'drop-on'));
+document.addEventListener('dragstart', e => {
+  const o = e.target.closest && e.target.closest('[data-dragol]'), p = e.target.closest && e.target.closest('[data-dragpage]');
+  if (o) dnd = { type:'seg', k:o.dataset.dragol }; else if (p) dnd = { type:'page', i:+p.dataset.dragpage }; else return;
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dnd.type);
+});
+document.addEventListener('dragover', e => {
+  const t = dnd && e.target.closest && e.target.closest('[data-droppage]'); if (!t) return;
+  e.preventDefault(); clearDrop();
+  if (dnd.type === 'page') { const r = t.getBoundingClientRect(); t.classList.add(e.clientY < r.top + r.height / 2 ? 'drop-before' : 'drop-after'); }
+  else t.classList.add('drop-on');
+});
+document.addEventListener('drop', e => {
+  const t = dnd && e.target.closest && e.target.closest('[data-droppage]'); if (!t) return;
+  e.preventDefault();
+  const j = +t.dataset.droppage, after = t.classList.contains('drop-after'), d = dnd;
+  clearDrop(); dnd = null;
+  if (d.type === 'page') { let to = after ? j + 1 : j; if (to > d.i) to--; movePage(d.i, to); }
+  else moveSeg(d.k, j);
+});
+document.addEventListener('dragend', () => { clearDrop(); dnd = null; });
+
+fromHash(); render();
+</script>
