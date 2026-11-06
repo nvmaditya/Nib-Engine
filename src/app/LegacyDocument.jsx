@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useStore, update, selectedBox } from './store.js';
-import { use, computeLayout, fontsInUse, fontReady, loadFont, onAssetReady, clearMeasureCache, fontStr } from './engine/core.js';
-import { FONTS } from './engine/config.js';
-import { setTab, select, mobile } from './actions.js';
-import Header from './components/Header.jsx';
-import WritePanel from './components/WritePanel.jsx';
-import StylePanel from './components/StylePanel.jsx';
-import Pages from './components/Pages.jsx';
-import ImportDialog from './components/ImportDialog.jsx';
-import Toast from './components/Toast.jsx';
+import { useStore, update, selectedBox } from '../store.js';
+import { use, computeLayout, fontsInUse, fontReady, loadFont, onAssetReady, clearMeasureCache, fontStr } from '../engine/core.js';
+import { FONTS } from '../engine/config.js';
+import { setTab, select, mobile } from '../actions.js';
+import Header from '../components/Header.jsx';
+import WritePanel from '../components/WritePanel.jsx';
+import StylePanel from '../components/StylePanel.jsx';
+import Pages from '../components/Pages.jsx';
+import ImportDialog from '../components/ImportDialog.jsx';
 
-export default function App() {
+export default function LegacyDocument() {
   const st = useStore();
 
   // Fetch the font files the document needs; lay out again once they arrive.
@@ -84,7 +83,6 @@ export default function App() {
       </div>
       <ImportDialog open={st.importOpen} file={st.importFile} pages={layout ? layout.pages : 1} />
       <div className={'drop-veil' + (veil ? ' show' : '')} id="drop-veil">Drop to import this document</div>
-      <Toast toast={st.toast} />
     </>
   );
 }

@@ -30,8 +30,6 @@ export interface EditorState {
   pendingSelect: [number, number] | null;
   touchedId: string | null;
   scrollToPage: number | null;
-  /** Compatibility with the old toast component, until the new interface replaces it. */
-  toast: { msg: string; action?: ToastAction; id: number } | null;
 }
 
 export interface UpdateOptions {
@@ -67,7 +65,6 @@ export const useEditor = create<EditorState>(() => ({
   pendingSelect: null,
   touchedId: null,
   scrollToPage: null,
-  toast: null,
 }));
 use(init.S, init.doc);
 
@@ -172,9 +169,7 @@ export function renameDocument(title: string): void {
   update(s => { s.title = t; }, { history: 'rename', layout: false });
 }
 
-let toastId = 0;
 export function toast(msg: string, action?: ToastAction): void {
-  update(s => { s.toast = { msg, action, id: ++toastId }; }, { save: false, layout: false });
   sonnerToast(msg, action ? { action: { label: action.label, onClick: action.fn } } : undefined);
 }
 

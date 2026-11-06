@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
+import { App } from './app/App';
 import { FONTS } from './engine/config.js';
 import '@fontsource-variable/figtree';
 import './styles/app.css';
