@@ -225,7 +225,14 @@ const INL = [
   { re:/`([^`]+)`/, g:1, k:null },
   { re:/\[([^\]]+)\]\([^)]*\)/, g:1, k:null },
 ];
-function parseInline(t, st) {
+// A backslash before ASCII punctuation makes that character literal: swap it to a private-use character while matching.
+const ESC_RE = /\\([!-\/:-@\[-`{-~])/g;
+const hideEsc = t => t.replace(ESC_RE, (_, c) => String.fromCharCode(0xE000 + c.charCodeAt(0)));
+const showEsc = t => t.replace(/[\uE021-\uE07E]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xE000));
+export function parseInline(t) {
+  return parseInlineRaw(hideEsc(t), {}).map(p => ({ text:showEsc(p.text), style:p.style }));
+}
+function parseInlineRaw(t, st) {
   const out = []; let rest = t; let guard = 0;
   while (rest && guard++ < 500) {
     let best = null, bi = 0;
@@ -236,10 +243,25 @@ function parseInline(t, st) {
     if (!best) { out.push({ text:rest, style:st }); break; }
     if (bi > 0) out.push({ text:rest.slice(0, bi), style:st });
     const ns = best.p.k ? { ...st, [best.p.k]:true } : st;
-    out.push(...parseInline(best.m[best.p.g], ns));
+    out.push(...parseInlineRaw(best.m[best.p.g], ns));
     rest = rest.slice(best.m.index + best.m[0].length);
   }
   return out;
+}
+// What kind of line this is, and where its words begin.
+export function parseLine(raw) {
+  raw = raw.replace(/\t/g, '    ');
+  const info = (kind, content = '', x = {}) => ({ kind, level:0, depth:0, marker:'', content, prefix:raw.length - content.length, ...x });
+  const plain = kind => ({ kind, level:0, depth:0, marker:'', content:'', prefix:0 });
+  if (/^\s*\\newpage\s*$/.test(raw)) return plain('newpage');
+  if (!raw.trim()) return plain('blank');
+  if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(raw)) return plain('hr');
+  let m;
+  if ((m = raw.match(/^(#{1,3})\s+(.*)$/))) return info('heading', m[2], { level:m[1].length });
+  if ((m = raw.match(/^(\s*)([-*+])\s+(.*)$/))) return info('bullet', m[3], { depth:Math.min(3, Math.floor(m[1].length / 2)), marker:m[2] });
+  if ((m = raw.match(/^(\s*)(\d{1,3}[.)]|[a-z]\))\s+(.*)$/))) return info('number', m[3], { depth:Math.min(3, Math.floor(m[1].length / 2)), marker:m[2] });
+  if ((m = raw.match(/^\s*>\s?(.*)$/))) return info('quote', m[1]);
+  return { kind:'text', level:0, depth:0, marker:'', content:raw, prefix:0 };
 }
 function tokenize(segs) {
   const toks = []; let cur = null; let pending = 0;
@@ -369,24 +391,24 @@ function layoutBox(box, g, cfg) {
   let li = -1;
   for (let raw of src) {
     li++;
-    raw = raw.replace(/\t/g, '    ');
-    if (/^\s*\\newpage\s*$/.test(raw)) { if (seg.rows.length) newSeg(seg.page + 1, g.top); continue; }
-    if (!raw.trim()) { push({ kind:'blank', src:{ li, tok:0 } }); continue; }
-    if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(raw)) { push({ kind:'hr', src:{ li, tok:0 } }); continue; }
+    const L = parseLine(raw);
+    if (L.kind === 'newpage') { if (seg.rows.length) newSeg(seg.page + 1, g.top); continue; }
+    if (L.kind === 'blank') { push({ kind:'blank', src:{ li, tok:0 } }); continue; }
+    if (L.kind === 'hr') { push({ kind:'hr', src:{ li, tok:0 } }); continue; }
     const b = { size:base, indent:0, align:'left', marker:null, quote:false, headingUL:false, level:0 };
-    let content = raw, m;
-    if ((m = raw.match(/^(#{1,3})\s+(.*)$/))) {
-      const l = m[1].length; b.level = l; b.size = base * [1.4, 1.18, 1.06][l - 1];
-      b.headingUL = l <= 2; b.align = l === 1 ? 'center' : 'left'; content = m[2];
-    } else if ((m = raw.match(/^(\s*)[-*+]\s+(.*)$/))) {
-      const lv = Math.min(3, Math.floor(m[1].length / 2)); b.indent = 30 * (lv + 1); b.marker = { type:'dot' }; content = m[2];
-    } else if ((m = raw.match(/^(\s*)(\d{1,3}[.)]|[a-z]\))\s+(.*)$/))) {
-      const lv = Math.min(3, Math.floor(m[1].length / 2)); b.indent = 34 * (lv + 1) + (m[2].length > 2 ? 8 : 0);
-      b.marker = { type:'text', text:m[2] }; content = m[3];
-    } else if ((m = raw.match(/^\s*>\s?(.*)$/))) {
-      b.quote = true; b.indent = 26; content = m[1];
+    const content = L.content;
+    if (L.kind === 'heading') {
+      const l = L.level; b.level = l; b.size = base * [1.4, 1.18, 1.06][l - 1];
+      b.headingUL = l <= 2; b.align = l === 1 ? 'center' : 'left';
+    } else if (L.kind === 'bullet') {
+      b.indent = 30 * (L.depth + 1); b.marker = { type:'dot' };
+    } else if (L.kind === 'number') {
+      b.indent = 34 * (L.depth + 1) + (L.marker.length > 2 ? 8 : 0);
+      b.marker = { type:'text', text:L.marker };
+    } else if (L.kind === 'quote') {
+      b.quote = true; b.indent = 26;
     }
-    let segs2 = parseInline(content, {});
+    let segs2 = parseInline(content);
     if (b.level === 3) segs2 = segs2.map(s => ({ text:s.text, style:{ ...s.style, bold:true } }));
     const f = fontStr(cfg, b.size);
     let toks = tokenize(segs2);
@@ -1237,8 +1259,13 @@ export function setFrame(sg, patch) {
   box.frames[sg.idx] = { ...(box.frames[sg.idx] || {}), ...patch };
 }
 // Where a line's words begin, after any heading, list or note marker.
-const contentStart = line => { const m = line.match(/^(#{1,3}\s+|\s*[-*+]\s+|\s*(\d{1,3}[.)]|[a-z]\))\s+|\s*>\s?)/); return m ? m[0].length : 0; };
-function srcOffset(text, src) {
+// (as an index into the line as typed, where a tab counts as one character)
+const contentStart = line => {
+  const want = parseLine(line).prefix; let ex = 0, i = 0;
+  while (i < line.length && ex < want) { ex += line[i] === '\t' ? 4 : 1; i++; }
+  return i;
+};
+export function srcOffset(text, src) {
   const lines = text.split('\n'); let off = 0;
   if (src.li >= lines.length) return text.length;
   for (let i = 0; i < src.li; i++) off += lines[i].length + 1;
@@ -1256,8 +1283,12 @@ export function frameRange(box, idx) {
 }
 // Markup still open at the end of a piece of a line (so a split can close and reopen it).
 function openMarks(s) {
-  const open = []; const re = /\*\*|~~|==|\*/g; let m;
-  while ((m = re.exec(s))) { const i = open.lastIndexOf(m[0]); if (i >= 0) open.splice(i, 1); else open.push(m[0]); }
+  s = hideEsc(s);
+  const open = []; const re = /\*\*|~~|==|\*|_/g; let m;
+  while ((m = re.exec(s))) {
+    if (m[0] === '_' && /\w/.test(s[m.index - 1] || '') && /\w/.test(s[m.index + 1] || '')) continue;
+    const i = open.lastIndexOf(m[0]); if (i >= 0) open.splice(i, 1); else open.push(m[0]);
+  }
   return open;
 }
 // The box's text without what this page's part shows; what follows moves up.
