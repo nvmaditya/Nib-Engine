@@ -30,8 +30,14 @@ export function SlashMenu({ state }: { state: SuggestionProps<SlashItem, SlashIt
     });
   }, [state]);
 
-  // the editor (where focus is) points at the highlighted option
-  const dom = state?.editor.view.dom, optionId = `${id}-${active}`, open = !!state && items.length > 0;
+  // While it is open, the editor (where focus is) says it controls the menu and points at the highlighted option.
+  const dom = state?.editor.view.dom, listId = `${id}-list`, optionId = `${id}-${active}`, open = !!state && items.length > 0;
+  useEffect(() => {
+    if (!dom || !open) return;
+    const attrs = { 'aria-haspopup': 'listbox', 'aria-expanded': 'true', 'aria-controls': listId };
+    for (const [k, v] of Object.entries(attrs)) dom.setAttribute(k, v);
+    return () => { for (const k of Object.keys(attrs)) dom.removeAttribute(k); };
+  }, [dom, open, listId]);
   useEffect(() => {
     if (!dom || !open) return;
     dom.setAttribute('aria-activedescendant', optionId);
@@ -41,7 +47,7 @@ export function SlashMenu({ state }: { state: SuggestionProps<SlashItem, SlashIt
   if (!state || !open) return null;
   const r = state.clientRect?.(), left = Math.max(8, Math.min(r?.left ?? 0, window.innerWidth - 232)), top = (r?.bottom ?? 0) + 6;
   return createPortal(
-    <div role="listbox" aria-label="Insert" className="fixed z-50 w-56 rounded-lg border border-line bg-surface p-1 text-fg shadow-lg" style={{ left, top }}>
+    <div id={listId} role="listbox" aria-label="Insert" className="fixed z-50 w-56 rounded-lg border border-line bg-surface p-1 text-fg shadow-lg" style={{ left, top }}>
       {items.map((it, i) => (
         <div key={it.label} id={`${id}-${i}`} role="option" aria-selected={i === active}
           className="cursor-pointer rounded-md px-2.5 py-1.5 text-sm font-medium aria-selected:bg-surface-2"

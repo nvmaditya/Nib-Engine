@@ -23,7 +23,13 @@ export interface PageBreakMark { offset: number; page: number; idx: number; acti
 
 export interface BlockEditorProps {
   boxId: string;
-  /** The markup lines this editor shows and writes; null for all of them. */
+  /**
+   * The markup lines this editor shows and writes; null for all of them. A new value is read when it changes
+   * (and the block's text is reloaded through it after an outside change). Typing grows or shrinks the
+   * editor's own lines from `first`, reported through onLineCount, so a parent that keeps passing the same
+   * range does not cut them back. Passing `{ first, first + lines }` follows the editor without a reload;
+   * any other range reloads those lines.
+   */
   range: LineRange | null;
   breaks?: PageBreakMark[];
   label: string;
@@ -31,7 +37,9 @@ export interface BlockEditorProps {
   acceptCaret?: boolean;
   onSplit?(idx: number): void;
   onRemovePart?(idx: number): void;
+  /** Focus came or went; `lines` is how many lines the editor holds. */
   onFocusChange?(focused: boolean, lines: number): void;
+  /** After each write: how many lines the editor holds now (its lines are `first` to `first + lines`). */
   onLineCount?(lines: number): void;
   onExternalChange?(): void;
   onReady?(e: Editor): void;
@@ -120,6 +128,7 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
   live.current = props;
   const shown = useRef<Shown | null>(null);
   const pending = useRef(false); // an outside change arrived while composing
+  const seenRange = useRef<string | null>(null); // the `range` value last acted on
   const breaksSig = JSON.stringify(breaks ?? []);
   const painted = useRef<{ doc: PMNode; sig: string } | null>(null);
 
@@ -162,13 +171,16 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     live.current.onLineCount?.(n);
   };
 
-  // Reload when the block's text is not what this editor last wrote or loaded, or its range changed.
+  // Reload when the block's text is not what this editor last wrote or loaded, or when the `range` prop
+  // changed to lines other than the ones it shows.
   const sync = (e: Editor) => {
     const t = textOf(boxId), r = live.current.range;
     if (t === null || e.isDestroyed) return;
-    const sh = shownIn(e), first = r?.first ?? 0, end = r ? r.end : lineCount(t);
-    if (sh && sh.text === t && sh.whole === (r === null) && sh.first === first && sh.end === end) return;
+    const sh = shownIn(e), first = r?.first ?? 0, end = r ? r.end : lineCount(t), key = r ? `${r.first}:${r.end}` : 'all';
+    const showsIt = !!sh && sh.whole === (r === null) && sh.first === first && sh.end === end;
+    if (sh && sh.text === t && (key === seenRange.current || showsIt)) { seenRange.current = key; return; }
     if (e.view.composing) { pending.current = true; return; } // never under an IME composition
+    seenRange.current = key;
     // where the selection was, as markup offsets of the block
     const abs = (p: number) => (sh ? lineStart(sh.text, sh.first) + offsetAt(e.state.doc, sh.slice, p) : 0);
     const anchor = abs(e.state.selection.anchor), head = abs(e.state.selection.head), focused = !!sh && e.isFocused;

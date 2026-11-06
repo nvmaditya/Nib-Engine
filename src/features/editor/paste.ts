@@ -31,12 +31,27 @@ function rgba(v: string): number[] | null {
   return NEAR_WHITE.has(v) ? [255, 255, 255, 1] : null;
 }
 
-/** Whether a background colour shows as no highlight: none, transparent, or near white (every channel ≥ 240). */
+const NO_COLOUR = /^(transparent|none|inherit|initial|unset|revert|revert-layer|auto|window|currentcolor)$/;
+// The words of a `background` shorthand that are not its colour.
+const BG_WORDS = new Set(['none', 'repeat', 'no-repeat', 'repeat-x', 'repeat-y', 'space', 'round', 'scroll', 'fixed', 'local', 'top', 'bottom', 'left', 'right', 'center', 'border-box', 'padding-box', 'content-box', 'text', 'auto', 'cover', 'contain']);
+const blankColour = (c: string) => {
+  if (NO_COLOUR.test(c)) return true;
+  const k = rgba(c);
+  return !!k && (k[3] === 0 || k.slice(0, 3).every(x => x >= 240)); // a colour name not listed here is a colour
+};
+
+/**
+ * Whether a background (a colour, or a `background` shorthand) shows as no highlight: none, transparent, or
+ * near white (every channel ≥ 240). Pasting and the schema's highlight rule both use it.
+ */
 export function isBlankBackground(value: string): boolean {
   const v = value.trim().toLowerCase().replace(/\s*!important$/, '');
-  if (!v || /^(transparent|none|inherit|initial|unset|revert|revert-layer|auto|window|currentcolor)$/.test(v)) return true;
-  const c = rgba(v);
-  return !!c && (c[3] === 0 || c.slice(0, 3).every(x => x >= 240));
+  if (!v) return true;
+  if (NO_COLOUR.test(v) || rgba(v)) return blankColour(v);
+  // a shorthand: its colour is the word that isn't an image, position, size, repeat or box (none: no colour)
+  const words = v.replace(/url\([^)]*\)/g, ' ').match(/(rgb|hsl)a?\([^)]*\)|[^\s,/]+/g) ?? [];
+  const colour = words.filter(w => !BG_WORDS.has(w) && !/^[-+.\d]/.test(w)).pop();
+  return colour === undefined || blankColour(colour);
 }
 
 const normalWeight = (w: string) => w === 'normal' || w === 'lighter' || (/^\d+$/.test(w) && +w < 500);

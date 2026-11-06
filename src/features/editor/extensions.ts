@@ -10,7 +10,6 @@ import { Placeholder } from '@tiptap/extensions';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
 import { placeCaret, redo, undo, useEditor } from '@/store/editor';
 import { fromMarkup, listMarkers, toMarkup } from './markup';
-import { offsetAt, posAt } from './positions';
 import { BLOCK_EXTENSIONS } from './schema';
 import { firstDiff } from './slices';
 
@@ -268,8 +267,9 @@ const ConverterSync = Extension.create({
         const overlap = start - Math.min(endA, endB);
         if (overlap > 0) { endA += overlap; endB += overlap; }
         const tr = state.tr.replace(start, endA, doc.slice(start, endB));
-        const head = posAt(tr.doc, md, offsetAt(state.doc, md, state.selection.head));
-        return tr.setSelection(Selection.near(tr.doc.resolve(Math.min(head, tr.doc.content.size))));
+        // the selection maps through that replacement (a paste leaves the caret at or after its end); columns
+        // read from the old doc would not match the new markup (a tab is one character there, four here)
+        return tr.setSelection(state.selection.map(tr.doc, tr.mapping));
       },
     })];
   },

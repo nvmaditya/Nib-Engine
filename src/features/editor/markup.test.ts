@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import { parseInline, parseLine, segSig, splitAtFrame, type InlinePiece } from '@/engine/core.js';
 import { SAMPLE_BODY, SAMPLE_HEAD } from '@/engine/config.js';
 import { box, docOf, layoutOf, words } from '@/test/docs';
@@ -99,3 +100,17 @@ test('a line with hundreds of marked words keeps every word', () => {
 test('both halves of a mid-paragraph split round-trip', () => { const b = box({ y: 1009, text: `${words(20)} **${words(15)}** ${words(5)}` }); const L = layoutOf(docOf(b)); const nb = splitAtFrame(b, L.segs.find(s => s.idx === 1)!, 'n'); expect(rt(b.text)).toBe(b.text); expect(rt(nb.text)).toBe(nb.text); });
 test('ordered markers', () => { expect(listMarkers({ kind: '1', delim: '.', start: 3 }, [0, 0, 1, 1, 0])).toEqual(['3.', '4.', '1.', '2.', '5.']); expect(listMarkers({ kind: 'a', delim: ')', start: 1 }, [0, 0])).toEqual(['a)', 'b)']); });
 test('plain text', () => expect(plainText('## The **water** _cycle_')).toBe('The water cycle'));
+
+// HTML read straight through the schema (no paste cleaning): a background is a highlight unless it is
+// transparent, none or near white (every channel 240 or more), the same rule pasting uses.
+test('the schema reads near-white and transparent backgrounds as no highlight', () => {
+  const marksOf = (style: string) => {
+    const el = document.createElement('div');
+    el.innerHTML = `<p><span style="${style}">x</span></p>`;
+    return PMDOMParser.fromSchema(nibSchema).parse(el).firstChild!.firstChild!.marks.map(m => m.type.name);
+  };
+  for (const s of ['background-color:#f8f9fa', 'background-color:rgb(248, 249, 250)', 'background:whitesmoke', 'background-color:transparent', 'background-color:#ffffff', 'background:url(x.png) #f3f3f3'])
+    expect(marksOf(s), s).toEqual([]);
+  for (const s of ['background-color:#ffff00', 'background:yellow', 'background-color:rgb(239, 250, 250)'])
+    expect(marksOf(s), s).toEqual(['highlight']);
+});

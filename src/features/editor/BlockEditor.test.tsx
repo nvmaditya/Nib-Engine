@@ -110,6 +110,19 @@ test('the toolbar is disabled until an editor has focus', () => {
   expect(screen.getByRole('combobox', { name: 'Text style' })).toBeDisabled();
 });
 
+test('shortcut hints say Ctrl+ or ⌘ for the platform', () => {
+  const { unmount } = render(<FormatToolbar />);
+  expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('title', 'Bold (Ctrl+B)');
+  expect(screen.getByRole('button', { name: 'Page break' })).toHaveAttribute('title', 'Page break (Ctrl+Enter)');
+  unmount();
+  const mac = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+  render(<FormatToolbar />);
+  expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('title', 'Bold (⌘B)');
+  expect(screen.getByRole('button', { name: 'Underline' })).toHaveAttribute('title', 'Underline (⌘U)');
+  expect(screen.getByRole('button', { name: 'Page break' })).toHaveAttribute('title', 'Page break (⌘Enter)');
+  mac.mockRestore();
+});
+
 test('Ctrl+Enter splits the line at the caret around a page break', () => {
   setup('one two');
   select(4);
@@ -124,11 +137,18 @@ test('the / menu inserts a numbered list', async () => {
   await act(async () => { ed.commands.insertContent('/'); });
   const lb = await screen.findByRole('listbox', { name: 'Insert' });
   expect(within(lb).getAllByRole('option').map(o => o.textContent)).toEqual(['Normal text', 'Title', 'Heading', 'Note', 'Bulleted list', 'Numbered list', 'Page break']);
+  const box = screen.getByRole('textbox', { name: 'Main text' });
+  expect(box).toHaveAttribute('aria-haspopup', 'listbox');
+  expect(box).toHaveAttribute('aria-expanded', 'true');
+  expect(box).toHaveAttribute('aria-controls', lb.id);
   for (let i = 0; i < 5; i++) fireEvent.keyDown(ed.view.dom, { key: 'ArrowDown' });
-  expect(within(lb).getByRole('option', { selected: true })).toHaveTextContent('Numbered list');
+  const opt = within(lb).getByRole('option', { selected: true });
+  expect(opt).toHaveTextContent('Numbered list');
+  expect(box).toHaveAttribute('aria-activedescendant', opt.id);
   fireEvent.keyDown(ed.view.dom, { key: 'Enter' });
   expect(text()).toBe('1. ');
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  for (const a of ['aria-haspopup', 'aria-expanded', 'aria-controls', 'aria-activedescendant']) expect(box).not.toHaveAttribute(a);
 });
 
 test('Escape closes the / menu', async () => {
@@ -164,6 +184,13 @@ test('pasted text lands as the converter writes it, so positions stay exact', ()
   act(() => { ed.view.pasteText('\tx'); });
   expect(text()).toBe('- item    x');
   expect(ed.state.doc.textContent).toBe('item    x');
+  expect(offsetAt(ed.state.doc, text(), ed.state.selection.head)).toBe(11); // after the x
+  // spaces the markup drops after a list marker
+  act(() => update(s => { s.doc.boxes[0].text = '- a'; }));
+  select(2);
+  act(() => { ed.view.pasteText('  x'); });
+  expect(text()).toBe('- xa');
+  expect(offsetAt(ed.state.doc, text(), ed.state.selection.head)).toBe(3); // between x and a
 });
 
 test('page-break lines outlive a pasted change', () => {
@@ -237,14 +264,22 @@ test('a reload without focus keeps the selection on the same text', () => {
 
 test('a part edits only its own lines and reports how many it has', () => {
   const onLineCount = vi.fn();
-  setup('a\nb\nc\nd', { range: { first: 1, end: 3 }, onLineCount });
+  const { rerender } = setup('a\nb\nc\nd', { range: { first: 1, end: 3 }, onLineCount });
   expect(ed.getText({ blockSeparator: '|' })).toBe('b|c');
   act(() => { ed.commands.setTextSelection(2); ed.view.focus(); }); // the end of "b"
   fireEvent.keyDown(ed.view.dom, { key: 'Enter' });
   expect(text()).toBe('a\nb\n\nc\nd');
   expect(onLineCount).toHaveBeenLastCalledWith(3);
+  // the parent still passes { first: 1, end: 3 }: the editor keeps the lines it has
+  expect(ed.getText({ blockSeparator: '|' })).toBe('b||c');
+  const caret = ed.state.selection.head;
+  rerender(ui({ range: { first: 1, end: 4 }, onLineCount })); // the parent catches up: nothing moves
+  expect(ed.getText({ blockSeparator: '|' })).toBe('b||c');
+  expect(ed.state.selection.head).toBe(caret);
   act(() => placeCaret('b1', 0)); // line 0 is not this part's
   expect(get().caret).not.toBeNull();
+  rerender(ui({ range: { first: 3, end: 5 }, onLineCount })); // a new range is shown
+  expect(ed.getText({ blockSeparator: '|' })).toBe('c|d');
 });
 
 test('a deleted block is never written back', () => {
