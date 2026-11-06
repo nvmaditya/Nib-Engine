@@ -2,7 +2,7 @@ import { parseInline, parseLine, srcOffset, use, computeLayout, splitAtFrame } f
 import { cleanSettings } from '@/engine/doc.js';
 import type { Box, EngineDoc } from '@/engine/types';
 
-const box = (o: Partial<Box> = {}): Box => ({ id: 'b1', page: 0, x: 60, y: 80, w: 500, text: '', style: {}, shuffle: 0, frames: {}, ...o });
+const box = (o: Partial<Box> = {}): Box => ({ id: 'b1', page: 0, x: 60, y: 80, w: 500, text: '', style: {}, shuffle: 0, frames: {}, kind: 'text', name: 'Text block', color: 0, ...o });
 const docOf = (...boxes: Box[]): EngineDoc => ({ pageCount: 1, boxes, fileName: '' });
 const words = (n: number) => Array.from({ length: n }, (_, i) => 'ab' + (i % 10)).join(' ');
 const layoutOf = (d: EngineDoc) => { use(cleanSettings({}, false), d); return computeLayout(); };
