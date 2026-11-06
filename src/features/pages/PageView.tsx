@@ -2,10 +2,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { FilePlus2, Plus } from 'lucide-react';
 import { PAGE_H, PAGE_W } from '@/engine/config.js';
-import { applyLook, frameShot, geom } from '@/engine/core.js';
+import { applyLook, frameShot } from '@/engine/core.js';
 import type { Layout, Look } from '@/engine/types';
 import { Button } from '@/components/ui/button';
-import { addBoxAt, addPage, pagesApi } from '@/features/doc/actions';
+import { addBlock, addPageAt, pagesApi } from '@/features/doc/actions';
 import { matches } from '@/lib/media';
 import { cn } from '@/lib/utils';
 import { update, useEditor } from '@/store/editor';
@@ -92,19 +92,19 @@ export function PageView({ layout, readOnly = false, className }: { layout: Page
   const cssH = Math.round(cssW * PAGE_H / PAGE_W);
   const s = cssW / PAGE_W;
 
-  // Add a block where the reader is looking, on a free line.
+  // Add a text block on the page the reader is looking at, on its first free line.
   useEffect(() => {
     pagesApi.addBox = () => {
       const pagesEl = pagesRef.current, sheetsEl = sheetsRef.current;
       if (!layout || !pagesEl || !sheetsEl || !s) return;
       const cr = pagesEl.getBoundingClientRect();
-      let best = { page: 0, y: geom().top, area: -1 };
+      let best = { page: 0, area: -1 };
       [...sheetsEl.querySelectorAll('.paper')].forEach((p, i) => {
         const r = p.getBoundingClientRect();
         const t = Math.max(r.top, cr.top + 56, 0), b = Math.min(r.bottom, cr.bottom, innerHeight), a = b - t;
-        if (a > best.area) best = { page: i, area: a, y: ((t - r.top) + Math.max(0, a) * 0.3) / s };
+        if (a > best.area) best = { page: i, area: a };
       });
-      addBoxAt({ page: best.page, x: 0, y: best.y }, layout.segs, true);
+      addBlock('text', best.page);
     };
     return () => { pagesApi.addBox = null; };
   }, [layout, s]);
@@ -126,7 +126,7 @@ export function PageView({ layout, readOnly = false, className }: { layout: Page
       {!readOnly && (
         <div role="toolbar" aria-label="Page tools" className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-line bg-desk/95 px-4 py-2.5 backdrop-blur-sm">
           <Button variant="outline" size="sm" onClick={() => pagesApi.addBox?.()}><Plus />Add block</Button>
-          <Button variant="outline" size="sm" onClick={() => layout && addPage(layout.pages)}><FilePlus2 />Add page</Button>
+          <Button variant="outline" size="sm" onClick={() => addPageAt()}><FilePlus2 />Add page</Button>
           <span className="ml-1 hidden text-[13px] text-muted md:inline">{hint}</span>
         </div>
       )}

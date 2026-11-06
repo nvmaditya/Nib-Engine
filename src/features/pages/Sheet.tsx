@@ -4,7 +4,7 @@ import { PAGE_W } from '@/engine/config.js';
 import { inkKey, paintPaper, paperKey, renderSegment, segBounds, segId } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
 import { Button } from '@/components/ui/button';
-import { addBoxAt, removePage, select } from '@/features/doc/actions';
+import { addTextBlockAt, deletePageAt, select } from '@/features/doc/actions';
 import { BoxFrame } from './BoxFrame';
 import { drag } from './drag';
 
@@ -58,7 +58,7 @@ export function Sheet({ i, pages, segs, allSegs, cssW, cssH, dpr, gap, selectedI
             onDoubleClick={e => {
               if (e.target !== e.currentTarget) return;
               const r = e.currentTarget.getBoundingClientRect();
-              addBoxAt({ page: i, x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s }, allSegs);
+              addTextBlockAt(i, (e.clientX - r.left) / s, (e.clientY - r.top) / s);
             }}>
             {segs.map(sg => (
               <BoxFrame key={segId(sg)} sg={sg} s={s} gap={gap}
@@ -71,7 +71,7 @@ export function Sheet({ i, pages, segs, allSegs, cssW, cssH, dpr, gap, selectedI
       <figcaption className="mt-2.5 flex min-h-8 items-center justify-between gap-2 text-[13px] text-muted">
         <span>{pages > 1 ? `Page ${i + 1} of ${pages}` : 'Page 1'}</span>
         {!readOnly && removable && (
-          <Button variant="outline" size="sm" onClick={() => removePage(i, allSegs)}>Remove page</Button>
+          <Button variant="outline" size="sm" onClick={() => deletePageAt(i)}>Remove page</Button>
         )}
       </figcaption>
     </figure>
