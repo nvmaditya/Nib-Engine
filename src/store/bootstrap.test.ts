@@ -3,6 +3,13 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { bootstrapDocuments } from './bootstrap';
 import { resetDbForTests } from './db';
 import { listDocs } from './documents';
+import { getDb } from './db';
+import { sampleDoc } from '@/engine/doc.js';
+
+vi.mock('@/engine/doc.js', async orig => {
+  const m = await orig<typeof import('@/engine/doc.js')>();
+  return { ...m, sampleDoc: vi.fn(m.sampleDoc) };
+});
 
 beforeEach(async () => {
   vi.restoreAllMocks();
@@ -30,4 +37,14 @@ test('first run without Longhand work seeds the example', async () => {
 test('blocked IndexedDB reports ok:false instead of throwing', async () => {
   vi.spyOn(indexedDB, 'open').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
   await expect(bootstrapDocuments()).resolves.toEqual({ ok: false });
+});
+
+test('a failure while building the document leaves nothing half-written', async () => {
+  vi.mocked(sampleDoc).mockImplementationOnce(() => { throw new Error('boom'); });
+  await expect(bootstrapDocuments()).resolves.toEqual({ ok: false });
+  const db = await getDb();
+  expect(await db.get('prefs', 'bootstrapped')).toBeUndefined();
+  expect(await listDocs()).toHaveLength(0);
+  await expect(bootstrapDocuments()).resolves.toEqual({ ok: true });
+  expect((await listDocs()).map(d => d.title)).toEqual(['The Water Cycle']);
 });
