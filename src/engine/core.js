@@ -1,4 +1,4 @@
-// Longhand's drawing engine: real font outlines bent into handwriting, pen and ink, paper,
+// Nib's drawing engine: real font outlines bent into handwriting, pen and ink, paper,
 // page layout with text that flows from page to page, and the scan and camera looks.
 // Ported from the single-page version; the React app hands it settings and the document with use().
 import opentype from 'opentype.js';
@@ -43,7 +43,7 @@ function canvasW(str, font) {
   }
   return v;
 }
-// Width as Longhand will actually write it: glyph advances from the font file,
+// Width as Nib will actually write it: glyph advances from the font file,
 // averaged over the letter's alternate shapes when variety is on.
 function textW(str, f, size) {
   if (!str) return 0;

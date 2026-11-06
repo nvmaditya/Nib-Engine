@@ -1,4 +1,4 @@
-// Everything Longhand can be set to: hands, pens, inks, papers, presets and defaults.
+// Everything Nib can be set to: hands, pens, inks, papers, presets and defaults.
 export const PAGE_W = 794, PAGE_H = 1123; // A4 at 96 dpi, the page's own units
 export const PAD = { l:52, r:40, t:44, b:34 }; // room around a text box for markers, ascenders, jitter
 

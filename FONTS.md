@@ -1,6 +1,6 @@
 # Fonts
 
-Longhand ships these handwriting fonts as `public/fonts/<id>.woff` (Latin subsets from [Fontsource](https://fontsource.org), originally from Google Fonts). Each font's full licence is in `public/fonts/licenses/<id>.txt`.
+Nib ships these handwriting fonts as `public/fonts/<id>.woff` (Latin subsets from [Fontsource](https://fontsource.org), originally from Google Fonts). Each font's full licence is in `public/fonts/licenses/<id>.txt`.
 
 | Font | File id | Licence | Copyright |
 |---|---|---|---|

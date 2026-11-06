@@ -1,4 +1,4 @@
-// Things people do to the document, ported from Longhand's handlers. The engine's boxes are called blocks in the interface.
+// Things people do to the document, ported from the handlers in Nib's earlier version, Longhand. The engine's boxes are called blocks in the interface.
 import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS, uid } from '@/engine/doc.js';
 import { boxSettings, clearMeasureCache, frameRange, framesOf, geom, snapX, snapY, splitAtFrame, textWithoutFrame } from '@/engine/core.js';

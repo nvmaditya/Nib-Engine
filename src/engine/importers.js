@@ -1,4 +1,4 @@
-// Bringing documents in: PDF, Word (.docx) and text files become Longhand's own simple markup
+// Bringing documents in: PDF, Word (.docx) and text files become Nib's own simple markup
 // (# headings, - lists, **bold**, *underline*, ~~crossed out~~). The readers load only when used.
 import { cleanName } from './core.js';
 
@@ -88,7 +88,7 @@ function pdfParagraphs(lines, body, left) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// Word: mammoth turns .docx into simple HTML, which is walked into Longhand's own markup.
+// Word: mammoth turns .docx into simple HTML, which is walked into Nib's own markup.
 async function readDocx(buf) {
   const m = await docxLib();
   const r = await m.convertToHtml({ arrayBuffer:buf }, { styleMap:['u => u', 'strike => s', "p[style-name='Title'] => h1.title:fresh", "p[style-name='Subtitle'] => h2:fresh"], convertImage:m.images.imgElement(() => ({ src:'' })) });
@@ -170,7 +170,7 @@ export async function readDocument(file) {
 export const importError = code => ({
   scan:'This PDF has no text in it, only pictures of pages (a scan), so there is nothing to copy. Try the original document instead.',
   doc:'Old Word files (.doc) can’t be read here. Open it in Word or Google Docs and save it as .docx or PDF first.',
-  type:'Longhand can read PDF, Word (.docx) and text files.',
+  type:'Nib can read PDF, Word (.docx) and text files.',
   empty:'There’s no text in that file.',
   big:'That file is over 40 MB. Try a smaller one.',
   password:'That PDF is password-protected. Save a copy without the password and try again.',
