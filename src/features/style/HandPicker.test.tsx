@@ -197,7 +197,7 @@ test('use your own font: it is chosen, listed first and said', async () => {
 test('your own font with one shape per letter, and one Nib can’t keep on the device', async () => {
   await openPicker();
   await upload(fontFile('labelle', 'Neat.ttf'));
-  await waitFor(() => expect(lastToast()).toBe('Added “Neat”. It’s in Your fonts on this device.'));
+  await waitFor(() => expect(lastToast()).toBe('Added “Neat” with 1 shape per letter. It’s in Your fonts on this device.'));
   vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
   await upload(fontFile('caveat', 'Mine.otf'));
   await waitFor(() => expect(lastToast()).toBe('Added “Mine” for now. Nib couldn’t keep it on this device, so it goes when you close this page.'));
