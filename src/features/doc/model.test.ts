@@ -185,3 +185,18 @@ test('the separator goes when the block it belongs to goes or is joined elsewher
   appendToBlock(S, o, n2.id, 'm'); // n2 gone: n3 now comes from m, with a separator that was for n2
   expect(o.boxes.find(b => b.id === n3.id)!.fromSep).toBeUndefined();
 });
+
+// Join back keeps the later parts' own places (item 2).
+test('join back keeps the later parts’ own width, and the joined block’s own place', () => {
+  const e = docOf(box({ id: 'm', text: lines(70), frames: { 2: { w: 300 } } }));
+  const n2 = splitBlock(S, e, 'm', 1)!;
+  expect(n2.frames).toEqual({ 1: { w: 300 } });
+  joinBack(S, e, n2.id);
+  expect(layoutFor(S, e).segs.map(s => s.w)).toEqual([630, 630, 300]);
+  const f = docOf(m());
+  const n3 = splitBlock(S, f, 'm', 1)!;
+  Object.assign(n3, { x: 200, w: 400, y: 300 });
+  joinBack(S, f, n3.id);
+  expect(f.boxes[0].frames).toEqual({ 1: { x: 200, y: 300, w: 400 } });
+  expect(layoutFor(S, f).segs.map(s => [s.x, s.w, s.top])).toEqual([[112, 630, 110], [200, 400, 300]]);
+});

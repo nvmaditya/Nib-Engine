@@ -49,12 +49,34 @@ export function splitBlock(S: Settings, doc: EngineDoc, boxId: string, idx: numb
   return nb;
 }
 
+/**
+ * After `box` was joined back into `target` (its text now starts at offset `at`): the parts after
+ * `box`'s first keep their own places, and its first part's own place goes to the part it starts, if it starts one.
+ */
+function keepPlaces(S: Settings, doc: EngineDoc, target: Box, box: Box, at: number): void {
+  layoutFor(S, doc);
+  let p = 0;
+  while (frameRange(target, p + 1)[0] > 0 && frameRange(target, p + 1)[0] <= at) p++;
+  const frames = { ...target.frames };
+  for (const [j, f] of Object.entries(box.frames)) frames[p + +j] = f;
+  if (p > 0 && frameRange(target, p)[0] === at) {
+    const own: FrameRect = {};
+    if (box.x !== target.x) own.x = box.x;
+    if (box.y !== geom().top) own.y = box.y;
+    if (box.w !== target.w) own.w = box.w;
+    if (Object.keys(own).length) frames[p] = { ...frames[p], ...own };
+  }
+  target.frames = frames;
+}
+
 /** The block's text goes on a new line at the end of the target's, and the block goes. */
-export function appendToBlock(_S: Settings, doc: EngineDoc, boxId: string, targetId: string): Box | null {
+export function appendToBlock(S: Settings, doc: EngineDoc, boxId: string, targetId: string): Box | null {
   const box = find(doc, boxId), target = find(doc, targetId);
   if (!joinable(box) || !joinable(target) || box === target) return null;
   const sep = box.from === target.id && box.fromSep != null ? box.fromSep : '\n';
+  const at = target.text.length + sep.length, rejoin = !!target.text && box.from === target.id;
   target.text = target.text ? target.text + sep + box.text : box.text;
+  if (rejoin) keepPlaces(S, doc, target, box, at);
   drop(doc, new Set([box]), target);
   return target;
 }
