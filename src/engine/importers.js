@@ -91,7 +91,7 @@ function pdfParagraphs(lines, body, left) {
 // Word: mammoth turns .docx into simple HTML, which is walked into Nib's own markup.
 async function readDocx(buf) {
   const m = await docxLib();
-  const r = await m.convertToHtml({ arrayBuffer:buf }, { styleMap:['u => u', 'strike => s', "p[style-name='Title'] => h1.title:fresh", "p[style-name='Subtitle'] => h2:fresh", "br[type='page'] => br.nib-page"], convertImage:m.images.imgElement(() => ({ src:'' })) });
+  const r = await m.convertToHtml({ arrayBuffer:buf }, { styleMap:['u => u', 'strike => s', "p[style-name='Title'] => h1.title:fresh", "p[style-name='Subtitle'] => h2:fresh", "br[type='page'] => br.nib-page", "p[style-name='Quote'] => blockquote:fresh", "p[style-name='Intense Quote'] => blockquote:fresh"], convertImage:m.images.imgElement(() => ({ src:'' })) });
   const dom = new DOMParser().parseFromString(r.value, 'text/html');
   // A page break starts a new part; each part loses its leading and trailing blank lines, and empty parts go.
   const parts = htmlToMarks(dom.body).split(PAGE).map(p => p.replace(/^(\s*\n)+/, '').replace(/\s+$/, '')).filter(Boolean);
@@ -155,6 +155,7 @@ const fail = code => Object.assign(new Error(code), { code });
 export async function readDocument(file) {
   const name = file.name || 'file', ext = ((name.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
   if (file.size > 40 * 1024 * 1024) throw fail('big');
+  if (file.size === 0) throw fail('empty');
   // The extension decides first, then the MIME type. Pictures and rich text come before text, so `text/rtf` is never read as text.
   const type = file.type || '';
   const kind = ext === 'pdf' || type === 'application/pdf' ? 'pdf'

@@ -44,7 +44,7 @@ export function docxOf(bodyXml) {
     { name: '_rels/.rels', data: `${XML}<Relationships ${R}>${rel('rId1', 'officeDocument', 'word/document.xml')}</Relationships>` },
     { name: 'word/_rels/document.xml.rels', data: `${XML}<Relationships ${R}>${rel('rId1', 'styles', 'styles.xml')}${rel('rId2', 'numbering', 'numbering.xml')}</Relationships>` },
     { name: 'word/document.xml', data: `${XML}<w:document ${NS}><w:body>${bodyXml}</w:body></w:document>` },
-    { name: 'word/styles.xml', data: `${XML}<w:styles ${NS}><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>${style('Title', 'Title')}${style('Heading1', 'heading 1')}${style('Heading2', 'heading 2')}${style('ListParagraph', 'List Paragraph')}</w:styles>` },
+    { name: 'word/styles.xml', data: `${XML}<w:styles ${NS}><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>${style('Title', 'Title')}${style('Heading1', 'heading 1')}${style('Heading2', 'heading 2')}${style('ListParagraph', 'List Paragraph')}${style('Quote', 'Quote')}</w:styles>` },
     { name: 'word/numbering.xml', data: `${XML}<w:numbering ${NS}><w:abstractNum w:abstractNumId="0">${level('bullet', '•')}</w:abstractNum><w:abstractNum w:abstractNumId="1">${level('decimal', '%1.')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>` },
   ]);
 }
