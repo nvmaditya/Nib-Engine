@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Redo2, Undo2 } from 'lucide-react';
+import { Check, CircleAlert, LoaderCircle, Redo2, Undo2, type LucideIcon } from 'lucide-react';
 import { Logo, Wordmark } from '@/brand/Logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,10 @@ import { useEditor, undo, redo, renameDocument } from '@/store/editor';
 import { StageNav } from './StageNav';
 import { useUndoShortcuts } from './useUndoShortcuts';
 import { createAndOpen, openImportPicker } from '@/features/home/actions';
+
+const SAVE: Record<'saved' | 'saving' | 'unsaved', [string, LucideIcon]> = {
+  saved: ['Saved', Check], saving: ['Saving…', LoaderCircle], unsaved: ['Not saved', CircleAlert],
+};
 
 function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name: 'doc' }>['stage']; ready: boolean }) {
   const title = useEditor(s => s.title);
@@ -20,6 +24,7 @@ function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name
   useEffect(() => { if (!editing.current) setDraft(title); }, [title, ready]);
   const commit = () => { editing.current = false; if (draft.trim() !== title) renameDocument(draft); else setDraft(title); };
   useUndoShortcuts();
+  const [said, SaveIcon] = SAVE[saving];
   return (
     <>
       <a href="#/" aria-label="Home" className="shrink-0"><Logo size={28} /></a>
@@ -34,9 +39,16 @@ function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         className="h-8 min-w-0 flex-1 border-transparent bg-transparent font-semibold shadow-none hover:border-line wide:max-w-56"
       />
-      {/* "Not saved" shows on phones too; "Saved" and "Saving…" only where there is room. */}
-      <span className={cn('shrink-0 text-xs', saving === 'unsaved' ? 'font-medium text-danger' : 'hidden text-muted sm:inline')} role="status">
-        {ready ? (saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : 'Not saved') : ''}
+      {/* The save state, in words where there is room. On a phone it is an icon (its words are read out and are its
+          title), and "Not saved" shows in words too. */}
+      <span role="status" title={ready ? said : undefined}
+        className={cn('flex shrink-0 items-center gap-1 text-xs', saving === 'unsaved' ? 'font-medium text-danger' : 'text-muted')}>
+        {ready && (
+          <>
+            <SaveIcon aria-hidden className="size-4 sm:hidden" />
+            <span className={saving === 'unsaved' ? undefined : 'sr-only sm:not-sr-only'}>{said}</span>
+          </>
+        )}
       </span>
       <div className="hidden flex-1 wide:block" />
       {/* Narrow screens: the stages get a full-width row of their own under the name. */}

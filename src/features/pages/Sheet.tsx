@@ -86,26 +86,29 @@ export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClic
       <div ref={paperRef} className="paper" data-paper={i} style={{ width: cssW, height: Math.round(cssW * PAGE_H / PAGE_W) }}>
         <div className="paper-art">
           <PaperCanvas i={i} pages={pages} pxW={cssW * dpr} near={near} />
+          {/* The block frames lie between the paper and the ink: the ink is multiplied over their outlines, so an
+              outline never hides a letter that reaches past its block's edge. The ink takes no pointer, so the
+              frames still get every click, and their name tags (z-index) stay above the ink. */}
+          {mode !== 'export' && (
+            <div className="ui"
+              onPointerDown={e => { if (e.target === e.currentTarget) select(null); }}
+              onDoubleClick={e => {
+                if (mode !== 'write' || e.target !== e.currentTarget) return;
+                const r = e.currentTarget.getBoundingClientRect();
+                addTextBlockAt(i, (e.clientX - r.left) / s, (e.clientY - r.top) / s);
+              }}>
+              {segs.map(sg => (
+                <BoxFrame key={segId(sg)} sg={sg} s={s} gap={gap} parts={parts(sg)} selected={sg.box.id === selectedId}
+                  mode={mode} tagMenu={tagMenu} onWordClick={onWordClick} />
+              ))}
+            </div>
+          )}
           <div className="ink-layer">{near && segs.map(sg => <InkCanvas key={segId(sg)} sg={sg} s={s} px={s * dpr} />)}</div>
         </div>
         <canvas className="scan" aria-hidden="true" />
         {pick && (
           <button type="button" role="checkbox" aria-checked={!pick.left} aria-label={`Include page ${i + 1}`} onClick={pick.toggle}
             className="pick absolute inset-0 cursor-pointer rounded-[1px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2" />
-        )}
-        {mode !== 'export' && (
-          <div className="ui"
-            onPointerDown={e => { if (e.target === e.currentTarget) select(null); }}
-            onDoubleClick={e => {
-              if (mode !== 'write' || e.target !== e.currentTarget) return;
-              const r = e.currentTarget.getBoundingClientRect();
-              addTextBlockAt(i, (e.clientX - r.left) / s, (e.clientY - r.top) / s);
-            }}>
-            {segs.map(sg => (
-              <BoxFrame key={segId(sg)} sg={sg} s={s} gap={gap} parts={parts(sg)} selected={sg.box.id === selectedId}
-                mode={mode} tagMenu={tagMenu} onWordClick={onWordClick} />
-            ))}
-          </div>
         )}
       </div>
       {shown !== null && <figcaption className="mt-2.5 flex min-h-8 items-center gap-2 text-[13px] text-muted">{shown}{pick?.left && ' · left out'}</figcaption>}
