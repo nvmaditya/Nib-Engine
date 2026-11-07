@@ -49,8 +49,30 @@ export function HomePage() {
     // Leave the document (its last edit is written first), so opening it again reads what Home changed.
     void closeDocument().then(reload);
   }, [reload, memory]);
-  // Other tabs add, rename, duplicate, save and delete documents: the list follows them.
-  useEffect(() => (memory ? undefined : onDocsChanged(() => { void reload(); })), [reload, memory]);
+  // Other tabs add, rename, duplicate, save and delete documents: the list follows them. A tab where someone is
+  // typing saves every few hundred ms, so it is read again at most once a second (the first change at once, the
+  // rest together a second later), and not while Home is hidden: shown again, it reads what it missed.
+  useEffect(() => {
+    if (memory) return;
+    let timer: ReturnType<typeof setTimeout> | undefined, again = false, missed = false;
+    const read = () => {
+      void reload();
+      timer = setTimeout(() => { timer = undefined; if (again) { again = false; read(); } }, 1000);
+    };
+    const heard = () => {
+      if (document.visibilityState === 'hidden') missed = true;
+      else if (timer !== undefined) again = true;
+      else read();
+    };
+    const shown = () => {
+      if (document.visibilityState !== 'visible' || !missed) return;
+      missed = false;
+      heard();
+    };
+    const off = onDocsChanged(heard);
+    document.addEventListener('visibilitychange', shown);
+    return () => { off(); clearTimeout(timer); document.removeEventListener('visibilitychange', shown); };
+  }, [reload, memory]);
   const shown = memory
     ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: {} as DocRecord['settings'], doc: memDoc }]
     : docs;

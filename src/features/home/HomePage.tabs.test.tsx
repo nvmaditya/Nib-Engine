@@ -17,6 +17,9 @@ async function anotherTab() {
 beforeEach(async () => { await (await getDb()).clear('documents'); location.hash = '#/'; });
 afterEach(() => { act(() => { sonner.dismiss(); }); });
 
+/** Changes close together are listed together, a second after the first (HomePage). */
+const later = { timeout: 3000 };
+
 test('the list follows documents another tab adds, renames, duplicates, saves and deletes', async () => {
   const mine = await createDoc({ title: 'Mine' });
   render(<HomePage />);
@@ -24,15 +27,15 @@ test('the list follows documents another tab adds, renames, duplicates, saves an
   const other = await anotherTab();
   try {
     const theirs = await other.docs.createDoc({ title: 'Theirs' });
-    expect(await screen.findByText('Theirs')).toBeInTheDocument();
+    expect(await screen.findByText('Theirs', {}, later)).toBeInTheDocument();
     await other.docs.renameDoc(theirs.id, 'Theirs, renamed');
-    expect(await screen.findByText('Theirs, renamed')).toBeInTheDocument();
+    expect(await screen.findByText('Theirs, renamed', {}, later)).toBeInTheDocument();
     await other.docs.duplicateDoc(mine.id);
-    expect(await screen.findByText('Mine (copy)')).toBeInTheDocument();
+    expect(await screen.findByText('Mine (copy)', {}, later)).toBeInTheDocument();
     await other.docs.putDoc({ ...(await other.docs.getDoc(mine.id))!, title: 'Mine, renamed in its tab' }, { session: 'their-tab' });
-    expect(await screen.findByText('Mine, renamed in its tab')).toBeInTheDocument();
+    expect(await screen.findByText('Mine, renamed in its tab', {}, later)).toBeInTheDocument();
     await other.docs.deleteDoc(theirs.id);
-    await waitFor(() => expect(screen.queryByText('Theirs, renamed')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Theirs, renamed')).toBeNull(), later);
   } finally { await other.close(); }
 });
 
