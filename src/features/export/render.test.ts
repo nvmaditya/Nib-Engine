@@ -86,3 +86,14 @@ test('a page keeps its own index, so its tilt and its scan randomness are its ow
   expect(frameShot).toHaveBeenCalledWith(expect.anything(), 1);
   expect(applyLook).toHaveBeenCalledWith(expect.anything(), 1);
 });
+test('the canvases a page passes through are let go once it is drawn (a phone has little canvas memory)', () => {
+  open(docOf(box({ text: 'x' }))); update(s => { s.S.look = 'scan'; s.S.tilt = true; }, { history: false });
+  const c = renderPage(freeze(), 0, 794);
+  const composed = vi.mocked(composePage).mock.results[0].value as HTMLCanvasElement, framed = vi.mocked(frameShot).mock.results[0].value as HTMLCanvasElement;
+  expect([dims(composed), dims(framed), dims(c)]).toEqual([[0, 0], [0, 0], [794, 1123]]);
+});
+test('a step that hands back the canvas it was given leaves it alone: that canvas is the page', () => {
+  open(docOf(box({ text: 'x' }))); const c = renderPage(freeze(), 0, 794); // As written, without the tilt
+  expect(vi.mocked(composePage).mock.results[0].value).toBe(c);
+  expect(dims(c)).toEqual([794, 1123]);
+});

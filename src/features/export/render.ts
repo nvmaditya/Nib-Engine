@@ -24,7 +24,12 @@ export function renderPage(f: Frozen, i: number, pxW: number): HTMLCanvasElement
   try {
     use(f.S, f.doc);
     computeLayout();
-    return applyLook(frameShot(composePage(i, pxW), i), i);
+    const a = composePage(i, pxW), b = frameShot(a, i), c = applyLook(b, i);
+    // Let the in-between pages go now: at print size each holds about 35 MB, and phones have little
+    // canvas memory. (A step without its effect hands back the canvas it was given, which is kept.)
+    if (b !== a) a.width = a.height = 0;
+    if (c !== b) b.width = b.height = 0;
+    return c;
   } finally {
     const s = useEditor.getState();
     use(s.S, s.doc);

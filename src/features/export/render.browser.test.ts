@@ -146,7 +146,7 @@ describe('in Chromium, with real pixels', () => {
       expect(o.size).toEqual([2480, 3508]);
       expect(o.differ).toBe(true);
       expect(o.detail[0], `ink detail with tilt ${o.tilt}: print ${o.detail[0]}, Standard scaled up ${o.detail[1]}`).toBeGreaterThan(o.detail[1] * 1.5);
-      expect(o.edges[0], `edges with tilt ${o.tilt}: print ${o.edges[0]}, Standard scaled up ${o.edges[1]}`).toBeGreaterThan(o.edges[1] * 1.15);
+      expect(o.edges[0], `edges with tilt ${o.tilt}: print ${o.edges[0]}, Standard scaled up ${o.edges[1]}`).toBeGreaterThan(o.edges[1] * 1.25);
     }
     expect(errors).toEqual([]);
   }, 120_000);
