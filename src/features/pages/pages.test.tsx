@@ -7,6 +7,7 @@ import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import type { Seg } from '@/engine/types';
 import { StageHost } from '@/features/doc/StageHost';
 import { layoutFor } from '@/features/doc/model';
+import { select } from '@/features/doc/actions';
 import { flushSave, update } from '@/store/editor';
 import { box, docOf, get, lastToast, layoutOf, lines, open, words } from '@/test/docs';
 import { PageView, type PageLayout } from './PageView';
@@ -118,6 +119,20 @@ test('the tag’s menu shows while writing, not in Style, and Export shows no fr
   pages('export', menu);
   expect(document.querySelector('.block-frame')).toBeNull();
   expect(inkCanvases().length).toBeGreaterThan(0);
+});
+
+test('block outlines are drawn under the writing, so a selected block never hides the first letters of its lines', () => {
+  open(sampleDoc(cleanSettings(null, false)));
+  select('b1');
+  for (const mode of ['write', 'style'] as const) {
+    const { unmount } = pages(mode);
+    const frames = frame('b1:0').parentElement!, ink = document.querySelector('.ink-layer')!;
+    // Same layer, no z-index between them: the ink (multiplied onto what is under it) is painted last, over the outlines.
+    expect(frames.parentElement).toBe(ink.parentElement);
+    expect(frames.compareDocumentPosition(ink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(ink.nextElementSibling).toBeNull();
+    unmount();
+  }
 });
 
 test('a margin note’s frame turns with its writing', () => {
