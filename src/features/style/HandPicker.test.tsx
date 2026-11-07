@@ -64,6 +64,15 @@ test('the panel shows the current hand writing the start of the document', () =>
   expect(screen.queryByRole('dialog')).toBeNull();
 });
 
+test('the current hand’s sample has a column of its own, so Change keeps its place', () => {
+  open(sampleDoc(cleanSettings(null, false)));
+  render(<Live />);
+  const c = screen.getByRole('button', { name: 'Change handwriting' }).querySelector('canvas')!;
+  expect(c.parentElement).toHaveClass('min-w-0', 'overflow-hidden');
+  expect(c.parentElement!.className).toMatch(/mask-image/); // it fades out before the box ends
+  expect(c.parentElement).not.toHaveTextContent('Change');
+});
+
 test('a hand with several shapes per letter says so', () => {
   open(sampleDoc(cleanSettings(null, false)));
   update(s => { s.S.font = 'caveat'; }, { history: false });

@@ -6,6 +6,7 @@ import type { Settings } from '@/engine/types';
 import { toMarkup } from '@/features/editor/markup';
 import { dprNow } from '@/features/pages/Sheet';
 import { useNearViewport } from '@/features/pages/useNearViewport';
+import { cn } from '@/lib/utils';
 
 /** The colour of a paper, for the tile a sample sits on. */
 export function paperTint(paperId: string): string {
@@ -21,7 +22,14 @@ const markupOf = (text: string): string => {
   return line ? toMarkup({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: line }] }] }) : '';
 };
 
-export function HandSample({ settings, text, height, className }: { settings: Settings; text: string; height: number; className?: string }) {
+/**
+ * `fit="width"` (a word on a tile): the sample shrinks to fit its box, keeping its shape, so the word is
+ * never cut. `fit="fade"` (the default, a line of text): it keeps its height and stops at a box of its
+ * own, fading out on the right, so it never runs under what sits beside it.
+ */
+export function HandSample({ settings, text, height, fit = 'fade', className }: {
+  settings: Settings; text: string; height: number; fit?: 'width' | 'fade'; className?: string;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const near = useNearViewport(ref, '100%');
   const [, setArrived] = useState(0);
@@ -49,11 +57,18 @@ export function HandSample({ settings, text, height, className }: { settings: Se
     if (c.dataset.k === key) return;
     const dpr = dprNow(), w = drawSample(c, settings, markup, Math.round(height * dpr));
     if (w == null) return clear();
-    c.style.width = `${w / dpr}px`; c.style.height = `${height}px`;
+    c.style.width = `${w / dpr}px`; c.style.height = fit === 'width' ? '' : `${height}px`;
     c.dataset.k = key;
   // `settings` is read through `key`.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [near, markup, key, height]);
+  }, [near, markup, key, height, fit]);
 
-  return <canvas ref={ref} aria-hidden="true" className={['mix-blend-multiply', className].filter(Boolean).join(' ')} />;
+  const canvas = <canvas ref={ref} aria-hidden="true" className={cn('block mix-blend-multiply', fit === 'width' ? 'h-auto max-w-full' : 'max-w-none', className)} />;
+  if (fit === 'width') return canvas;
+  // (The box takes its tile's paper colour, so the ink still multiplies onto paper inside the mask, and the fade shows none.)
+  return (
+    <span className="block min-w-0 flex-1 overflow-hidden [background:inherit] [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)]">
+      {canvas}
+    </span>
+  );
 }

@@ -80,6 +80,22 @@ test('nothing to write draws nothing', () => {
   expect(drawSample).not.toHaveBeenCalled();
 });
 
+test('fit width: the sample shrinks to its box and keeps its shape, so a word is never cut', () => {
+  render(<HandSample settings={S} text="Homework" height={30} fit="width" />);
+  const c = document.querySelector('canvas')!;
+  expect(c).toHaveClass('max-w-full', 'h-auto');
+  expect(c.style.width).toBe(`${120 / dprNow()}px`);
+  expect(c.style.height).toBe(''); // its height follows the width it gets
+});
+
+test('a long sample stops at a box of its own, fading out on the right', () => {
+  render(<HandSample settings={S} text="The water cycle is the continuous" height={30} />);
+  const c = document.querySelector('canvas')!;
+  expect(c.parentElement).toHaveClass('min-w-0', 'flex-1', 'overflow-hidden');
+  expect(c.parentElement!.className).toMatch(/mask-image:linear-gradient\(to_right/);
+  expect(c.style.height).toBe('30px');
+});
+
 test('paper tints', () => {
   expect(paperTint('yellow')).toBe('rgb(249, 238, 170)');
   expect(paperTint('nope')).toBe('rgb(251, 251, 247)');

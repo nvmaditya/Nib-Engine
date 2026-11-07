@@ -49,6 +49,11 @@ test('six looks, in order', () => {
   expect(screen.getByText('hand, pen, ink, paper and realism in one tap')).toBeInTheDocument();
   expect(STYLE_LOOKS.map(l => l.id)).toEqual(['exam', 'notes', 'letter', 'scribble', 'journal', 'school']);
 });
+test('each look’s word shrinks to fit its tile, whole', () => {
+  open(docOf(box())); render(<Live />);
+  const canvases = screen.getAllByRole('button', { name: /^(Exam answer|Neat notes|Letter|Quick scribble|Journal|School copy)$/ }).map(b => b.querySelector('canvas'));
+  for (const c of canvases) expect(c).toHaveClass('max-w-full', 'h-auto');
+});
 test('a new document is an Exam answer', () => {
   open(docOf(box())); render(<Live />);
   expect(screen.getByRole('button', { name: 'Exam answer' })).toHaveAttribute('aria-pressed', 'true');
