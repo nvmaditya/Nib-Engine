@@ -1,7 +1,7 @@
 // Outline's page list: each page with the parts of blocks on it, in the order they are laid out. Pages
 // reorder by their grip and blocks move to another page by dragging their item (Design decision 4);
 // a block's later part can't move on its own (spec §4 rule 4).
-import { memo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useId, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { GripVertical, Plus } from 'lucide-react';
 import { HEADER_FIELDS } from '@/engine/doc.js';
 import { frameRange, hasOwnStyle } from '@/engine/core.js';
@@ -70,11 +70,12 @@ const OutlineItem = memo(function OutlineItem({ boxId, idx, name, color, label, 
     },
     onDrop: t => { if (t) moveBlockTo(boxId, idx, t.page); },
   });
+  const snippetId = useId();
   return (
     <li>
       <button type="button" data-item={`${boxId}:${idx}`} data-box={boxId}
         aria-label={[label ? `${name}, part ${label}` : name, own && 'own style'].filter(Boolean).join(', ')}
-        aria-current={selected ? 'true' : undefined}
+        aria-current={selected ? 'true' : undefined} aria-describedby={snippet ? snippetId : undefined}
         onClick={() => select(boxId)} onPointerDown={onPointerDown}
         style={{ '--bc': color } as CSSProperties}
         className={cn(
@@ -89,7 +90,7 @@ const OutlineItem = memo(function OutlineItem({ boxId, idx, name, color, label, 
           {label && <span className="ml-1.5 text-xs text-muted">{label}</span>}
         </span>
         {own ? <span className="rounded-full bg-surface-2 px-[7px] py-px text-[11px] font-medium whitespace-nowrap text-muted">Own style</span> : <span />}
-        <span className="col-start-2 col-end-4 truncate text-xs text-muted">{snippet}</span>
+        <span id={snippetId} className="col-start-2 col-end-4 truncate text-xs text-muted">{snippet}</span>
       </button>
     </li>
   );

@@ -6,12 +6,12 @@ import type { Seg } from '@/engine/types';
 import { useStageActive } from '@/features/doc/StageHost';
 import { PageView, type PageLayout } from '@/features/pages/PageView';
 import { useEditor } from '@/store/editor';
-import { BlockMenu } from './BlockMenu';
+import { PartMenu } from './TypedPage';
 import { Inspector } from './Inspector';
 import { OutlineList } from './OutlineList';
 import { WriteBar } from './WriteBar';
 
-const tagMenu = (sg: Seg) => <BlockMenu boxId={sg.box.id} idx={sg.idx} />;
+const tagMenu = (sg: Seg) => <PartMenu sg={sg} />;
 
 const itemsIn = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('[data-item]')];
 const itemOf = (root: HTMLElement, boxId: string | null) =>
