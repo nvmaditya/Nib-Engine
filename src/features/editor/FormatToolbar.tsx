@@ -1,4 +1,4 @@
-// The formatting tools for whichever block editor last had focus.
+// The formatting tools for whichever block editor last had focus, or for the one editor they are given.
 import { useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
 import { Bold, Highlighter, List, ListOrdered, SeparatorHorizontal, Strikethrough, Underline } from 'lucide-react';
@@ -44,8 +44,12 @@ const ring = 'focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outl
 /** Whether the focus went to one of the tools, which format the selection of the editor it left. */
 export const inFormatToolbar = (to: EventTarget | null): boolean => to instanceof Element && !!to.closest('[data-format-toolbar]');
 
-export function FormatToolbar({ className }: { className?: string }) {
-  const { editor } = useActiveEditor();
+/**
+ * The formatting tools. Given `editor` (an editor, or null while there is none), they format that editor alone;
+ * without it, whichever block editor last had focus.
+ */
+export function FormatToolbar({ className, editor: given }: { className?: string; editor?: Editor | null }) {
+  const active = useActiveEditor().editor, editor = given === undefined ? active : given;
   const subscribe = useCallback((fn: () => void) => {
     if (!editor) return () => {};
     editor.on('transaction', fn);

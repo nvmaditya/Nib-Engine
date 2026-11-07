@@ -1,12 +1,12 @@
 // What a block editor adds to the schema's extensions: the app's one undo history, page breaks, list indents,
 // the `*underline*` shortcut, list markers, the `/` menu, a placeholder, and pasted content written the way
-// the converter writes it.
+// the converter writes it. The Import preview takes the same pieces with an undo history of its own.
 import { Extension, markInputRule, type AnyExtension, type Editor, type Range } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey, Selection, type Transaction } from '@tiptap/pm/state';
 import { AddMarkStep, canSplit, RemoveMarkStep } from '@tiptap/pm/transform';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { Placeholder } from '@tiptap/extensions';
+import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
 import { placeCaret, redo, undo, useEditor } from '@/store/editor';
 import { fromMarkup, listMarkers, toMarkup } from './markup';
@@ -315,4 +315,12 @@ export function editorExtensions(opts: { boxId: string; slash(state: SuggestionP
     Placeholder.configure({ placeholder: 'Write here…' }),
     ConverterSync,
   ];
+}
+
+/**
+ * The extensions of the Import preview: a block editor's, with TipTap's own undo history in place of the app's
+ * (the text isn't in the document yet) and no `/` menu (its toolbar covers it).
+ */
+export function previewExtensions(placeholder: string): AnyExtension[] {
+  return [...BLOCK_EXTENSIONS, UndoRedo, BlockKeys, UnderlineStar, ListMarkers, Placeholder.configure({ placeholder }), ConverterSync];
 }
