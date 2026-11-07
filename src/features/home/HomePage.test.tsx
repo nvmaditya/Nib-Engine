@@ -1,10 +1,14 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Toaster, toast as sonner } from 'sonner';
-import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, onDocsChanged, renameDoc } from '@/store/documents';
+import { NewerDocumentError, createDoc, deleteDoc, duplicateDoc, listDocs, onDocsChanged, renameDoc } from '@/store/documents';
 import { cleanSettings } from '@/engine/doc.js';
 import { HomePage } from './HomePage';
+import { fontsLoad } from '@/test/docs';
 import { forgetThumb, thumbFor } from './thumbs';
+
+fontsLoad();
+vi.mock('@/engine/importers.js', async orig => ({ ...(await orig<typeof import('@/engine/importers.js')>()), readDocument: vi.fn(async () => ({ parts: ['# Essay\nHello'], pages: 0, words: 2, name: 'Essay' })) }));
 
 vi.mock('./thumbs', async orig => ({
   ...(await orig<typeof import('./thumbs')>()),
@@ -37,8 +41,8 @@ beforeEach(() => {
 test('lists recent documents and opens one', async () => {
   render(<HomePage />);
   expect(await screen.findByText('B')).toBeInTheDocument();
-  expect(screen.getByText('2 pages · Exam answer · Edited today')).toBeInTheDocument();
-  expect(screen.getByText('2 pages · Edited 3 November 2026')).toBeInTheDocument();
+  expect(await screen.findByText('2 pages · Exam answer · Edited today')).toBeInTheDocument();
+  expect(await screen.findByText('2 pages · Edited 3 November 2026')).toBeInTheDocument();
   await userEvent.click(screen.getByText('A'));
   expect(location.hash).toBe('#/d/a1/write');
 });
@@ -165,4 +169,23 @@ test('while someone types in another tab, Home reads the list again at most once
   } finally { delete (document as { visibilityState?: string }).visibilityState; }
   act(() => { document.dispatchEvent(new Event('visibilitychange')); });
   await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(3)); // shown again: what it missed, at once
+});
+
+test('Home, top to bottom: Import, the templates, Recent, then where things are kept', async () => {
+  render(<HomePage />); await screen.findByText('A');
+  const hero = screen.getByRole('button', { name: /^Import a PDF, Word or text file/ }), [tpl, recent] = screen.getAllByRole('heading', { level: 2 });
+  expect([tpl.textContent, recent.textContent]).toEqual(['Start something new', 'Recent']);
+  expect(hero.compareDocumentPosition(tpl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(tpl.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(hero).toHaveTextContent('Headings, lists, bold, underline and crossed-out words come across.');
+  expect(screen.getByText('Everything is saved on this device. Nothing is uploaded.')).toBeInTheDocument();
+});
+test('dragging a file over Home says where to drop it and lights up the hero', async () => {
+  render(<HomePage />); await screen.findByText('A'); fireEvent.dragEnter(window, { dataTransfer: { types: ['Files'] } });
+  expect(screen.getByText('Drop to import this document')).toBeInTheDocument(); expect(screen.getByRole('button', { name: /^Import a PDF/ })).toHaveClass('border-primary');
+  fireEvent.dragLeave(window, { dataTransfer: { types: ['Files'] } }); expect(screen.queryByText('Drop to import this document')).toBeNull();
+});
+test('No documents yet: New document makes a Blank page', async () => {
+  mem.docs = []; render(<HomePage />); await userEvent.click(await screen.findByRole('button', { name: 'New document' }));
+  await waitFor(() => expect(createDoc).toHaveBeenCalledWith(expect.objectContaining({ title: 'Untitled', doc: expect.objectContaining({ boxes: [expect.objectContaining({ name: 'Main text', text: '' })] }) })));
 });

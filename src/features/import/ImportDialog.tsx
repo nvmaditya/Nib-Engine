@@ -10,14 +10,14 @@ import { importError, readDocument } from '@/engine/importers.js';
 import type { ReadResult } from '@/engine/types';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { matches, WIDE } from '@/lib/media';
 import { cn } from '@/lib/utils';
 import { placeCaret, useEditor } from '@/store/editor';
 import { importAsNewDocument, importIntoOpenDocument, type ImportRequest } from './apply';
 import { ImportOptions } from './ImportOptions';
 import { ImportPreview, type PreviewHandle } from './ImportPreview';
-import { initialOptions, lookById, type ImportOptionsValue, type ImportTarget } from './options';
+import { IMPORT_ACCEPT, initialOptions, lookById, type ImportOptionsValue, type ImportTarget } from './options';
 
-const ACCEPT = '.pdf,.docx,.txt,.md,.markdown,.text,application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const NO_TEXT = 'There’s no text to write out.';
 const get = useEditor.getState;
 
@@ -41,6 +41,20 @@ const typing = (el: EventTarget | null): boolean =>
   || (el instanceof HTMLElement && !!el.closest('[contenteditable="true"]'));
 const NATIVE_UNDO = ['historyUndo', 'historyRedo'];
 
+/**
+ * After Write it out on a phone the focus goes to the pages (their first heading, once drawn), never into the
+ * editor: a caret there brings up the on-screen keyboard over the text just written.
+ */
+function focusPages(): void {
+  let tries = 0;
+  const go = () => {
+    const region = document.querySelector<HTMLElement>('[data-pages]');
+    const target = region?.querySelector<HTMLElement>('[data-page-heading]') ?? (tries >= 40 ? region : null);
+    if (target) { if (!target.hasAttribute('tabindex')) target.tabIndex = -1; target.focus({ preventScroll: true }); } else if (tries++ < 40) setTimeout(go, 50);
+  };
+  setTimeout(go, 50); // (once the dialog has let go of the focus)
+}
+
 export function ImportDialog({ open, file, target, onClose }: { open: boolean; file: File | null; target: ImportTarget; onClose(): void }) {
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
@@ -59,6 +73,7 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
   const content = useRef<HTMLDivElement>(null);
   const preview = useRef<PreviewHandle>(null);
   const reading = useRef(0); // only the last file read wins
+  const toPages = useRef(false); // written out into the open document on a phone: the focus goes to the pages
   // What had the focus when it opened (the Write bar's Import, say): it gets it back on closing. The dialog is
   // opened from the store, not by a Radix trigger, so Radix itself has nothing to give it back to.
   const [opener] = useState(() => document.activeElement as HTMLElement | null);
@@ -116,15 +131,22 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
     if (target === 'open') {
       importIntoOpenDocument(req);
       // The caret goes where the imported text starts (the block it went into ends with it), ready to write on.
-      const s = get(), b = s.doc.boxes.find(x => x.id === s.selectedId);
-      if (b) placeCaret(b.id, b.text.endsWith(req.text) ? b.text.length - req.text.length : 0);
+      // (Not on a phone: a caret there brings up the on-screen keyboard over the pages just written. The pages get
+      // the focus instead.)
+      if (matches(WIDE)) {
+        const s = get(), b = s.doc.boxes.find(x => x.id === s.selectedId);
+        if (b) placeCaret(b.id, b.text.endsWith(req.text) ? b.text.length - req.text.length : 0);
+      } else { toPages.current = true; focusPages(); }
       onClose();
       return;
     }
     setBusy(true);
     const ok = await importAsNewDocument(req);
     setBusy(false);
-    if (ok) onClose();
+    if (!ok) return;
+    // The new document is open on Write now; its caret waits at the start of the imported text (the last block).
+    if (matches(WIDE)) { const b = get().doc.boxes.at(-1); if (b) placeCaret(b.id, 0); } else { toPages.current = true; focusPages(); }
+    onClose();
   }
 
   const choose = (e: ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) void readFile(f); e.target.value = ''; };
@@ -142,7 +164,7 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
 
   const ready = read.status === 'ready' && read.res ? read.res : null;
   const alert = read.status === 'error' || blank ? read.msg : '';
-  const input = <input type="file" className="sr-only" accept={ACCEPT} onChange={choose} />;
+  const input = <input type="file" className="sr-only" accept={IMPORT_ACCEPT} onChange={choose} />;
 
   return (
     <DialogContent ref={content} tabIndex={-1}
@@ -151,6 +173,7 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
       // Closing gives the focus back to what opened it, unless the caret went into the document (Write it out).
       onCloseAutoFocus={e => {
         e.preventDefault();
+        if (toPages.current) return; // written out on a phone: focusPages has it, not the opener
         if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[contenteditable="true"]')) return;
         if (opener?.isConnected) opener.focus();
       }}

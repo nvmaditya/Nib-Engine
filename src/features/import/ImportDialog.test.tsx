@@ -40,6 +40,7 @@ function phone(): void {
 const ESSAY = { parts: ['# A Short Essay\n\n## Introduction\nWater moves between **rivers**, *seas* and ~~lakes~~ all the time.', '## Conclusion\nThat is the water cycle.'], pages: 0, words: 24, name: 'Essay' };
 const essay = () => new File(['x'], 'Essay.docx');
 function Open({ file = essay() }: { file?: File | null }) { const o = useEditor(s => s.importOpen); return <ImportDialog open={o} file={file} target="open" onClose={closeImport} />; }
+function HomeLike() { const o = useEditor(s => s.importOpen), f = useEditor(s => s.importFile); return <ImportDialog open={o} file={f} target="new" onClose={closeImport} />; }
 /** The document's own Undo and Redo keys, as the top bar listens for them. */
 function Shortcuts() { useUndoShortcuts(); return null; }
 const dialog = () => screen.findByRole('dialog', { name: 'Import a document' }), writeIt = () => screen.getByRole('button', { name: 'Write it out' });
@@ -235,6 +236,12 @@ test('Write it out puts the caret where the imported text starts, in the documen
   const text = get().doc.boxes[0].text; expect(offsetAt(behind.state.doc, text, behind.state.selection.from)).toBe('mine\n\\newpage\n'.length);
   await new Promise(r => setTimeout(r, 10)); expect(behind.view.dom).toHaveFocus(); // (closing doesn't take it back to the button)
 });
+test('on a phone, Write it out leaves the caret out of the editor (no keyboard) and focuses the pages instead', async () => {
+  phone(); open(docOf(box({ id: 'm', name: 'Main text', text: 'mine' }))); render(<><ImportButton /><main data-pages aria-label="Pages"><h2 data-page-heading tabIndex={-1}>Page 1</h2></main><Open /></>);
+  await userEvent.click(screen.getByRole('button', { name: 'Import' })); await ready(); await userEvent.click(writeIt());
+  expect(get().caret).toBeNull(); await waitFor(() => expect(screen.getByText('Page 1')).toHaveFocus());
+  await new Promise(r => setTimeout(r, 10)); expect(screen.getByText('Page 1')).toHaveFocus();
+});
 test('…and with Replace, at the start of the new Main text', async () => {
   open(docOf(box({ id: 'm', text: 'mine' }))); render(<><ImportButton /><Open /></>);
   await userEvent.click(screen.getByRole('button', { name: 'Import' })); await ready(); await userEvent.click(writeIt());
@@ -262,6 +269,16 @@ test('from Home, Write it out makes a new document with its look and opens it', 
   await userEvent.click(screen.getByRole('radio', { name: 'Neat notes' })); await userEvent.click(writeIt());
   await waitFor(() => expect(parseHash(location.hash)).toMatchObject({ name: 'doc', stage: 'write' }));
   expect([get().title, get().S.font, get().canUndo, onClose.mock.calls.length]).toEqual(['Essay', 'patrick', false, 1]);
+});
+test('from Home, wide: the new document’s caret waits at the start of the imported text', async () => {
+  location.hash = '#/'; render(<ImportDialog open file={essay()} target="new" onClose={vi.fn()} />); await ready(); await userEvent.click(writeIt());
+  await waitFor(() => expect(get().caret).toMatchObject({ boxId: get().doc.boxes.at(-1)!.id, offset: 0 }));
+});
+test('from Home, on a phone: no caret (no keyboard); the pages get the focus once they are drawn', async () => {
+  phone(); location.hash = '#/'; openImport(essay()); render(<HomeLike />); await ready(); await userEvent.click(writeIt());
+  await waitFor(() => expect(parseHash(location.hash)).toMatchObject({ name: 'doc' })); expect(get().caret).toBeNull();
+  render(<main data-pages aria-label="Pages"><h2 data-page-heading>Page 1</h2></main>); // (drawn a moment later)
+  await waitFor(() => expect(screen.getByText('Page 1')).toHaveFocus()); expect(get().caret).toBeNull();
 });
 test('from Home, Write it out can’t be pressed again while the document is being made', async () => {
   location.hash = '#/'; const onClose = vi.fn(); render(<ImportDialog open file={essay()} target="new" onClose={onClose} />); await ready();

@@ -3,6 +3,8 @@ import type { EngineDoc, HeaderFields } from '@/engine/types';
 import { STYLE_LOOKS } from '@/features/style/looks';
 import { useStylePrefs, type SavedLook } from '@/features/style/prefs';
 
+/** The files the picker offers: what the Import dialog reads. */
+export const IMPORT_ACCEPT = '.pdf,.docx,.txt,.md,.markdown,.text,application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 export type ImportTarget = 'new' | 'open';
 
 export interface ImportOptionsValue { where: 'replace' | 'append'; breaks: boolean; look: string | null; header: HeaderFields | null }
