@@ -5,6 +5,7 @@ import { FONTS } from './engine/config.js';
 import '@fontsource-variable/figtree';
 import './styles/app.css';
 import { initTheme } from './lib/theme';
+import { startPwa } from './app/pwa';
 
 initTheme();
 
@@ -16,3 +17,4 @@ faces.textContent = FONTS.map(f => `@font-face{font-family:"LH ${f.id}";src:url(
 document.head.append(faces);
 
 createRoot(document.getElementById('root')!).render(<App />);
+startPwa();
