@@ -221,18 +221,30 @@ function leaveDeleted(): void {
  * Follow other tabs' saves, renames and deletes of the open document. With nothing waiting to be saved, this tab
  * reads their version and shows it in place. With a change waiting, it saves now, and the save's check decides: it
  * is refused if their write came first, and this tab then shows their version and says its change wasn't kept.
- * A message can be missed; the check on every save is the guarantee. Returns the remover.
+ * A message can be missed (a tab that slept, or whose channel the browser closed), so a page shown again looks at
+ * storage too, before its first edit; the check on every save is the guarantee. Returns the remover.
  */
 export function installDocFollow(): () => void {
-  return onDocsChanged(c => {
+  const check = () => {
+    const id = get().docId;
+    if (!stored(id)) return;
+    if (savePending) void saveNow();
+    else void follow(id, false);
+  };
+  const off = onDocsChanged(c => {
     const id = get().docId;
     if (!stored(id) || c.id !== id) return;
     if (c.type === 'deleted') leaveDeleted();
-    else if (c.type === 'saved' && !(c.by !== undefined && c.by === session)) {
-      if (savePending) void saveNow();
-      else void follow(id, false);
-    }
+    else if (c.type === 'saved' && !(c.by !== undefined && c.by === session)) check();
   });
+  const onShow = () => { if (document.visibilityState === 'visible') check(); };
+  document.addEventListener('visibilitychange', onShow);
+  window.addEventListener('pageshow', onShow); // (also back from the back-forward cache)
+  return () => {
+    off();
+    document.removeEventListener('visibilitychange', onShow);
+    window.removeEventListener('pageshow', onShow);
+  };
 }
 
 function saveSoon(): void {

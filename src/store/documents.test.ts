@@ -194,3 +194,27 @@ test('other tabs hear of new documents, saves, renames and deletes; this tab doe
   off(); offOwn();
   await (await import('./db')).resetDbForTests(); // the other tab's connection
 });
+
+test('a channel the browser closed (a tab that slept) is replaced: the others hear that tab’s next save, and it hears theirs again', async () => {
+  const heardHere: DocChange[] = [], heardThere: DocChange[] = [];
+  const off = onDocsChanged(c => heardHere.push(c)); // this tab, awake (its channel is made before the spy below)
+  const made: BroadcastChannel[] = [];
+  const Real = globalThis.BroadcastChannel;
+  globalThis.BroadcastChannel = class extends Real { constructor(name: string) { super(name); made.push(this); } };
+  vi.resetModules();
+  const sleeper = await import('./documents');
+  const offThere = sleeper.onDocsChanged(c => heardThere.push(c));
+  globalThis.BroadcastChannel = Real;
+  try {
+    const a = await createDoc({ title: 'A' });
+    expect(made).toHaveLength(1);
+    made[0].close(); // the sleeping tab's channel
+    await sleeper.putDoc({ ...(await sleeper.getDoc(a.id))!, title: 'B' });
+    await vi.waitFor(() => expect(heardHere).toContainEqual({ type: 'saved', id: a.id, rev: 2 }));
+    await renameDoc(a.id, 'C');
+    await vi.waitFor(() => expect(heardThere).toContainEqual({ type: 'saved', id: a.id, rev: 3 }));
+  } finally {
+    off(); offThere();
+    await (await import('./db')).resetDbForTests(); // the sleeping tab's connection
+  }
+});

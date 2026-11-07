@@ -80,7 +80,16 @@ function channelOf(): BroadcastChannel | null {
 }
 
 function announce(c: DocChange): void {
-  try { channelOf()?.postMessage(c); } catch { /* the other tabs find out when they save */ }
+  for (let tries = 0; tries < 2; tries++) {
+    const ch = channelOf();
+    if (!ch) return;
+    try { ch.postMessage(c); return; } catch {
+      // The browser closed it (a tab that slept, say): this page hears nothing on it either. Make a fresh one and say
+      // it again; if that fails too, the other tabs find out when they save.
+      ch.onmessage = null;
+      if (channel === ch) channel = undefined;
+    }
+  }
 }
 
 /** Hear of documents added, saved, renamed or deleted in other tabs. Returns the remover. */

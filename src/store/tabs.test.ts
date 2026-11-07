@@ -214,3 +214,42 @@ test('one tab’s saves that overlap don’t stop each other', async () => {
   expect(state(a).saving).toBe('saved');
   void b;
 });
+
+test('a tab that missed the news reads the document again when it is shown, so its first edit after waking is kept', async () => {
+  const a = await openTab(), b = await openTab();
+  const id = await seed(a);
+  await openIn(a, id); await openIn(b, id);
+  // Another tab's save that neither heard of (B slept through it, its channel closed), written straight to storage.
+  const db = await (await import('./db')).getDb();
+  const stored = await db.get('documents', id);
+  await db.put('documents', { ...stored, doc: { ...stored.doc, boxes: [{ ...stored.doc.boxes[0], text: 'The water cycle, while B slept' }] }, rev: stored.rev + 1, savedBy: 'their-tab' });
+
+  document.dispatchEvent(new Event('visibilitychange')); // B is shown again (jsdom's page is always visible)
+  await vi.waitFor(() => expect(text(b)).toBe('The water cycle, while B slept'));
+  expect(messages(b)).toEqual([FOLLOWED]);
+  type(b, ' and B woke');
+  await b.ed.flushSave();
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, while B slept and B woke');
+  expect(messages(b)).toEqual([FOLLOWED]); // kept, not refused
+  await vi.waitFor(() => expect(text(a)).toBe('The water cycle, while B slept and B woke'));
+
+  // Shown again with nothing new (each has what storage holds: B its own write, A what it read): nothing happens.
+  const said = [messages(a).length, messages(b).length];
+  window.dispatchEvent(new Event('pageshow'));
+  document.dispatchEvent(new Event('visibilitychange'));
+  await new Promise(r => setTimeout(r, 50));
+  expect([messages(a).length, messages(b).length]).toEqual(said);
+  expect(text(b)).toBe('The water cycle, while B slept and B woke');
+});
+
+test('a page brought back from the back-forward cache reads the document again too', async () => {
+  const a = await openTab(), b = await openTab();
+  const id = await seed(a);
+  await openIn(b, id);
+  const db = await (await import('./db')).getDb();
+  const stored = await db.get('documents', id);
+  await db.put('documents', { ...stored, title: 'Renamed while away', rev: stored.rev + 1, savedBy: 'their-tab' });
+  window.dispatchEvent(new Event('pageshow'));
+  await vi.waitFor(() => expect(state(b).title).toBe('Renamed while away'));
+  void a;
+});
