@@ -109,6 +109,11 @@
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* Keys (the shortcut sheet, the palette, the menu, the tips) are in Figtree like every other word, not in the
+     monospace Tailwind's base gives <kbd>. */
+  kbd {
+    font-family: inherit;
+  }
   /* React mounts inside #root, which takes the place of <body> in the page layout. */
   #root {
     flex: 1;
