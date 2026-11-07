@@ -72,6 +72,8 @@ use(init.S, init.doc);
 const get = useEditor.getState;
 const history = new History<string>(100);
 let createdAt = 0;
+/** Counts every change to the undo history (a step recorded, undone, redone or cleared), so a gesture can tell something else happened mid-drag. */
+let historyTick = 0;
 let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savePending = false;
@@ -141,7 +143,7 @@ export function openDocument(rec: DocRecord): void {
   sonnerToast.dismiss(); // a message's Undo belongs to the document it was shown in
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
-  history.clear();
+  history.clear(); historyTick++;
   failing = null;
   createdAt = rec.createdAt;
   clearMeasureCache();
@@ -168,7 +170,7 @@ export function closeDocument(): Promise<void> {
   clearTimeout(layoutTimer);
   layoutTimer = undefined;
   sonnerToast.dismiss();
-  history.clear();
+  history.clear(); historyTick++;
   failing = null;
   useEditor.setState({
     docId: null, title: '', version: s.version + 1, selectedId: null, scope: 'all', saving: 'saved',
@@ -185,18 +187,20 @@ let edits = 0, gestures = 0;
  * a key of its own, later calls record nothing.
  */
 export function gesture(kind: string): (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => void {
-  const key = kind + ':g' + ++gestures;
-  let first = true;
+  let key = '', seen = -1;
   return (fn, opts) => {
+    // Another step (or an undo or redo) since our last change: carry on as a new step, so the drag isn't lost.
+    const first = seen !== historyTick;
+    if (first) key = kind + ':g' + ++gestures;
     update(fn, { ...opts, history: first ? key : false });
-    first = false;
+    seen = historyTick;
   };
 }
 
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.
 export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOptions = {}): void {
   const { save = true, layout = 'now', history: hist } = opts;
-  if (save && hist !== false) history.record(snapshotState(), hist ?? 'edit:' + ++edits);
+  if (save && hist !== false) { history.record(snapshotState(), hist ?? 'edit:' + ++edits); historyTick++; }
   if (fn) fn(get());
   const s = get();
   use(s.S, s.doc);
@@ -227,11 +231,11 @@ function restore(snap: string): void {
 
 export function undo(): void {
   const snap = history.undo(snapshotState());
-  if (snap !== null) restore(snap);
+  if (snap !== null) { historyTick++; restore(snap); }
 }
 export function redo(): void {
   const snap = history.redo(snapshotState());
-  if (snap !== null) restore(snap);
+  if (snap !== null) { historyTick++; restore(snap); }
 }
 
 export function renameDocument(title: string): void {
