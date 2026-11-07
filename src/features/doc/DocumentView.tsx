@@ -12,7 +12,7 @@ import { OutlineView } from '@/features/write/OutlineView';
 import { StyleStage } from '@/features/style/StyleStage';
 import { ExportStage } from '@/features/export/ExportStage';
 import { ImportDialog } from '@/features/import/ImportDialog';
-import { openImport, select } from './actions';
+import { closeImport, openImport, select } from './actions';
 import { StageHost } from './StageHost';
 
 /** Fetch the font files the document needs, and lay the pages out again once they arrive. */
@@ -121,7 +121,7 @@ export function DocumentView({ stage }: { stage: Stage }) {
             : s === 'style' ? <StyleStage layout={layout} />
               : <ExportStage layout={layout} />
       )} />
-      <ImportDialog open={importOpen} file={importFile} pages={layout ? layout.pages : 1} />
+      <ImportDialog open={importOpen} file={importFile} target="open" onClose={closeImport} />
       {veil && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-[3px] border-dashed border-primary bg-primary/10 text-lg font-semibold text-fg">
           Drop to import this document

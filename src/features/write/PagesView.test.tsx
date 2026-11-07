@@ -273,7 +273,8 @@ test('Import opens from the Write bar and from a file dropped anywhere on the do
   const file = new File(['Dropped words'], 'notes.txt', { type: 'text/plain' });
   const drop = Object.assign(new Event('drop', { cancelable: true }), { dataTransfer: { types: ['Files'], files: [file] } });
   act(() => { window.dispatchEvent(drop); });
-  expect(await screen.findByDisplayValue('Dropped words')).toBeInTheDocument();
+  expect(await screen.findByRole('textbox', { name: 'Imported text' })).toHaveTextContent('Dropped words'); // the dialog's rich preview
+  expect(screen.getByText('notes.txt: 2 words.')).toBeInTheDocument();
 });
 
 test('dragging a page by its grip moves it', async () => {
