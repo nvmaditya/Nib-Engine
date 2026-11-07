@@ -72,3 +72,8 @@ test('each card is drawn with its own look’s settings, and Keep with the docum
   const fonts = vi.mocked(drawSample).mock.calls.map(c => c[1].font);
   expect(fonts).toEqual(['labelle', 'labelle', 'patrick', 'cedarville', 'reenie', 'caveat', 'playwrite']);
 });
+test('a look’s name may take a second line rather than be cut short, so Keep this document’s look reads in full', () => {
+  open(docOf(box())); render(<Harness target="open" />);
+  const name = screen.getByText('Keep this document’s look');
+  expect(name).toHaveClass('line-clamp-2'); expect(name).not.toHaveClass('truncate');
+});
