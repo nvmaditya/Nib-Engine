@@ -9,12 +9,16 @@ export function scrubPng(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   if (bytes.length < 8 || SIGNATURE.some((v, i) => bytes[i] !== v)) throw new Error('not a PNG');
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const kept: Uint8Array[] = [bytes.subarray(0, 8)];
-  let size = 8, at = 8, ended = false;
+  let size = 8, at = 8, ended = false, first = true, idat = false;
   while (!ended) {
     if (at + 12 > bytes.length) throw new Error('truncated PNG');
     const length = dv.getUint32(at), end = at + 12 + length;
     if (end > bytes.length) throw new Error('truncated PNG');
     const type = String.fromCharCode(bytes[at + 4], bytes[at + 5], bytes[at + 6], bytes[at + 7]);
+    if (first && type !== 'IHDR') throw new Error('not a PNG');
+    first = false;
+    if (type === 'IEND' && !idat) throw new Error('truncated PNG');
+    if (type === 'IDAT') idat = true;
     if ((PNG_KEEP as readonly string[]).includes(type)) {
       kept.push(bytes.subarray(at, end));
       size += end - at;

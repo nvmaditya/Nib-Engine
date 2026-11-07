@@ -27,20 +27,22 @@ function scanEnd(b: Uint8Array, from: number): number {
 export function scrubJpeg(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   if (bytes.length < 2 || bytes[0] !== 0xff || bytes[1] !== SOI) throw new Error('not a JPEG');
   const kept: Uint8Array[] = [];
-  let size = 2 + JFIF_APP0.length + 2, at = 2, ended = false;
+  let size = 2 + JFIF_APP0.length + 2, at = 2, ended = false, sof = false, sos = false;
   while (!ended) {
     if (at >= bytes.length) throw new Error('truncated JPEG');
     if (bytes[at] !== 0xff) throw new Error('not a JPEG');
     while (bytes[at + 1] === 0xff) at++; // fill bytes before a marker
     if (at + 1 >= bytes.length) throw new Error('truncated JPEG');
     const m = bytes[at + 1];
-    if (m === EOI) { ended = true; break; }
+    if (m === EOI) { if (!sof || !sos) throw new Error('not a JPEG'); ended = true; break; }
     if (m === 0x00) throw new Error('not a JPEG');
     if (m === SOI || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { at += 2; continue; } // markers with no length
     if (at + 4 > bytes.length) throw new Error('truncated JPEG');
     const end = at + 2 + ((bytes[at + 2] << 8) | bytes[at + 3]);
     if (end > bytes.length || end < at + 4) throw new Error('truncated JPEG');
     const stop = m === SOS ? scanEnd(bytes, end) : end;
+    if (m === SOS) sos = true;
+    else if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) sof = true;
     if (keeps(m)) { kept.push(bytes.subarray(at, stop)); size += stop - at; }
     at = stop;
   }

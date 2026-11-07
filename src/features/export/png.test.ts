@@ -48,6 +48,14 @@ describe('scrubPng', () => {
     expect(() => scrubPng(pngFile({ width: 1, height: 1, after: [pngChunk('XYZW', 'x')] }))).toThrow('unknown critical PNG chunk XYZW');
     expect(types(scrubPng(pngFile({ width: 1, height: 1, before: [pngChunk('xyzw', 'x')] })))).toEqual(['IHDR', 'IDAT', 'IEND']);
   });
+  test('a PNG without IHDR first, or without any IDAT, is refused', () => {
+    const src = pngFile({ width: 4, height: 3 });
+    const ihdrLen = 25; // 12 + 13
+    const swapped = new Uint8Array([...src.slice(0, 8), ...pngChunk('sRGB', Uint8Array.of(0)), ...src.slice(8)]);
+    expect(() => scrubPng(swapped)).toThrow('not a PNG');
+    const noIdat = new Uint8Array([...src.slice(0, 8 + ihdrLen), ...pngChunk('IEND', '')]);
+    expect(() => scrubPng(noIdat)).toThrow('truncated PNG');
+  });
   test('truncation anywhere is refused, never returned', () => {
     const src = pngFile({ width: 4, height: 3, before: PNG_METADATA });
     for (let n = 8; n < src.length; n++) expect(() => scrubPng(src.slice(0, n))).toThrow('truncated PNG');

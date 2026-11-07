@@ -47,6 +47,14 @@ describe('scrubJpeg', () => {
     const src = jpegFile({ width: 8, height: 8 });
     expect(() => scrubJpeg(src.slice(0, 30))).toThrow('truncated JPEG');
   });
+  test('a JPEG with no frame header or no scan is refused', () => {
+    const src = jpegFile({ width: 8, height: 8 });
+    const at = (m: number) => src.findIndex((v, i) => v === 0xff && src[i + 1] === m);
+    const noSof = new Uint8Array([...src.slice(0, at(0xc0)), ...src.slice(at(0xc4))]);
+    expect(() => scrubJpeg(noSof)).toThrow('not a JPEG');
+    const noSos = new Uint8Array([...src.slice(0, at(0xda)), 0xff, 0xd9]);
+    expect(() => scrubJpeg(noSos)).toThrow('not a JPEG');
+  });
   test('truncation anywhere is refused, never returned', () => {
     const src = jpegFile({ width: 8, height: 8, head: JPEG_METADATA, between: [JPEG_METADATA[7]] });
     for (let n = 2; n < src.length; n++) expect(() => scrubJpeg(src.slice(0, n))).toThrow('truncated JPEG');
