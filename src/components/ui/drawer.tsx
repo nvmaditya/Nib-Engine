@@ -5,17 +5,25 @@ import { cn } from '@/lib/utils';
 
 const Modal = React.createContext(true);
 
+type RootProps = React.ComponentProps<typeof DrawerPrimitive.Root>;
+
+/** A non-modal drawer must be controlled: its own dialog (below) follows `open`. */
+type DrawerProps = RootProps & ({ modal?: true } | { modal: false; open: boolean });
+
 /**
  * A bottom sheet (vaul). vaul 1.1.2 leaves its Radix dialog modal even with `modal={false}` (focus kept
  * in the sheet, the rest of the page hidden from assistive technology), so a non-modal drawer gets a
- * non-modal dialog of its own; it needs a controlled `open`. (vaul and `radix-ui` share one
- * `@radix-ui/react-dialog`, so the content finds that dialog.)
+ * non-modal dialog of its own, which follows `open`. (vaul and `radix-ui` share one
+ * `@radix-ui/react-dialog`, so the content finds that dialog.) A close from inside it (Escape) goes to
+ * `onOpenChange`, as a drag away does through vaul, unless it isn't `dismissible`.
  */
-function Drawer({ modal = true, open, children, ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
+function Drawer({ modal = true, open, onOpenChange, dismissible = true, children, ...props }: DrawerProps) {
   return (
-    <DrawerPrimitive.Root modal={modal} open={open} {...props}>
+    <DrawerPrimitive.Root modal={modal} open={open} onOpenChange={onOpenChange} dismissible={dismissible} {...props}>
       <Modal.Provider value={modal}>
-        {modal ? children : <DialogPrimitive.Root modal={false} open={open}>{children}</DialogPrimitive.Root>}
+        {modal ? children : (
+          <DialogPrimitive.Root modal={false} open={open} onOpenChange={o => { if (o || dismissible) onOpenChange?.(o); }}>{children}</DialogPrimitive.Root>
+        )}
       </Modal.Provider>
     </DrawerPrimitive.Root>
   );
