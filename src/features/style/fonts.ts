@@ -25,19 +25,25 @@ export function fontId(buf: ArrayBuffer): string {
   return 'up-' + fnv1a32(new Uint8Array(buf)).toString(36) + '-' + buf.byteLength.toString(36);
 }
 
+/** The first four bytes of a TrueType, OpenType or WOFF file (0x00010000, `true`, `OTTO`, `wOFF`). */
+const SIGNATURES = [0x00010000, 0x74727565, 0x4f54544f, 0x774f4646];
+const fontSignature = (buf: ArrayBuffer): boolean => buf.byteLength >= 12 && SIGNATURES.includes(new DataView(buf).getUint32(0));
+
 /**
  * Make an uploaded font available as a hand. The engine reads its outlines through `engineFor`,
- * the way it reads a built-in hand's; a file it can't read is not added. The FontFace is only for
- * the interface and the canvas fallback.
+ * the way it reads a built-in hand's; a new file it can't read is not added. A `stored` one was read
+ * when it was added, so start-up doesn't wait to read every file again: its outlines are read the first
+ * time it is drawn (its file is here, so `fontReady` is true), and only a file that isn't a font file at
+ * all is skipped. The FontFace is only for the interface and the canvas fallback.
  */
-export function registerFont(rec: FontRecord): FontCfg | null {
+export function registerFont(rec: FontRecord, stored = false): FontCfg | null {
   const have = FONTS.find(f => f.id === rec.id);
   if (have) return have;
   const cfg: FontCfg = {
     id: rec.id, name: rec.name, family: 'Nib Upload ' + rec.id, weight: 400, scale: 1, group: 'mine', local: true,
     buf: rec.buf, forms: rec.forms > 1 ? rec.forms : undefined,
   };
-  if (!engineFor(cfg)) return null;
+  if (stored ? !fontSignature(rec.buf) : !engineFor(cfg)) return null;
   FONTS.push(cfg);
   if (typeof FontFace === 'function' && typeof document !== 'undefined' && document.fonts) {
     try {
@@ -105,7 +111,7 @@ export async function loadUploadedFonts(): Promise<number> {
     let n = 0;
     for (const { key, rec } of found.sort((a, b) => order(a.rec) - order(b.rec))) {
       let ok = false;
-      try { ok = wellFormed(rec) && !!registerFont(rec); } catch { /* skip this one */ }
+      try { ok = wellFormed(rec) && !!registerFont(rec, true); } catch { /* skip this one */ }
       if (ok) n++; else unusable.add(key);
     }
     return n;

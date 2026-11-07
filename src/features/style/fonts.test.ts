@@ -10,6 +10,12 @@ vi.mock('@/store/documents', async importOriginal => {
   const actual = await importOriginal<typeof import('@/store/documents')>();
   return { ...actual, setPref: vi.fn(actual.setPref) };
 });
+// Counts the font files the engine reads the outlines of.
+const parsed = vi.hoisted(() => ({ n: 0 }));
+vi.mock('opentype.js', async importOriginal => {
+  const real = ((await importOriginal()) as { default: { parse: (b: ArrayBuffer) => unknown } }).default;
+  return { default: { ...real, parse: (b: ArrayBuffer) => { parsed.n++; return real.parse(b); } } };
+});
 
 beforeEach(async () => {
   await (await getDb()).clear('prefs');
@@ -29,6 +35,17 @@ test('an uploaded font is drawn from its own outlines and is back after a reload
   expect(await fonts.loadUploadedFonts()).toBe(1);
   expect(core.engineFor(config.FONTS.find(f => f.id === id)!)).not.toBeNull();
   expect(docjs.cleanSettings({ font: id }, false).font).toBe(id);
+});
+test('at start-up a stored font is a hand without its outlines being read; they are read the first time it is drawn', async () => {
+  const r = await addFontFile(fontFile('caveat', 'Mine.woff')) as { id: string };
+  vi.resetModules(); // a fresh page
+  const [fonts, config, core] = await Promise.all([import('@/features/style/fonts'), import('@/engine/config.js'), import('@/engine/core.js')]);
+  parsed.n = 0;
+  expect(await fonts.loadUploadedFonts()).toBe(1);
+  expect(parsed.n).toBe(0);
+  expect(core.fontReady(r.id)).toBe(true); // its file is here: nothing to wait for
+  expect(core.engineFor(config.FONTS.find(f => f.id === r.id)!)).not.toBeNull();
+  expect(parsed.n).toBe(1);
 });
 test('only TTF, OTF and WOFF files are taken', async () => { for (const n of ['hand.woff2', 'hand.txt', 'hand']) expect(await addFontFile(new File([new Uint8Array(16)], n))).toEqual({ ok: false, reason: 'type' }); });
 test('the extension is checked without regard to case', async () => { expect(await addFontFile(fontFile('caveat', 'HAND.WOFF'))).toMatchObject({ ok: true, name: 'HAND' }); });
