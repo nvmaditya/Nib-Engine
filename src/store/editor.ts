@@ -80,7 +80,8 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savePending = false;
 
 const historyFlags = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
-const snapshotState = () => { const s = get(); return JSON.stringify({ S: s.S, doc: s.doc, title: s.title }); };
+/** The settings, blocks and title, as `update` records them for undo. */
+export const stateSnapshot = (): string => { const s = get(); return JSON.stringify({ S: s.S, doc: s.doc, title: s.title }); };
 
 /** Only documents kept in IndexedDB are saved; the in-memory one (storage blocked) has nowhere to go. */
 const stored = (id: string | null): id is string => id !== null && id !== MEMORY_ID;
@@ -200,7 +201,7 @@ export function gesture(kind: string): (fn: (s: EditorState) => void, opts?: Omi
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.
 export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOptions = {}): void {
   const { save = true, layout = 'now', history: hist } = opts;
-  if (save && hist !== false) { history.record(snapshotState(), hist ?? 'edit:' + ++edits); historyTick++; }
+  if (save && hist !== false) { history.record(stateSnapshot(), hist ?? 'edit:' + ++edits); historyTick++; }
   if (fn) fn(get());
   const s = get();
   use(s.S, s.doc);
@@ -227,7 +228,8 @@ export function flushLayout(): void {
 }
 beforeRouteChange(flushLayout);
 
-function restore(snap: string): void {
+/** Put back the settings, blocks and title of a `stateSnapshot()`, as a step under the history key `key` (or none). */
+function restore(snap: string, key: string | false): void {
   const o = JSON.parse(snap) as { S: unknown; doc: unknown; title: string };
   update(s => {
     s.title = o.title;
@@ -236,16 +238,16 @@ function restore(snap: string): void {
     if (s.selectedId && !s.doc.boxes.some(b => b.id === s.selectedId)) s.selectedId = null;
     if (!s.selectedId && s.scope === 'box') s.scope = 'all';
     clearMeasureCache();
-  }, { history: false });
+  }, { history: key });
 }
 
 export function undo(): void {
-  const snap = history.undo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); }
+  const snap = history.undo(stateSnapshot());
+  if (snap !== null) { historyTick++; restore(snap, false); }
 }
 export function redo(): void {
-  const snap = history.redo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); }
+  const snap = history.redo(stateSnapshot());
+  if (snap !== null) { historyTick++; restore(snap, false); }
 }
 
 export function renameDocument(title: string): void {
@@ -272,6 +274,9 @@ export function docAction(label: string, fn: () => void): ToastAction {
 export const snapshot = (): string => JSON.stringify(get().doc);
 export const undoTo = (snap: string, sel: string | null): ToastAction =>
   docAction('Undo', () => update(s => { s.doc = cleanDoc(JSON.parse(snap)) ?? emptyDoc(); s.selectedId = sel; }, { history: 'undo-to' }));
+/** Undo for a change to the settings and the title as well (an import): back to a `stateSnapshot()`, as one step. Nothing to put back records nothing. */
+export const undoToState = (snap: string): ToastAction =>
+  docAction('Undo', () => { if (stateSnapshot() !== snap) restore(snap, 'undo-to'); });
 
 let caretSeq = 0;
 /** Ask for the caret at a markup offset of a block (a clicked word, the change an undo made). Also selects the block. */
