@@ -122,4 +122,21 @@ describe('Write in Chromium, laid out for real', () => {
     }, null, { timeout: 5_000 });
     expect(errors).toEqual([]);
   }, 120_000);
+
+  test.each([1135, 390])('at %i px, a name tag’s ⋯ menu opens beside its button, clear of the window’s edges', async width => {
+    const page = await openSample(width);
+    const button = page.locator('.typed-page').getByRole('button', { name: 'Options for Main text' });
+    const b = (await button.boundingBox())!;
+    await button.click();
+    const menu = page.getByRole('menu');
+    await menu.waitFor();
+    await page.waitForFunction(() => document.querySelector('[role="menu"]')?.getAttribute('data-state') === 'open', null);
+    const m = (await menu.boundingBox())!;
+    expect(m.y, 'under the button').toBeGreaterThan(b.y + b.height);
+    expect(m.x, 'clear of the left edge').toBeGreaterThanOrEqual(8);
+    expect(m.x + m.width, 'clear of the right edge').toBeLessThanOrEqual(width - 8);
+    // Where there is room, it starts at the button; where there isn't, it moves only as far as it must.
+    expect(Math.abs(m.x - Math.max(8, Math.min(b.x, width - 8 - m.width))), 'how far it is from beside the button (px)').toBeLessThan(1);
+    expect(errors).toEqual([]);
+  }, 120_000);
 });

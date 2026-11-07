@@ -208,7 +208,7 @@ const TAG_BUTTON = 'size-[18px] rounded-[4px] text-white/90 hover:bg-white/25 ho
 export function PartMenu({ sg }: { sg: Seg }) {
   const ref = useRef<HTMLButtonElement>(null);
   useFocusRescue(ref, () => ({ page: sg.page, top: sg.top }));
-  return <BlockMenu boxId={sg.box.id} idx={sg.idx} trigger={<OptionsButton ref={ref} label={`Options for ${sg.box.name}`} className={TAG_BUTTON} />} />;
+  return <BlockMenu boxId={sg.box.id} idx={sg.idx} align="start" trigger={<OptionsButton ref={ref} label={`Options for ${sg.box.name}`} className={TAG_BUTTON} />} />;
 }
 
 /**
@@ -279,7 +279,7 @@ function TypedPart({ p, s, gap, seg }: { p: Part; s: number; gap: number; seg(id
         </button>
         <span className="font-semibold">{name}</span>
         {p.label && <><span aria-hidden className="font-medium opacity-85">·</span><span className="font-medium opacity-85">{p.label}</span></>}
-        <BlockMenu boxId={p.boxId} idx={p.idx} trigger={<OptionsButton label={`Options for ${name}`} data-part-menu="" className={TAG_BUTTON} />} />
+        <BlockMenu boxId={p.boxId} idx={p.idx} align="start" trigger={<OptionsButton label={`Options for ${name}`} data-part-menu="" className={TAG_BUTTON} />} />
       </div>
       <div className="typed-body" style={{ fontSize: gap * s * 0.56, lineHeight: `${gap * s}px`, '--lh': `${gap * s}px` } as CSSProperties}>
         {b.t === 'fields' && <HeaderFields boxId={p.boxId} compact />}
