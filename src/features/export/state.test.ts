@@ -26,7 +26,14 @@ test('format, ZIP and quality are remembered on the device', async () => {
 });
 test('stored values of the wrong shape are ignored', async () => { await setPref('export', { format: 'gif', zip: 'yes', quality: 'print' }); await loadExportPrefs(); expect(useExportPrefs.getState()).toMatchObject({ format: 'pdf', zip: true, quality: 'print' }); });
 test('a choice made before the stored ones arrive wins', async () => { await setPref('export', { format: 'png' }); const p = loadExportPrefs(); setExportPrefs({ format: 'jpg' }); await p; expect(useExportPrefs.getState().format).toBe('jpg'); });
-test('choosing what is already chosen writes nothing', () => { vi.mocked(setPref).mockClear(); setExportPrefs({ format: useExportPrefs.getState().format }); expect(setPref).not.toHaveBeenCalled(); });
+test('choosing what is already chosen writes nothing', async () => {
+  vi.mocked(setPref).mockClear();
+  const before = useExportPrefs.getState();
+  setExportPrefs({ format: before.format });
+  await new Promise(r => setTimeout(r, 20)); // let the write, if there were one, happen
+  expect(setPref).not.toHaveBeenCalled();
+  expect(useExportPrefs.getState()).toBe(before);
+});
 test('a refused write keeps the choice for now', async () => { vi.mocked(setPref).mockRejectedValueOnce(new Error('quota')); setExportPrefs({ format: 'png' }); await vi.waitFor(() => expect(setPref).toHaveBeenCalled()); expect(useExportPrefs.getState().format).toBe('png'); });
 test('a page left out and put back', () => { setChoose(true); togglePage(1); expect(useExportPick.getState()).toEqual({ choose: true, out: [1] }); togglePage(1); expect(useExportPick.getState().out).toEqual([]); });
 test('the page choice starts again when another document opens', () => { openDocument(rec('A', docOf(box()))); setChoose(true); togglePage(0); openDocument(rec('B', docOf(box()))); expect(useExportPick.getState()).toEqual({ choose: false, out: [] }); });

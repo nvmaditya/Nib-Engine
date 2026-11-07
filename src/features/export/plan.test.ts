@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { PAGE_H, PAGE_W } from '@/engine/config.js';
 import {
   chosenPages, downloadLabel, downloadNames, estimateBytes, exportBase, failMessage, formatSize, PRINT_RATIO, QUALITY,
-  savedMessage, suffixShown, zipNames, type ExportPlan, type Sample,
+  planOf, savedMessage, suffixShown, whatIsMade, zipNames, type ExportPlan, type Sample,
 } from './plan';
 
 const P = (p: Partial<ExportPlan> = {}): ExportPlan => ({ format: 'pdf', quality: 'standard', zip: true, pages: [0, 1, 2], pageCount: 3, base: 'The Water Cycle', ...p });
@@ -48,3 +48,10 @@ test('the size estimate', () => {
 });
 test('sizes read the way people say them', () => expect([2_700_406, 601_260, 1_692_875, 12_400_000, 999_499, 999_500, 9_949_999, 9_950_000, 1_500].map(formatSize))
   .toEqual(['~2.7 MB', '~601 KB', '~1.7 MB', '~12 MB', '~999 KB', '~1.0 MB', '~9.9 MB', '~10 MB', '~2 KB']));
+test('planOf gathers the choices', () => {
+  expect(planOf({ format: 'png', zip: false, quality: 'print' }, { choose: true, out: [1, 7] }, 3, 'my/notes.pdf', 'T'))
+    .toEqual({ format: 'png', quality: 'print', zip: false, pages: [0, 2], pageCount: 3, base: 'my notes' });
+  expect(planOf({ format: 'pdf', zip: true, quality: 'standard' }, { choose: false, out: [1] }, 2, '', '').pages).toEqual([0, 1]);
+});
+test('whatIsMade', () => expect([P(), P({ format: 'png' }), P({ format: 'jpg', zip: false }), P({ format: 'jpg', pages: [0] }), P({ format: 'png', pages: [] })].map(whatIsMade))
+  .toEqual(['PDF', 'ZIP', 'images', 'JPG', 'PNG']));
