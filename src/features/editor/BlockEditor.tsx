@@ -37,10 +37,11 @@ export interface BlockEditorProps {
   acceptCaret?: boolean;
   onSplit?(idx: number): void;
   onRemovePart?(idx: number): void;
-  /** Focus came or went; `lines` is how many lines the editor holds. */
-  onFocusChange?(focused: boolean, lines: number): void;
+  /** Focus came or went; `lines` is how many lines the editor holds, `event` is the browser's focus or blur event. */
+  onFocusChange?(focused: boolean, lines: number, event?: FocusEvent): void;
   /** After each write: how many lines the editor holds now (its lines are `first` to `first + lines`). */
   onLineCount?(lines: number): void;
+  /** The editor reloaded: the block changed from outside (not by its own writes), or its lines did while it has focus. */
   onExternalChange?(): void;
   onReady?(e: Editor): void;
   className?: string;
@@ -185,10 +186,9 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     const abs = (p: number) => (sh ? lineStart(sh.text, sh.first) + offsetAt(e.state.doc, sh.slice, p) : 0);
     const anchor = abs(e.state.selection.anchor), head = abs(e.state.selection.head), focused = !!sh && e.isFocused;
     load(e, t, r);
-    if (focused) {
-      live.current.onExternalChange?.();
-      selectAt(e, sh.text !== t ? firstDiff(sh.text, t) : head);
-    } else if (sh) selectAt(e, anchor, head, false); // so the toolbar still formats the same words
+    if (focused || (sh && sh.text !== t)) live.current.onExternalChange?.();
+    if (focused) selectAt(e, sh.text !== t ? firstDiff(sh.text, t) : head);
+    else if (sh) selectAt(e, anchor, head, false); // so the toolbar still formats the same words
   };
 
   const extensions = useMemo(() => [...editorExtensions({ boxId, slash: setSlash }), PageBreakLines], [boxId]);
@@ -208,9 +208,9 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
       const sh = shownIn(e);
       live.current.onFocusChange?.(true, sh ? sh.end - sh.first : 0);
     },
-    onBlur: ({ editor: e }) => {
+    onBlur: ({ editor: e, event }) => {
       const sh = shownIn(e);
-      live.current.onFocusChange?.(false, sh ? sh.end - sh.first : 0);
+      live.current.onFocusChange?.(false, sh ? sh.end - sh.first : 0, event);
     },
   }, [boxId]);
 

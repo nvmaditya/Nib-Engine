@@ -38,6 +38,9 @@ function modKey(): string {
 
 const ring = 'focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none';
 
+/** Whether the focus went to one of the tools, which format the selection of the editor it left. */
+export const inFormatToolbar = (to: EventTarget | null): boolean => to instanceof Element && !!to.closest('[data-format-toolbar]');
+
 export function FormatToolbar({ className }: { className?: string }) {
   const { editor } = useActiveEditor();
   const subscribe = useCallback((fn: () => void) => {
@@ -50,7 +53,7 @@ export function FormatToolbar({ className }: { className?: string }) {
   const off = !usable(editor), mod = modKey();
 
   return (
-    <div role="toolbar" aria-label="Formatting" className={cn('flex flex-wrap items-center gap-0.5', className)}>
+    <div role="toolbar" aria-label="Formatting" data-format-toolbar="" className={cn('flex flex-wrap items-center gap-0.5', className)}>
       <select aria-label="Text style" disabled={off} value={style}
         onChange={e => { if (usable(editor)) setTextStyle(editor, e.target.value as TextStyle); }}
         className={cn('h-8 rounded-md bg-transparent pr-1 pl-2 text-sm font-medium text-fg hover:bg-surface-2 disabled:opacity-40', ring)}>

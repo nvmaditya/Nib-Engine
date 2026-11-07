@@ -1,8 +1,9 @@
 // A page's typed copy: each block part at its place on the page, edited in place. A part edits the markup
 // lines that start in it (plan, Design decision 1). While a part's editor has focus its lines are frozen:
 // typing never re-slices it, so the caret never moves, and the block's later parts shift by the lines it
-// gained. Everything is worked out from the layout again once the editor is left or the block changes
-// from outside (undo, an action).
+// gained. They stay frozen while the focus is only away in the Formatting toolbar or another window, and
+// everything is worked out from the layout again once the editor is really left or the block changes from
+// outside (undo, an action).
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import { GripVertical } from 'lucide-react';
 import { create } from 'zustand';
@@ -13,6 +14,7 @@ import { blockColor, partLabel } from '@/features/doc/blocks';
 import { select } from '@/features/doc/actions';
 import { useStageActive } from '@/features/doc/StageHost';
 import { BlockEditor, type PageBreakMark } from '@/features/editor/BlockEditor';
+import { inFormatToolbar } from '@/features/editor/FormatToolbar';
 import { lineStart } from '@/features/editor/positions';
 import { frozenRanges, partRanges, type LineRange } from '@/features/editor/slices';
 import { drag, nudge, startBlockDrag } from '@/features/pages/drag';
@@ -29,17 +31,45 @@ interface PartKey { boxId: string; idx: number }
 /** The focused part's block: its ranges when the freeze began (`base`), and how many lines that part holds now. */
 interface Freeze extends PartKey { base: LineRange[]; count: number }
 
-// One editor has the focus at a time, so one freeze serves every typed page.
+// One editor has the focus at a time, so one freeze serves every typed page. `focused` is the part whose
+// editor has the focus, or had it when the focus went away to the toolbar or another window.
 const useFreeze = create<{ focused: PartKey | null; freeze: Freeze | null }>(() => ({ focused: null, freeze: null }));
 const is = (k: PartKey | null, boxId: string, idx: number) => !!k && k.boxId === boxId && k.idx === idx;
+
+// While the focus is away, where it lands next decides whether the freeze goes on.
+let away: (PartKey & { end(): void }) | null = null;
 
 const freeze = {
   /** The part's editor took the focus holding `lines` lines, while its block showed `shown`. */
   focus(boxId: string, idx: number, lines: number, shown: LineRange[]) {
+    away?.end();
     useFreeze.setState({ focused: { boxId, idx }, freeze: { boxId, idx, base: shown, count: lines } });
+  },
+  /**
+   * Its editor `dom` lost the focus to the Formatting toolbar or to another window: the lines stay as they
+   * are, so the tools format the words it had selected and the caret comes back to them. Focus landing
+   * anywhere else (another control, or the page itself) leaves the part.
+   */
+  hold(boxId: string, idx: number, dom: Element) {
+    away?.end();
+    const land = (to: EventTarget | null) => {
+      if (inFormatToolbar(to) || (to instanceof Node && dom.contains(to))) return; // its editor's focus freezes it again
+      freeze.leave(boxId, idx);
+    };
+    const onIn = (e: FocusEvent) => land(e.target);
+    const onOut = (e: FocusEvent) => { if (!e.relatedTarget && document.hasFocus()) land(null); };
+    const end = () => {
+      document.removeEventListener('focusin', onIn, true);
+      document.removeEventListener('focusout', onOut, true);
+      if (away?.end === end) away = null;
+    };
+    document.addEventListener('focusin', onIn, true);
+    document.addEventListener('focusout', onOut, true);
+    away = { boxId, idx, end };
   },
   /** It lost the focus, or went away. */
   leave(boxId: string, idx: number) {
+    if (is(away, boxId, idx)) away!.end();
     const s = useFreeze.getState();
     if (is(s.focused, boxId, idx) || is(s.freeze, boxId, idx)) {
       useFreeze.setState({ focused: is(s.focused, boxId, idx) ? null : s.focused, freeze: is(s.freeze, boxId, idx) ? null : s.freeze });
@@ -51,9 +81,10 @@ const freeze = {
     if (s.freeze && is(s.freeze, boxId, idx)) { if (s.freeze.count !== lines) useFreeze.setState({ freeze: { ...s.freeze, count: lines } }); }
     else if (is(s.focused, boxId, idx)) useFreeze.setState({ freeze: { boxId, idx, base: shown, count: lines } });
   },
-  /** The block changed from outside: its lines come from the layout again. */
-  external(boxId: string) {
-    if (useFreeze.getState().freeze?.boxId === boxId) useFreeze.setState({ freeze: null });
+  /** The block changed from outside under the part's editor: its lines come from the layout again. */
+  external(boxId: string, idx: number) {
+    const s = useFreeze.getState();
+    if (is(s.focused, boxId, idx) && s.freeze?.boxId === boxId) useFreeze.setState({ freeze: null });
   },
 };
 
@@ -254,13 +285,17 @@ function TypedPart({ p, s, gap, seg }: { p: Part; s: number; gap: number; seg(id
         {b.t === 'cont' && <p className="m-0 text-muted">{`Continues the paragraph from page ${b.from}.`}</p>}
         {b.t === 'editor' && (
           <BlockEditor boxId={p.boxId} range={b.range} breaks={b.breaks} label={`${name}, page ${p.page + 1}`} acceptCaret={active}
-            onFocusChange={(on, lines) => {
-              if (!on) { freeze.leave(p.boxId, p.idx); return; }
+            onFocusChange={(on, lines, ev) => {
+              if (!on) {
+                if (ev?.target instanceof Element && (inFormatToolbar(ev.relatedTarget) || !document.hasFocus())) freeze.hold(p.boxId, p.idx, ev.target);
+                else freeze.leave(p.boxId, p.idx);
+                return;
+              }
               freeze.focus(p.boxId, p.idx, lines, live.current.shown);
               if (useEditor.getState().selectedId !== p.boxId) select(p.boxId);
             }}
             onLineCount={lines => freeze.lines(p.boxId, p.idx, lines, live.current.shown)}
-            onExternalChange={() => freeze.external(p.boxId)} />
+            onExternalChange={() => freeze.external(p.boxId, p.idx)} />
         )}
       </div>
     </div>
