@@ -138,7 +138,7 @@ test('on a phone, the sheet opens up to just below the stage switcher, and the p
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(sheet.style.getPropertyValue('--snap-point-height')).toBe('89px'));
     expect(room()).toBe('679px');
-    expect(screen.getByRole('main', { name: 'Pages' })).toHaveClass('pb-[calc(var(--sheet-shown)+12px)]');
+    expect(screen.getByRole('main', { name: 'Pages' })).toHaveClass("after:h-[calc(var(--sheet-shown)+12px)]");
   } finally {
     vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
   }

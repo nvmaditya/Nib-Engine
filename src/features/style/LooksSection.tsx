@@ -1,5 +1,5 @@
 // Looks: hand, pen, ink, paper and realism in one tap, and the looks saved on this device.
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Settings } from '@/engine/types';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ const DEFAULT_NAME = 'My look';
 export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; blockScope: boolean }) {
   const saved = useStylePrefs(s => s.looks);
   const active = useStageActive();
+  const saveRef = useRef<HTMLButtonElement>(null);
   const [asking, setAsking] = useState(false);
   const [name, setName] = useState(DEFAULT_NAME);
   const all = [...STYLE_LOOKS, ...saved];
@@ -36,7 +37,10 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
       () => toast('Nib couldn’t save that look on this device.'),
     );
   };
-  const remove = (look: SavedLook) => {
+  const remove = (look: SavedLook, card: HTMLElement | null) => {
+    // The button being pressed goes away, so focus moves on first: to the next card, or to Save.
+    const next = card?.nextElementSibling?.querySelector('button');
+    (next ?? saveRef.current)?.focus();
     void removeSavedLook(look.id).then(r => {
       if (r) toast(`Removed “${r.look.name}”.`, { label: 'Undo', fn: () => { void putBackSavedLook(r.look, r.index); } });
     });
@@ -49,7 +53,7 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
           const isSaved = saved.includes(look);
           return (
             <div key={look.id} className="relative">
-              <button type="button" aria-pressed={on === look} onClick={() => pickLook(look)}
+              <button type="button" aria-pressed={on === look} onClick={() => { if (on !== look) pickLook(look); }}
                 className="flex w-full flex-col items-stretch gap-1.5 rounded-lg border border-line bg-surface p-1.5 text-left text-[13px] font-medium transition-colors outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:ring-1 aria-pressed:ring-primary">
                 <span className="flex h-[38px] items-center overflow-hidden rounded-md px-2" style={{ background: paperTint(look.v.paper ?? S.paper) }}>
                   <HandSample settings={{ ...V, ...lookPatch(look, false) }} text="Homework" height={30} fit="width" />
@@ -57,7 +61,7 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
                 <span className="truncate px-0.5">{look.name}</span>
               </button>
               {isSaved && (
-                <button type="button" aria-label={`Remove ${look.name}`} onClick={() => remove(look)}
+                <button type="button" aria-label={`Remove ${look.name}`} onClick={e => remove(look, e.currentTarget.parentElement)}
                   className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-surface/90 text-muted outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/50">
                   <X aria-hidden="true" className="size-3" />
                 </button>
@@ -66,9 +70,9 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
           );
         })}
       </div>
-      <Button variant="outline" size="sm" className="mt-3" onClick={ask}><Plus />Save the current style as a look</Button>
+      <Button ref={saveRef} variant="outline" size="sm" className="mt-3" onClick={ask}><Plus />Save the current style as a look</Button>
       <Dialog open={asking && active} onOpenChange={setAsking}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm" onCloseAutoFocus={e => { e.preventDefault(); saveRef.current?.focus(); }}>
           <form onSubmit={submit} className="grid gap-4">
             <DialogHeader><DialogTitle>Save as a look</DialogTitle></DialogHeader>
             <div className="grid gap-2">

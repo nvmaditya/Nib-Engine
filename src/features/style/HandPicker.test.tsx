@@ -273,3 +273,13 @@ test('the picker doesn’t stay open over another stage', async () => {
   rerender(<Host stage="style" />);
   expect(dialog()).toBeInTheDocument();
 });
+
+test.each([
+  ['Escape', async () => { await userEvent.keyboard('{Escape}'); }],
+  ['the × button', async () => { await userEvent.click(within(dialog()).getByRole('button', { name: 'Close' })); }],
+])('closing the picker by %s puts focus back on Change handwriting', async (_n, close) => {
+  await openPicker();
+  await close();
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Handwriting' })).toBeNull());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Change handwriting' })).toHaveFocus());
+});

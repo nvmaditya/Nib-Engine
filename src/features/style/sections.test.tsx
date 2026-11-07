@@ -199,3 +199,21 @@ test('letter and word spacing are folded away', async () => {
   expect(screen.getByRole('slider', { name: 'Word spacing' })).toBeInTheDocument();
   expect(screen.getByRole('slider', { name: 'Letter spacing' })).toBeInTheDocument();
 });
+
+test.each([
+  ['button', /^Ballpoint/, 'tip'],
+  ['button', 'Blue ink', 'ink'],
+  ['button', 'Ruled', 'paper'],
+  ['button', 'Natural', 'mess'],
+] as const)('pressing the chosen %s %s records nothing and keeps Redo', async (role, name, key) => {
+  open(docOf(box())); render(<Live />);
+  // Something to undo, so there is a Redo to lose.
+  await userEvent.click(screen.getByRole('button', { name: /^Gel pen/ }));
+  undo();
+  expect(get().canRedo).toBe(true);
+  const before = get().S[key];
+  await userEvent.click(screen.getByRole(role, { name }));
+  expect(get().S[key]).toBe(before);
+  expect(get().canRedo).toBe(true);
+  expect(get().canUndo).toBe(false);
+});

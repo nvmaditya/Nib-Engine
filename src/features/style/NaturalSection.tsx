@@ -12,7 +12,7 @@ export function NaturalSection({ V }: { V: Settings }) {
   return (
     <Group title="How natural">
       <Segmented label="How natural">
-        {PRESETS.map(p => <SegButton key={p.id} pressed={matches(p)} onClick={() => setV(p.v)}>{p.name}</SegButton>)}
+        {PRESETS.map(p => <SegButton key={p.id} pressed={matches(p)} onClick={() => { if (!matches(p)) setV(p.v); }}>{p.name}</SegButton>)}
       </Segmented>
       {!any && <p className="mt-2 text-[13px] text-muted">Fine-tuned by you.</p>}
       <Fold id="fine" title="Fine-tune">

@@ -1,6 +1,6 @@
 // Style: the pages in the middle and the Style panel on the right (380 px). On phones the pages fill
-// the stage and the panel is a sheet over them; the pages leave room at the bottom for as much as the
-// sheet covers, so the last one can scroll clear of it.
+// the stage and the panel is a sheet over them; the pages leave room after the last sheet for as much as the
+// sheet covers (a spacer, not padding, so the top snap doesn't make the document scroll), so the last one can scroll clear of it.
 import { useRef, type CSSProperties } from 'react';
 import { PageView, type PageLayout } from '@/features/pages/PageView';
 import { useWide } from '@/lib/media';
@@ -22,7 +22,7 @@ export function StyleStage({ layout }: { layout: PageLayout | null }) {
   }
   return (
     <div ref={stage} className="flex min-h-0 flex-1 flex-col" style={{ '--sheet-shown': snaps.shown } as CSSProperties}>
-      <PageView layout={layout} mode="style" className="min-h-0 flex-1 overflow-y-auto pb-[calc(var(--sheet-shown)+12px)]" />
+      <PageView layout={layout} mode="style" className="min-h-0 flex-1 overflow-y-auto after:block after:h-[calc(var(--sheet-shown)+12px)] after:content-['']" />
       <StyleSheet snaps={snaps}>{panel}</StyleSheet>
     </div>
   );
