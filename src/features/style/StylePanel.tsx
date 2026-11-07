@@ -15,14 +15,14 @@ import { PenInkSection } from './PenInkSection';
 import { ScopeBar } from './ScopeBar';
 import { SizeSection } from './SizeSection';
 
-export function StylePanel({ pages }: { pages: number | null }) {
+export function StylePanel({ pages, onHead }: { pages: number | null; onHead?: (px: number) => void }) {
   const S = useEditor(s => s.S);
   const active = useStageActive();
   useEditor(s => (active ? s.version : -1)); // redraw on every change only while the stage is shown
   const V = view(), box = scopeBox(), blockScope = !!box;
   return (
     <section aria-label="Style">
-      <ScopeBar notice={<PageCountNotice pages={pages} />} />
+      <ScopeBar notice={<PageCountNotice pages={pages} />} onHead={onHead} />
       <LooksSection V={V} S={S} blockScope={blockScope} />
       <HandSection V={V} start={docStart(useEditor.getState().doc)} blockName={box?.name ?? null} />
       <PenInkSection V={V} />

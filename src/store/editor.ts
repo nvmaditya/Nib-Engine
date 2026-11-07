@@ -5,8 +5,9 @@ import { toast as sonnerToast } from 'sonner';
 import { cleanDoc, cleanSettings, loadSaved } from '@/engine/doc.js';
 import { clearMeasureCache, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Settings } from '@/engine/types';
-import { MEMORY_ID, beforeRouteChange } from '@/app/route';
-import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
+import { MEMORY_ID, beforeRouteChange, navigate } from '@/app/route';
+import { loadUploadedFonts } from '@/features/style/fonts';
+import { MissingDocumentError, NewerDocumentError, StaleDocumentError, getDoc, onDocsChanged, putDoc, type DocRecord } from '@/store/documents';
 import { forgetDb } from './db';
 import { History } from './history';
 
@@ -87,8 +88,48 @@ const stored = (id: string | null): id is string => id !== null && id !== MEMORY
 
 export const SAVE_FAILED = 'Nib couldn’t save your last change.';
 export const SAVE_NEWER = 'This document was saved by a newer version of Nib. Reload the page to keep editing.';
+export const NOT_ON_DEVICE = 'That document isn’t on this device.';
+// Another tab with the same document open (see installDocFollow).
+export const FOLLOWED = 'Updated with changes from another tab.';
+export const NOT_KEPT = 'This document was changed in another tab, so your last change wasn’t kept.';
+export const DELETED_ELSEWHERE = 'This document was deleted in another tab.';
+export const COPY_LOST = 'Copy your text';
+export const COPIED = 'Copied your text.';
+export const COPY_FAILED = 'Nib couldn’t copy your text.';
 let saveSeq = 0;
 let failing: string | null = null; // the document whose saves are failing; one message per streak
+
+// What storage holds of the open document. A save is written only if storage hasn't moved on since: its revision
+// is still `base` (the one this tab read), or the last write was this session's own (putDoc).
+let base = 0;
+let baseAt = 0; // its updatedAt: a record an earlier Nib wrote has no revision (0), and only its time tells it moved on
+let session = '';
+let written = -1; // the revision of this session's latest write: storage still holding it means this tab has it
+/** Each block's text as last written (or read): what a refused save loses is what differs from it. */
+let savedText = new Map<string, string>();
+/** Bumps each time a document is opened or read again, so an action made for the earlier copy does nothing. */
+let opened = 0;
+let followSeq = 0;
+let followLost = false; // a change of this tab's was refused, or dropped, since the open copy was read
+const textsOf = (doc: EngineDoc) => new Map(doc.boxes.map(b => [b.id, b.text]));
+/** The blocks' text that differs from `since` (as last written or read): what a refused save loses. */
+const lostText = (texts: Map<string, string>, since: Map<string, string>): string =>
+  [...texts].filter(([id, t]) => t.trim() && since.get(id) !== t).map(([, t]) => t).join('\n\n');
+
+function adopt(rec: DocRecord, doc: EngineDoc): void {
+  createdAt = rec.createdAt;
+  base = rec.rev ?? 0;
+  baseAt = rec.updatedAt;
+  session = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  written = -1;
+  savedText = textsOf(doc);
+  opened++;
+  followSeq++; // a look at storage started for the earlier copy is dropped
+  followLost = false;
+}
+
+/** Refusals a second try can't change. */
+const refused = (e: unknown) => e instanceof NewerDocumentError || e instanceof StaleDocumentError || e instanceof MissingDocumentError;
 
 async function saveNow(): Promise<void> {
   clearTimeout(saveTimer);
@@ -97,21 +138,128 @@ async function saveNow(): Promise<void> {
   const s = get();
   if (!stored(s.docId)) return;
   const id = s.docId;
-  const seq = ++saveSeq;
-  const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc };
+  const seq = ++saveSeq, at = opened, by = session, readAt = baseAt;
+  const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc, rev: base };
+  const texts = textsOf(s.doc), prior = savedText;
   try {
-    try { await putDoc(rec); } catch (e) {
-      if (e instanceof NewerDocumentError || seq !== saveSeq) throw e; // a newer save has started and carries newer content: no retry
+    let rev: number;
+    try { rev = await putDoc(rec, { session: by, readAt }); } catch (e) {
+      if (refused(e) || seq !== saveSeq) throw e; // or a newer save has started and carries newer content: no retry
       forgetDb(); // the connection may have been closed under us: open a fresh one and try once more
-      await putDoc(rec);
+      rev = await putDoc(rec, { session: by, readAt });
     }
+    if (opened === at) written = rev;
     if (failing === id) failing = null;
+    if (seq === saveSeq && get().docId === id) savedText = texts;
     if (seq === saveSeq && get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
   } catch (e) {
-    if (seq !== saveSeq || get().docId !== id) return; // superseded, or its document is closed
+    if (get().docId !== id) { // closed (Home), or another document opened, while it was written
+      if (e instanceof StaleDocumentError) notKept(lostText(texts, prior)); // nothing shows it now, so say so here
+      return;
+    }
+    if (seq !== saveSeq || opened !== at) return; // superseded, or the open copy isn't the one it was made from
+    if (e instanceof MissingDocumentError) { leaveDeleted(); return; } // never written back
+    if (e instanceof StaleDocumentError) { void follow(id, true); return; } // the other tab's version wins
     useEditor.setState({ saving: 'unsaved' });
     if (failing !== id) { failing = id; toast(e instanceof NewerDocumentError ? SAVE_NEWER : SAVE_FAILED); }
   }
+}
+
+/**
+ * Read the open document again because another tab saved it (`lost`: this tab's last change was refused for it),
+ * and show that version in place. Nothing happens if this tab already has what storage holds.
+ */
+async function follow(id: string, lost: boolean): Promise<void> {
+  followLost ||= lost;
+  const n = ++followSeq;
+  let rec: DocRecord | undefined;
+  try {
+    await loadUploadedFonts(); // a hand another tab added is registered before the document is read, so it is kept
+    rec = await getDoc(id);
+  } catch {
+    if (n === followSeq && followLost && get().docId === id) useEditor.setState({ saving: 'unsaved' });
+    return; // it can't be read now; the next save is still checked
+  }
+  if (n !== followSeq || get().docId !== id) return; // a later look is on its way, or the document was closed
+  if (!rec) { leaveDeleted(); return; }
+  const read = (rec.rev ?? 0) === base && (base > 0 || rec.updatedAt === baseAt); // still the copy this tab read
+  if (rec.rev === written || read) { // this tab has it already
+    if (followLost) { followLost = false; saveSoon(); }
+    return;
+  }
+  const lostNow = followLost || savePending; // a change typed while it was read is lost too
+  followLost = false;
+  readAgain(rec, lostNow);
+}
+
+/** Show the stored version of the open document in place: the stage, Write view and selection stay; undo starts again. */
+function readAgain(rec: DocRecord, lost: boolean): void {
+  const s = get();
+  const mine = lost ? lostText(textsOf(s.doc), savedText) : '';
+  clearTimeout(saveTimer); saveTimer = undefined; savePending = false; saveSeq++; // nothing of the earlier copy is written
+  cancelLayout();
+  dismissMessages(); // a message's Undo was for the earlier copy
+  const S = cleanSettings(rec.settings, false);
+  const doc = cleanDoc(rec.doc) ?? emptyDoc();
+  history.clear(); historyTick++;
+  failing = null;
+  adopt(rec, doc);
+  clearMeasureCache();
+  use(S, doc);
+  const keep = s.selectedId !== null && doc.boxes.some(b => b.id === s.selectedId);
+  useEditor.setState({
+    title: rec.title, S, doc, version: s.version + 1, layoutTick: s.layoutTick + 1,
+    selectedId: keep ? s.selectedId : longestBox(doc)?.id ?? null, scope: keep ? s.scope : 'all',
+    saving: 'saved', caret: null, ...historyFlags(),
+  });
+  if (lost) notKept(mine); else toast(FOLLOWED);
+}
+
+/** This tab's last change wasn't kept (another tab saved first): say so, with Copy for the words it lost. */
+function notKept(mine: string): void {
+  toast(NOT_KEPT, mine ? { label: COPY_LOST, fn: () => copyText(mine) } : undefined);
+}
+
+function copyText(text: string): void {
+  Promise.resolve().then(() => navigator.clipboard.writeText(text)).then(() => toast(COPIED), () => toast(COPY_FAILED));
+}
+
+/** The open document was deleted in another tab: write nothing (that would bring it back), go Home and say so. */
+function leaveDeleted(): void {
+  clearTimeout(saveTimer); saveTimer = undefined; savePending = false; saveSeq++;
+  void closeDocument();
+  navigate({ name: 'home' });
+  toast(DELETED_ELSEWHERE);
+}
+
+/**
+ * Follow other tabs' saves, renames and deletes of the open document. With nothing waiting to be saved, this tab
+ * reads their version and shows it in place. With a change waiting, it saves now, and the save's check decides: it
+ * is refused if their write came first, and this tab then shows their version and says its change wasn't kept.
+ * A message can be missed (a tab that slept, or whose channel the browser closed), so a page shown again looks at
+ * storage too, before its first edit; the check on every save is the guarantee. Returns the remover.
+ */
+export function installDocFollow(): () => void {
+  const check = () => {
+    const id = get().docId;
+    if (!stored(id)) return;
+    if (savePending) void saveNow();
+    else void follow(id, false);
+  };
+  const off = onDocsChanged(c => {
+    const id = get().docId;
+    if (!stored(id) || c.id !== id) return;
+    if (c.type === 'deleted') leaveDeleted();
+    else if (c.type === 'saved' && !(c.by !== undefined && c.by === session)) check();
+  });
+  const onShow = () => { if (document.visibilityState === 'visible') check(); };
+  document.addEventListener('visibilitychange', onShow);
+  window.addEventListener('pageshow', onShow); // (also back from the back-forward cache)
+  return () => {
+    off();
+    document.removeEventListener('visibilitychange', onShow);
+    window.removeEventListener('pageshow', onShow);
+  };
 }
 
 function saveSoon(): void {
@@ -141,12 +289,12 @@ export function flushSave(): Promise<void> {
 export function openDocument(rec: DocRecord): void {
   if (savePending) void saveNow(); // don't lose the last edits of the document being left
   cancelLayout();
-  sonnerToast.dismiss(); // a message's Undo belongs to the document it was shown in
+  dismissMessages(); // a message's Undo belongs to the document it was shown in
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
   history.clear(); historyTick++;
   failing = null;
-  createdAt = rec.createdAt;
+  adopt(rec, doc);
   clearMeasureCache();
   use(S, doc);
   const s = get();
@@ -169,9 +317,10 @@ export function closeDocument(): Promise<void> {
   if (s.docId === null || s.docId === MEMORY_ID) return Promise.resolve();
   const saved = flushSave(); // takes what to write now, before the state below changes
   cancelLayout();
-  sonnerToast.dismiss();
+  dismissMessages();
   history.clear(); historyTick++;
   failing = null;
+  followSeq++; // a look at storage for it is dropped
   useEditor.setState({
     docId: null, title: '', version: s.version + 1, selectedId: null, scope: 'all', saving: 'saved',
     importOpen: false, importFile: null, scrollToPage: null, caret: null,
@@ -241,11 +390,11 @@ function restore(snap: string): void {
 
 export function undo(): void {
   const snap = history.undo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); }
+  if (snap !== null) { historyTick++; restore(snap); takeDownUndoMessages(); }
 }
 export function redo(): void {
   const snap = history.redo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); }
+  if (snap !== null) { historyTick++; restore(snap); takeDownUndoMessages(); }
 }
 
 export function renameDocument(title: string): void {
@@ -253,19 +402,39 @@ export function renameDocument(title: string): void {
   update(s => { s.title = t; }, { history: 'rename', layout: false });
 }
 
-/** A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. */
+const messages = new Set<string>(); // the messages said since they were last taken down (some may have gone already)
+const undoMessages = new Set<string>(); // the messages showing an Undo, so undoing or redoing can take them down
+
+/**
+ * Take down every message, one by one. Never with sonner's dismiss-all: a message said again right after that (its
+ * id is its text) is merged into the one going away, and doesn't show. A dismissal by id is cancelled by saying the
+ * same thing again, so that message stays up, with its new action.
+ */
+function dismissMessages(): void {
+  for (const id of messages) sonnerToast.dismiss(id);
+  messages.clear(); undoMessages.clear();
+}
+
+const takeDownUndoMessages = (): void => { for (const id of undoMessages) sonnerToast.dismiss(id); undoMessages.clear(); };
+
+/**
+ * A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. The text
+ * is its id, so saying the same thing again replaces the message showing instead of stacking a copy.
+ */
 export function toast(msg: string, action?: ToastAction, o: { duration?: number } = {}): void {
-  if (!action && o.duration === undefined) { sonnerToast(msg, undefined); return; }
-  sonnerToast(msg, {
-    ...(action && { action: { label: action.label, onClick: action.fn } }),
-    ...(o.duration !== undefined && { duration: o.duration }),
+  messages.add(msg);
+  if (action?.label === 'Undo') undoMessages.add(msg); else undoMessages.delete(msg);
+  sonnerToast(msg, { // (both always given: said again while it shows, the message is updated in place)
+    id: msg,
+    action: action && { label: action.label, onClick: action.fn },
+    duration: o.duration,
   });
 }
 
 /** A message's action that only runs while the document it was made in is still open. */
 export function docAction(label: string, fn: () => void): ToastAction {
-  const id = get().docId;
-  return { label, fn: () => { if (get().docId === id) fn(); } };
+  const id = get().docId, at = opened; // (not once another tab's version has been read in its place)
+  return { label, fn: () => { if (get().docId === id && opened === at) fn(); } };
 }
 
 // Undo for whole-document changes: a snapshot, and an action that puts it back.

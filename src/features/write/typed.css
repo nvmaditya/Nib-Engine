@@ -2,14 +2,26 @@
    and its editor at the page's own scale, one line of text to a ruled line (--lh, set inline). Unlayered,
    like the editor's own styles, which these adjust. */
 
+/* The page is at least A4 (its min-height, set inline) and grows to hold its parts. They share its one grid cell,
+   each placed at its spot on the page by its margins, so a part whose editor holds more lines than the page has
+   room for (frozen while it has the focus, plan M2 Design decision 1) makes the page longer instead of spilling
+   out of it, with a little paper left under it. Once the editor is left, the lines go on to the next page and the
+   page is A4 again: a part ends at least 29 page units above the bottom (its last line is at most 46 units up),
+   which is more than its 8 px margin on a page 288 px wide or wider. */
 .typed-page {
+  display: grid;
+  grid-template: auto / minmax(0, 1fr);
   border-radius: 2px;
 }
 .typed-page.dragging {
   z-index: 10;
 }
 .typed-part {
-  position: absolute;
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: start;
+  position: relative;
+  margin-bottom: 8px;
   border: 1.5px solid color-mix(in srgb, var(--bc) 50%, transparent);
   border-radius: 3px;
 }

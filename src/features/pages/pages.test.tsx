@@ -7,6 +7,7 @@ import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import type { Seg } from '@/engine/types';
 import { StageHost } from '@/features/doc/StageHost';
 import { layoutFor } from '@/features/doc/model';
+import { select } from '@/features/doc/actions';
 import { flushSave, update } from '@/store/editor';
 import { box, docOf, get, lastToast, layoutOf, lines, open, words } from '@/test/docs';
 import { PageView, type PageLayout } from './PageView';
@@ -120,10 +121,24 @@ test('the tag’s menu shows while writing, not in Style, and Export shows no fr
   expect(inkCanvases().length).toBeGreaterThan(0);
 });
 
+test('block outlines are drawn under the writing, so a selected block never hides the first letters of its lines', () => {
+  open(sampleDoc(cleanSettings(null, false)));
+  select('b1');
+  for (const mode of ['write', 'style'] as const) {
+    const { unmount } = pages(mode);
+    const frames = frame('b1:0').parentElement!, ink = document.querySelector('.ink-layer')!;
+    // Same layer, no z-index between them: the ink (multiplied onto what is under it) is painted last, over the outlines.
+    expect(frames.parentElement).toBe(ink.parentElement);
+    expect(frames.compareDocumentPosition(ink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(ink.nextElementSibling).toBeNull();
+    unmount();
+  }
+});
+
 test('a margin note’s frame turns with its writing', () => {
   open(docOf(box({ id: 'n', kind: 'note', name: 'Margin note', text: 'A note to self.' })));
   pages();
-  expect(frame('n:0').style.rotate).toMatch(/^-0\.0\d+rad$/);
+  expect(frame('n:0').style.getPropertyValue('--tilt')).toMatch(/^-0\.0\d+rad$/);
 });
 
 test('clicking a word asks for the caret there', () => {
@@ -176,10 +191,10 @@ test('Escape during a block drag puts the part back, keeps it selected, and drop
   const f = frame('w:0'), y0 = get().doc.boxes[0].y;
   fireEvent.pointerDown(f, { clientX: 300, clientY: 140, button: 0, pointerId: 1 });
   fireEvent.pointerMove(f, { clientX: 300, clientY: 290, pointerId: 1 });
-  expect(f.style.transform).not.toBe('');
+  expect(f.style.getPropertyValue('--shift')).not.toBe('');
   const ok = fireEvent.keyDown(f, { key: 'Escape' });
   expect(ok).toBe(false); // default prevented
-  expect(f.style.transform).toBe('');
+  expect(f.style.getPropertyValue('--shift')).toBe('');
   expect(drag.active).toBe(false);
   expect(get().selectedId).toBe('w'); // Escape ended the drag; it didn't also deselect
   fireEvent.pointerMove(f, { clientX: 300, clientY: 400, pointerId: 1 });

@@ -37,8 +37,10 @@ export function handNote(cfg: FontCfg): string {
   return TAG_WORDS.filter(([t]) => tags.includes(t)).map(([, w]) => w).join(', ');
 }
 
+/** `3 shapes per letter`. A built-in hand with one shape says nothing; an uploaded font always says, so the person knows it was counted. */
 export function shapesNote(cfg: FontCfg): string | null {
-  return (cfg.forms ?? 1) > 1 ? `${cfg.forms} shapes per letter` : null;
+  const n = cfg.forms ?? 1;
+  return n > 1 ? `${n} shapes per letter` : isMine(cfg) ? '1 shape per letter' : null;
 }
 
 export const PANGRAM = 'The quick brown fox jumps over the lazy dog';
@@ -64,11 +66,11 @@ function firstWords(words: string): string {
 
 /**
  * The words a hand is shown writing: the start of the document's first line of plain text (or of its
- * first line with any words, a heading say), reading the text and note blocks page by page, top to
+ * first line with any words, a heading say), reading the text blocks (not headers or margin notes) page by page, top to
  * bottom, then left to right. A document with nothing written gets the pangram.
  */
 export function docStart(doc: EngineDoc): string {
-  const blocks = doc.boxes.filter(b => b.kind !== 'header')
+  const blocks = doc.boxes.filter(b => b.kind === 'text')
     .sort((a: Box, b: Box) => a.page - b.page || a.y - b.y || a.x - b.x);
   let first = '';
   for (const b of blocks) {

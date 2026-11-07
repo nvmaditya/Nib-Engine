@@ -7,8 +7,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { loadUploadedFonts } from '@/features/style/fonts';
-import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, putDoc, type DocRecord } from '@/store/documents';
-import { SAVE_NEWER, closeDocument, toast, useEditor } from '@/store/editor';
+import { MissingDocumentError, NewerDocumentError, deleteDoc, duplicateDoc, listDocs, onDocsChanged, renameDoc, type DocRecord } from '@/store/documents';
+import { NOT_ON_DEVICE, SAVE_NEWER, closeDocument, toast, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { createAndOpen, importIntoNewDoc, openImportPicker } from './actions';
 
@@ -34,16 +34,44 @@ export function HomePage() {
   const memory = useEditor(s => s.docId === MEMORY_ID);
   const memTitle = useEditor(s => s.title);
   const memDoc = useEditor(s => s.doc);
-  // Reading a document cleans it, which drops a hand this page doesn't know, and a rename or duplicate
-  // would write that loss. Another tab may have added one since this page started, so register it first.
+  // Reading a document cleans it, which drops a hand this page doesn't know, and a duplicate would write
+  // that loss. Another tab may have added one since this page started, so register it first.
+  const reads = useRef(0);
   const reload = useCallback(async () => {
+    const n = ++reads.current; // only the latest read is shown
     await loadUploadedFonts();
-    try { setDocs(await listDocs()); } catch { setDocs('unreadable'); }
+    let next: DocRecord[] | 'unreadable';
+    try { next = await listDocs(); } catch { next = 'unreadable'; }
+    if (n === reads.current) setDocs(next);
   }, []);
   useEffect(() => {
     if (memory) return;
     // Leave the document (its last edit is written first), so opening it again reads what Home changed.
     void closeDocument().then(reload);
+  }, [reload, memory]);
+  // Other tabs add, rename, duplicate, save and delete documents: the list follows them. A tab where someone is
+  // typing saves every few hundred ms, so it is read again at most once a second (the first change at once, the
+  // rest together a second later), and not while Home is hidden: shown again, it reads what it missed.
+  useEffect(() => {
+    if (memory) return;
+    let timer: ReturnType<typeof setTimeout> | undefined, again = false, missed = false;
+    const read = () => {
+      void reload();
+      timer = setTimeout(() => { timer = undefined; if (again) { again = false; read(); } }, 1000);
+    };
+    const heard = () => {
+      if (document.visibilityState === 'hidden') missed = true;
+      else if (timer !== undefined) again = true;
+      else read();
+    };
+    const shown = () => {
+      if (document.visibilityState !== 'visible' || !missed) return;
+      missed = false;
+      heard();
+    };
+    const off = onDocsChanged(heard);
+    document.addEventListener('visibilitychange', shown);
+    return () => { off(); clearTimeout(timer); document.removeEventListener('visibilitychange', shown); };
   }, [reload, memory]);
   const shown = memory
     ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: {} as DocRecord['settings'], doc: memDoc }]
@@ -69,14 +97,16 @@ export function HomePage() {
 
   const open = (d: DocRecord) => navigate({ name: 'doc', id: d.id, stage: 'write' });
   const change = async (fn: () => Promise<unknown>) => {
-    try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : FAILED); }
+    try { await fn(); } catch (e) {
+      toast(e instanceof NewerDocumentError ? SAVE_NEWER : e instanceof MissingDocumentError ? NOT_ON_DEVICE : FAILED);
+    }
     await reload();
   };
   const doRename = async () => {
     if (!renaming) return;
     const d = renaming, title = name.trim() || 'Untitled';
     setRenaming(null);
-    await change(() => putDoc({ ...d, title, updatedAt: Date.now() }));
+    await change(() => renameDoc(d.id, title)); // only the name, on the stored copy as it is now
   };
   const doDuplicate = (d: DocRecord) => change(() => loadUploadedFonts().then(() => duplicateDoc(d.id)));
   const doDelete = async () => {

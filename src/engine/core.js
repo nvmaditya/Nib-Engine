@@ -120,12 +120,30 @@ function makeEngine(font, id) {
     if (a === undefined) { const g = font.glyphs.get(gi); a = ((g && g.advanceWidth) || 0) / upm; advCache.set(gi, a); }
     return a;
   };
+  const bCache = new Map();
+  const bounds = g => { // outline box in em units, control points included
+    let b = bCache.get(g);
+    if (!b) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      const pt = (x, y) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; };
+      for (const c of cmds(g)) { if (c.x !== undefined) pt(c.x, c.y); if (c.x1 !== undefined) pt(c.x1, c.y1); if (c.x2 !== undefined) pt(c.x2, c.y2); }
+      b = x0 <= x1 ? [x0, y0, x1, y1] : [0, 0, 0, 0]; bCache.set(g, b);
+    }
+    return b;
+  };
+  // An alternate drawn inside a frame or circle (a stylistic set's squared or circled letters: W -> a boxed W)
+  // is both much taller than its letter (over 1.4 times) and much wider (over 1.3 times, in outline box and
+  // advance), and is not a way to write it. A script font's tall flourish that is no wider is kept.
+  const enclosed = (a, base) => {
+    const [x0, y0, x1, y1] = bounds(a), [bx0, b0, bx1, b1] = bounds(base);
+    return y1 - y0 > (b1 - b0) * 1.4 && x1 - x0 > (bx1 - bx0) * 1.3 && adv(a) > adv(base) * 1.3;
+  };
   const forms = gi => {
     let f = formsCache.get(gi);
     if (!f) {
       const base = adv(gi); f = [gi];
       const s = alts.get(gi);
-      if (s) for (const a of [...s].sort((x, y) => x - y)) { const aa = adv(a); if (a !== gi && cmds(a).length && aa > base * 0.6 && aa < base * 1.6) f.push(a); }
+      if (s) for (const a of [...s].sort((x, y) => x - y)) { const aa = adv(a); if (a !== gi && cmds(a).length && aa > base * 0.6 && aa < base * 1.6 && !enclosed(a, gi)) f.push(a); }
       formsCache.set(gi, f);
     }
     return f;
@@ -140,17 +158,6 @@ function makeEngine(font, id) {
   let letterAlts = 0;
   for (const ch of 'abcdefghijklmnopqrstuvwxyz') { const g = font.charToGlyphIndex(ch); if (g) letterAlts += forms(g).length - 1; }
   const sp = font.charToGlyphIndex(' ');
-  const bCache = new Map();
-  const bounds = g => { // outline box in em units, control points included
-    let b = bCache.get(g);
-    if (!b) {
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      const pt = (x, y) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; };
-      for (const c of cmds(g)) { if (c.x !== undefined) pt(c.x, c.y); if (c.x1 !== undefined) pt(c.x1, c.y1); if (c.x2 !== undefined) pt(c.x2, c.y2); }
-      b = x0 <= x1 ? [x0, y0, x1, y1] : [0, 0, 0, 0]; bCache.set(g, b);
-    }
-    return b;
-  };
   const eng = { id, gi, forms, adv, avgAdv, cmds, bounds, letterAlts, spaceAdv: (sp ? adv(sp) : 0) || 0.26 };
   eng.ns = nativeStroke(eng);
   return eng;

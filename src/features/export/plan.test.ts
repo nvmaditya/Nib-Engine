@@ -20,6 +20,8 @@ test('the file name: what was typed, else the title, made safe to save', () => {
   expect(exportBase('my/notes.pdf', 'X')).toBe('my notes');
   expect(exportBase('  ', 'a:b')).toBe('a b');
   expect(exportBase('', '')).toBe('Untitled');
+  expect(exportBase('***???', 'QA Ten')).toBe('QA Ten'); // a name that is only symbols is no name: the title stands in
+  expect(exportBase('***???', '<>|')).toBe('Untitled'); // and when the title is no name either
   expect(exportBase('', 'Café ☕ 水の循環')).toBe('Café ☕ 水の循環');
 });
 test('names', () => {
