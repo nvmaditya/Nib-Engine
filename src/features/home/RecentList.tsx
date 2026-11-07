@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useRef, useState, type RefObject } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { navigate } from '@/app/route';
 import { Button } from '@/components/ui/button';
@@ -16,8 +16,9 @@ import { RECENT_PX, forgetThumb } from './thumbs';
 
 const FAILED = 'That didn’t work. Try again.';
 
-const Row = memo(function Row({ d, readOnly, onRename, onDuplicate, onDelete }: {
-  d: DocRecord; readOnly: boolean; onRename(d: DocRecord): void; onDuplicate(d: DocRecord): void; onDelete(d: DocRecord): void;
+const Row = memo(function Row({ d, readOnly, more, onRename, onDuplicate, onDelete }: {
+  d: DocRecord; readOnly: boolean; more(id: string, el: HTMLButtonElement | null): void;
+  onRename(d: DocRecord): void; onDuplicate(d: DocRecord): void; onDelete(d: DocRecord): void;
 }) {
   const saved = useStylePrefs(s => s.looks);
   const [pages, setPages] = useState<number | null>(null);
@@ -32,7 +33,7 @@ const Row = memo(function Row({ d, readOnly, onRename, onDuplicate, onDelete }: 
       </button>
       {!readOnly && <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label={`More for ${d.title}`}><MoreHorizontal /></Button>
+          <Button ref={el => { more(d.id, el); }} variant="ghost" size="icon" aria-label={`More for ${d.title}`}><MoreHorizontal /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => onRename(d)}>Rename</DropdownMenuItem>
@@ -44,15 +45,28 @@ const Row = memo(function Row({ d, readOnly, onRename, onDuplicate, onDelete }: 
   );
 });
 
-export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; readOnly: boolean; onChange(): Promise<void> }) {
+/** `heading`: the list's heading, where the focus goes when a Delete leaves no row behind. */
+export function RecentList({ docs, readOnly, heading, onChange }: {
+  docs: DocRecord[]; readOnly: boolean; heading?: RefObject<HTMLElement | null>; onChange(): Promise<void>;
+}) {
   const [renaming, setRenaming] = useState<DocRecord | null>(null);
   const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<DocRecord | null>(null);
+  // The dialogs open from a menu that is gone by the time they close, so they give the focus back here: to the row's
+  // More button (the row a Delete removed: the next row's, or the one before's, or the heading when none is left).
+  const moreButtons = useRef(new Map<string, HTMLButtonElement>());
+  const more = useCallback((id: string, el: HTMLButtonElement | null) => { if (el) moreButtons.current.set(id, el); else moreButtons.current.delete(id); }, []);
+  const back = useRef<string | null>(null);
+  const focusBack = (e: Event) => {
+    e.preventDefault();
+    (back.current === null ? heading?.current : moreButtons.current.get(back.current))?.focus();
+  };
   const change = useCallback(async (fn: () => Promise<unknown>) => {
     try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : e instanceof MissingDocumentError ? NOT_ON_DEVICE : FAILED); }
     await onChange();
   }, [onChange]);
-  const startRename = useCallback((d: DocRecord) => { setName(d.title); setRenaming(d); }, []);
+  const startRename = useCallback((d: DocRecord) => { back.current = d.id; setName(d.title); setRenaming(d); }, []);
+  const startDelete = useCallback((d: DocRecord) => { back.current = d.id; setDeleting(d); }, []);
   const doRename = async () => {
     if (!renaming) return;
     const d = renaming, title = name.trim() || 'Untitled';
@@ -62,7 +76,8 @@ export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; re
   const doDuplicate = useCallback((d: DocRecord) => change(() => loadUploadedFonts().then(() => duplicateDoc(d.id))), [change]);
   const doDelete = async () => {
     if (!deleting) return;
-    const d = deleting;
+    const d = deleting, i = docs.findIndex(x => x.id === d.id);
+    back.current = (docs[i + 1] ?? docs[i - 1])?.id ?? null;
     setDeleting(null);
     await change(async () => { await deleteDoc(d.id); await forgetThumb('doc:' + d.id); });
   };
@@ -71,13 +86,13 @@ export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; re
     <>
       <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
         {docs.map(d => (
-          <Row key={d.id} d={d} readOnly={readOnly}
-            onRename={startRename} onDuplicate={doDuplicate} onDelete={setDeleting} />
+          <Row key={d.id} d={d} readOnly={readOnly} more={more}
+            onRename={startRename} onDuplicate={doDuplicate} onDelete={startDelete} />
         ))}
       </ul>
 
       <Dialog open={!!renaming} onOpenChange={o => { if (!o) setRenaming(null); }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={focusBack}>
           <form onSubmit={e => { e.preventDefault(); void doRename(); }} className="contents">
             <DialogHeader><DialogTitle>Rename document</DialogTitle></DialogHeader>
             <Input aria-label="Document name" value={name} onChange={e => setName(e.target.value)} autoFocus />
@@ -90,7 +105,7 @@ export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; re
       </Dialog>
 
       <AlertDialog open={!!deleting} onOpenChange={o => { if (!o) setDeleting(null); }}>
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={focusBack}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{deleting?.title}”? This can’t be undone.</AlertDialogTitle>
             <AlertDialogDescription className="sr-only">The document is removed from this device.</AlertDialogDescription>

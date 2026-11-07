@@ -25,6 +25,7 @@ export function HomePage() {
   // Reading a document cleans it, which drops a hand this page doesn't know, and a duplicate would write
   // that loss. Another tab may have added one since this page started, so register it first.
   const reads = useRef(0);
+  const recentHeading = useRef<HTMLHeadingElement>(null);
   const reload = useCallback(async () => {
     const n = ++reads.current; // only the latest read is shown
     await loadUploadedFonts();
@@ -106,7 +107,7 @@ export function HomePage() {
         <TemplateGrid />
 
         <section aria-labelledby="recent-h">
-          <h2 id="recent-h" className="mb-3 text-base font-semibold">Recent</h2>
+          <h2 id="recent-h" ref={recentHeading} tabIndex={-1} className="mb-3 rounded-sm text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/50">Recent</h2>
           {shown === null ? null : shown === 'unreadable' ? (
             <p className="rounded-xl border border-line bg-surface p-6 text-muted">Nib can’t read your documents on this device right now.</p>
           ) : shown.length === 0 ? (
@@ -115,7 +116,7 @@ export function HomePage() {
               <Button onClick={() => { void openTemplate('blank'); }}>New document</Button>
             </div>
           ) : (
-            <RecentList docs={shown} readOnly={memory} onChange={reload} />
+            <RecentList docs={shown} readOnly={memory} heading={recentHeading} onChange={reload} />
           )}
         </section>
 

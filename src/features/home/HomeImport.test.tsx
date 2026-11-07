@@ -1,6 +1,6 @@
 // Import from Home: a file dropped anywhere, or chosen with the hero, opens the Import dialog; the document is
 // made only on Write it out. Then Home around it: its layout, its headings, and the focus after Rename and Delete.
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { closeImport } from '@/features/doc/actions';
 import { createDoc } from '@/store/documents';
@@ -101,4 +101,36 @@ test('Home’s two headings look the same: the same size, weight and colour', as
   const look = (h: HTMLElement) => [...h.classList].filter(c => /^(text|font)-/.test(c)).sort();
   const [tpl, recent] = screen.getAllByRole('heading', { level: 2 });
   expect(look(recent)).toEqual(look(tpl)); expect(look(tpl)).toEqual(['font-semibold', 'text-base']);
+});
+
+// When Rename or Delete closes, the focus goes back to the list, never to the page itself.
+const doc = (id: string, title: string) => ({ id, title, createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } });
+const moreFor = (title: string) => screen.getByRole('button', { name: `More for ${title}` });
+test.each([
+  ['Enter, after a new name', async () => { const f = screen.getByRole('textbox', { name: 'Document name' }); await userEvent.clear(f); await userEvent.type(f, 'Essay{Enter}'); }, 'Essay'],
+  ['Escape', () => userEvent.keyboard('{Escape}'), 'A'],
+  ['Cancel', () => userEvent.click(screen.getByRole('button', { name: 'Cancel' })), 'A'],
+] as const)('closing Rename with %s gives the focus back to the row’s More button', async (_how, close, title) => {
+  render(<HomePage />); await screen.findByText('A'); await menu('A', 'Rename'); await screen.findByRole('dialog', { name: 'Rename document' });
+  await close();
+  await waitFor(() => expect(moreFor(title)).toHaveFocus());
+});
+test.each([
+  ['Cancel', 'B', 'B'],
+  ['Escape', 'B', 'B'],
+  ['Delete', 'B', 'C'], // the next row's
+  ['Delete', 'C', 'B'], // the last row: the one before's
+] as const)('closing Delete with %s on %s puts the focus on More for %s', async (how, title, target) => {
+  mem.docs = [doc('a', 'A'), doc('b', 'B'), doc('c', 'C')];
+  render(<HomePage />); await screen.findByText('C'); await menu(title, 'Delete'); const dlg = await screen.findByRole('alertdialog');
+  if (how === 'Escape') await userEvent.keyboard('{Escape}'); else await userEvent.click(within(dlg).getByRole('button', { name: how }));
+  await waitFor(() => expect(moreFor(target)).toHaveFocus());
+  if (how === 'Delete') await waitFor(() => expect(screen.queryByText(title)).toBeNull());
+  expect(moreFor(target)).toHaveFocus(); // (still, once the list is read again)
+});
+test('deleting the only document puts the focus on the Recent heading, just above New document', async () => {
+  render(<HomePage />); await screen.findByText('A'); await menu('A', 'Delete');
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+  await screen.findByText('No documents yet.');
+  expect(screen.getByRole('heading', { name: 'Recent' })).toHaveFocus();
 });
