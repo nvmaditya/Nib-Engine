@@ -3,7 +3,7 @@
 // or style (select and drag).
 import { useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { GripVertical } from 'lucide-react';
-import { segId, segTilt } from '@/engine/core.js';
+import { hasOwnStyle, segId, segTilt } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
 import { blockColor, partLabel } from '@/features/doc/blocks';
 import { deleteBlock, editFrame, removePart, select } from '@/features/doc/actions';
@@ -26,7 +26,7 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
   // Where the pointer went down, and whether a click there may put the caret at a word: decided at
   // pointerdown, since a drag captures the pointer and its click then lands on the frame itself.
   const down = useRef<{ x: number; y: number; word: boolean } | null>(null);
-  const box = sg.box, write = mode === 'write';
+  const box = sg.box, write = mode === 'write', own = !write && hasOwnStyle(box);
   // Delete takes only this page's part of a block on several pages, else the block. A header's text
   // comes from its fields, so a header is deleted whole.
   const byPart = parts > 1 && box.kind !== 'header';
@@ -76,7 +76,7 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
     '--bc': blockColor(box), rotate: tilt ? `${tilt}rad` : undefined,
   } as CSSProperties;
   return (
-    <div ref={ref} className={cn('block-frame', selected && 'selected', sg.idx > 0 && 'cont', !box.text.trim() && 'empty')}
+    <div ref={ref} className={cn('block-frame', selected && 'selected', sg.idx > 0 && 'cont', own && 'own', !box.text.trim() && 'empty')}
       data-id={segId(sg)} tabIndex={0} role="group" aria-label={label ? `${box.name}, part ${label}` : box.name} style={style}
       onPointerDown={onPointerDown} onClick={onClick} onKeyDown={onKeyDown}
       onFocus={() => { if (!selected) select(box.id); }}>
@@ -88,6 +88,7 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
         </button>
         <span className="tag-name">{box.name}</span>
         {label && <><span aria-hidden className="tag-sep">·</span><span className="tag-part">{label}</span></>}
+        {own && <span className="tag-own">Own style</span>}
         {write && tagMenu && <span className="tag-menu">{tagMenu(sg)}</span>}
       </div>
     </div>

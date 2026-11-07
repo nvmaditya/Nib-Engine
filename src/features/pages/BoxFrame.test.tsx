@@ -17,8 +17,8 @@ beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); });
 // A header low on page 1, so its last line runs onto page 2.
 const header = () => box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: { name: 'A', class: 'B', date: 'C' } });
 const part = (id: string, idx: number) => layoutFor(get().S, get().doc).segs.find(s => s.box.id === id && s.idx === idx)!;
-const frame = (id: string, idx: number, mode: 'write' | 'style' = 'write') =>
-  render(<BoxFrame sg={part(id, idx)} s={1} gap={34} selected parts={2} mode={mode} />);
+const frame = (id: string, idx: number, mode: 'write' | 'style' = 'write', parts = 2) =>
+  render(<BoxFrame sg={part(id, idx)} s={1} gap={34} selected parts={parts} mode={mode} />);
 const press = async (key: string) => { screen.getByRole('group').focus(); await userEvent.keyboard(key); };
 
 test('the name tag holds the Move grip, the name and which part it is', () => {
@@ -75,9 +75,26 @@ test.each(['text', 'note'] as const)('clicking the writing of a %s block puts th
 
 test('in Style a part moves with the arrow keys but Delete does nothing', async () => {
   open(docOf(box({ id: 'm', name: 'Main text', text: lines(40) })));
-  frame('m', 0, 'style');
+  frame('m', 0, 'style', 1);
   await press('{ArrowDown}');
   expect(get().doc.boxes[0].y).toBe(144);
   await press('{Delete}');
   expect(get().doc.boxes).toHaveLength(1);
+});
+
+test('in Style, a block with its own style wears the badge', () => {
+  open(docOf(box({ id: 'm', name: 'Main text', text: 'x', style: { size: 40 } })));
+  frame('m', 0, 'style', 1);
+  expect(screen.getByText('Own style')).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'Main text' })).toHaveClass('own');
+});
+
+test('in Write, or without its own style, there is no badge', () => {
+  open(docOf(box({ id: 'm', name: 'Main text', text: 'x', style: { size: 40 } })));
+  const w = frame('m', 0, 'write', 1);
+  expect(screen.queryByText('Own style')).toBeNull();
+  w.unmount();
+  open(docOf(box({ id: 'm', name: 'Main text', text: 'x' })));
+  frame('m', 0, 'style', 1);
+  expect(screen.queryByText('Own style')).toBeNull();
 });

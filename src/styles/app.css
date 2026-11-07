@@ -275,7 +275,8 @@
   }
   .block-frame:hover .tag,
   .block-frame:focus-within .tag,
-  .block-frame.selected .tag {
+  .block-frame.selected .tag,
+  .block-frame.own .tag {
     opacity: 1;
     pointer-events: auto;
   }
@@ -304,6 +305,15 @@
   .block-frame .tag-part {
     font-weight: 500;
     opacity: 0.85;
+  }
+  .block-frame .tag-own {
+    margin-left: 2px;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
   }
   .block-frame .tag-menu {
     display: contents;
@@ -338,5 +348,21 @@
   }
   .pv-photo {
     background: #c9c6cb center / cover no-repeat;
+  }
+}
+
+/* While the handwriting picker is open on a wide screen (a 440 px panel, 16 px from the right), messages
+   are centred in the space beside it, so they don't cover its footer. */
+@media (width >= 53.75rem) {
+  body:has([data-hand-picker]) [data-sonner-toaster][data-x-position='center'] {
+    left: calc((100% - 456px) / 2);
+  }
+}
+
+/* On a phone the picker is a sheet along the bottom with its footer ("Use your own font") last, so
+   messages are lifted above that footer instead. */
+@media (width < 53.75rem) {
+  body:has([data-hand-picker]) [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: calc(var(--offset, 24px) + 72px + env(safe-area-inset-bottom));
   }
 }

@@ -1,7 +1,7 @@
 // Things people do to the document, ported from the handlers in Nib's earlier version, Longhand. The engine's boxes are called blocks in the interface.
 import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS, uid } from '@/engine/doc.js';
-import { boxSettings, clearMeasureCache, frameRange, geom, snapY } from '@/engine/core.js';
+import { boxSettings, clearMeasureCache, frameRange, geom, hasOwnStyle, snapY } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, HeaderKey, Seg, Settings } from '@/engine/types';
 import { newBlockName, nextColor } from '@/features/doc/blocks';
 import {
@@ -247,16 +247,21 @@ export function showField(boxId: string, key: 'subject' | 'roll', on: boolean): 
 export const scopeBox = (): Box | null => (get().scope === 'box' ? selectedBox() : null);
 export const view = (): Settings => { const b = scopeBox(); return b ? boxSettings(b) : get().S; };
 
-/** Change handwriting settings (for the selected block only when the panel is set to it). */
-export function setV(obj: Partial<Settings>, history: string = step('style')): void {
-  update(s => {
+/** The change a handwriting setting makes: to the selected block when the panel is set to it, else to the document. */
+export function applyStyle(obj: Partial<Settings>): (s: EditorState) => void {
+  return s => {
     const b = s.scope === 'box' ? s.doc.boxes.find(x => x.id === s.selectedId) : null;
     for (const [k, v] of Object.entries(obj)) {
       if (b && BOX_KEYS.includes(k)) b.style = { ...b.style, [k]: v };
       else (s.S as unknown as Record<string, unknown>)[k] = v;
     }
     clearMeasureCache();
-  }, { history });
+  };
+}
+
+/** Change handwriting settings (for the selected block only when the panel is set to it). */
+export function setV(obj: Partial<Settings>, history: string = step('style')): void {
+  update(applyStyle(obj), { history });
 }
 
 /** Change a setting every page shares (paper, effects, the download look). */
@@ -266,7 +271,7 @@ export function setS<K extends keyof Settings>(k: K, v: Settings[K], opts: { lay
 
 export function resetBoxStyle(): void {
   const b = selectedBox();
-  if (!b) return;
+  if (!b || !hasOwnStyle(b)) return;
   const id = b.id, before = { style: b.style, shuffle: b.shuffle };
   update(() => { b.style = {}; b.shuffle = 0; clearMeasureCache(); }, { history: step('match') });
   const undoMatch = docAction('Undo', () => update(s => {

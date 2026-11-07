@@ -1403,6 +1403,41 @@ export function fontsInUse() {
 }
 export const clearMeasureCache = () => mCache.clear();
 
+// Style's samples: the first line of markup, written by the engine itself with these settings
+// (hand, pen, ink, realism, mistakes and seed), heightPx tall. It lays out a one-block document,
+// keeps the first row and draws only that. Returns the canvas width, or null when there is no
+// text to write. The ink fills about 85% of heightPx, from its tallest to its lowest point. The document being drawn, its layout and the engine come back as they were.
+export function drawSample(canvas, settings, markup, heightPx) {
+  if (!markup.trim()) return null;
+  const keepS = S, keepDoc = doc, keepE = ENG, keepSegs = SEGS, keepPages = PAGES;
+  let tmp = null;
+  try {
+    use(settings, { pageCount:1, fileName:'', boxes:[] });
+    const top = geom().top;
+    use(settings, { pageCount:1, fileName:'', boxes:[{ id:'sample', page:0, x:PAD.l, y:top, w:4000, text:markup.split('\n')[0], style:{}, shuffle:0, frames:{}, kind:'text', name:'', color:0 }] });
+    const sg = computeLayout().segs[0], r = sg && sg.rows[0];
+    if (!r || r.kind !== 'text') return null;
+    const g = geom(), one = { ...sg, w:Math.ceil(r.w) + 12, rows:[r], bottom:r.ruleY + g.gap * 0.35 };
+    // segBounds pads for ascenders, descenders, tilt and drift, so the row is drawn large on a scratch canvas, its ink
+    // (the alpha channel) found, and just that ink fitted to 85% of heightPx, centred and with side margins.
+    tmp = document.createElement('canvas');
+    renderSegment(tmp, one, 4 * heightPx / segBounds(one).h);
+    const tw = tmp.width, th = tmp.height, tctx = tmp.getContext('2d'), px = tctx.getImageData(0, 0, tw, th).data;
+    let x0 = tw, x1 = -1, y0 = th, y1 = -1;
+    for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) if (px[(y * tw + x) * 4 + 3] > 12) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) { x0 = 0; x1 = tw - 1; y0 = 0; y1 = th - 1; } // nothing inked: fit the whole canvas
+    const sw = x1 - x0 + 1, sh = y1 - y0 + 1, f = 0.85 * heightPx / sh, side = heightPx * 0.075;
+    canvas.width = Math.max(1, Math.round(sw * f + 2 * side)); canvas.height = heightPx;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(tmp, x0, y0, sw, sh, side, (heightPx - sh * f) / 2, sw * f, sh * f);
+    return canvas.width;
+  } finally {
+    S = keepS; doc = keepDoc; ENG = keepE; SEGS = keepSegs; PAGES = keepPages;
+    if (tmp) tmp.width = tmp.height = 0; // let the large scratch canvas go now (Safari limits canvas memory)
+  }
+}
+
 export {
   S as settings, fontCfg, penCfg, inkColor, inkName, familyCss, fontStr, boxSettings, hasOwnStyle, withBox,
   computeLayout, renderSegment, segBounds, paintPaper, paperKey, composePage, frameShot, applyLook,

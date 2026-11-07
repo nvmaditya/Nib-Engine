@@ -45,3 +45,10 @@ export const lastToast = (): string | undefined => {
   const calls = vi.mocked(sonner).mock.calls;
   return calls.length ? (calls[calls.length - 1][0] as string) : undefined;
 };
+
+/** The action (its Undo, say) on the last message given to the mocked `sonner`: pressing it, as `onClick`. */
+export const lastToastAction = (): (() => void) | undefined => {
+  const calls = vi.mocked(sonner).mock.calls;
+  const a = calls.length ? calls[calls.length - 1][1]?.action : undefined;
+  return a && typeof a === 'object' && 'onClick' in a ? (a.onClick as () => void) : undefined;
+};

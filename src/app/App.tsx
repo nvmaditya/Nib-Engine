@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
+import { loadUploadedFonts } from '@/features/style/fonts';
+import { bootStyle, refreshStylePrefsOnShow } from '@/features/style/prefs';
 import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
 import { closeDocument, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
@@ -16,7 +18,10 @@ export function App() {
 
   useEffect(() => {
     let live = true;
-    void bootstrapDocuments().then(r => {
+    // Uploaded fonts are registered before any document is read, so no document loses its hand.
+    // The two run side by side because bootstrapDocuments never cleans a stored document (it only
+    // makes the first one). If it ever reads stored documents, it must wait for bootStyle first.
+    void Promise.all([bootstrapDocuments(), bootStyle()]).then(([r]) => {
       if (!live) return;
       if (!r.ok) {
         const S = cleanSettings(null, false);
@@ -30,6 +35,7 @@ export function App() {
   }, []);
 
   useEffect(() => installFlushOnHide(), []);
+  useEffect(() => refreshStylePrefsOnShow(), []);
 
   const wantId = route.name === 'doc' ? route.id : null;
   useEffect(() => {
@@ -38,7 +44,8 @@ export function App() {
     let live = true;
     // Going Home closes the open document first, so Home doesn't clear the message shown here.
     const goHome = () => { void closeDocument(); navigate({ name: 'home' }); };
-    void getDoc(wantId).then(rec => {
+    // Another tab may have added a hand since this page started: register it before the document is read.
+    void loadUploadedFonts().then(() => getDoc(wantId)).then(rec => {
       if (!live) return;
       if (rec) openDocument(rec);
       else { goHome(); toast('That document isn’t on this device.'); }
