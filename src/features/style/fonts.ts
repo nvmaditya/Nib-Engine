@@ -2,7 +2,7 @@ import { FONTS } from '@/engine/config.js';
 import { engineFor } from '@/engine/core.js';
 import type { FontCfg } from '@/engine/types';
 import { getDb } from '@/store/db';
-import { setPref } from '@/store/documents';
+import { getPref, setPref } from '@/store/documents';
 
 /** A font file kept on the device, in `prefs` under `font:<id>`. */
 export interface FontRecord { id: string; name: string; buf: ArrayBuffer; forms: number; addedAt: number }
@@ -59,16 +59,25 @@ export async function addFontFile(file: File): Promise<AddFontResult> {
   try { buf = await file.arrayBuffer(); } catch { return { ok: false, reason: 'unreadable' }; }
   const id = fontId(buf);
   const have = FONTS.find(f => f.id === id);
-  if (have) return { ok: true, id, name: have.name, forms: have.forms ?? 1, kept: true, existed: true };
+  if (have) {
+    const forms = have.forms ?? 1;
+    if (await getPref(FONT_KEY_PREFIX + id).catch(() => undefined)) return { ok: true, id, name: have.name, forms, kept: true, existed: true };
+    // A hand on this page only: the device couldn't keep it the first time. Try again, and say how that went, as for a new one.
+    const kept = await keep({ id, name: have.name, buf, forms, addedAt: Date.now() });
+    return { ok: true, id, name: have.name, forms, kept, existed: false };
+  }
   const probe: FontCfg = { id, name: fileName(file), family: 'Nib Upload ' + id, weight: 400, scale: 1, group: 'mine', local: true, buf };
   const eng = engineFor(probe) as { letterAlts: number } | null;
   if (!eng) return { ok: false, reason: 'unreadable' };
   const per = Math.round(eng.letterAlts / 26);
   const rec: FontRecord = { id, name: probe.name, buf, forms: per > 0 ? per + 1 : 1, addedAt: Date.now() };
   if (!registerFont(rec)) return { ok: false, reason: 'unreadable' };
-  let kept = true;
-  try { await setPref(FONT_KEY_PREFIX + id, rec); } catch { kept = false; }
-  return { ok: true, id, name: rec.name, forms: rec.forms, kept, existed: false };
+  return { ok: true, id, name: rec.name, forms: rec.forms, kept: await keep(rec), existed: false };
+}
+
+/** Keep a font on the device; false when storage refuses it. */
+async function keep(rec: FontRecord): Promise<boolean> {
+  try { await setPref(FONT_KEY_PREFIX + rec.id, rec); return true; } catch { return false; }
 }
 
 const RANGE = () => IDBKeyRange.bound(FONT_KEY_PREFIX, FONT_KEY_PREFIX + '￿');

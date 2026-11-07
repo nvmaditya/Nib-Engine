@@ -35,6 +35,18 @@ test('the extension is checked without regard to case', async () => { expect(awa
 test('a file the engine can’t read is refused and not kept', async () => { const n = FONTS.length; expect(await addFontFile(new File([new Uint8Array(64)], 'broken.ttf'))).toEqual({ ok: false, reason: 'unreadable' }); expect(FONTS.length).toBe(n); expect(await storedFontIds()).toEqual([]); });
 test('the same file twice is one font', async () => { const a = await addFontFile(fontFile('caveat', 'A.woff')) as { id: string }; expect(await addFontFile(fontFile('caveat', 'B.woff'))).toMatchObject({ ok: true, id: a.id, name: 'A', existed: true }); expect(FONTS.filter(f => f.group === 'mine')).toHaveLength(1); expect(await storedFontIds()).toEqual([a.id]); });
 test('a font that can’t be stored still works until the page is closed', async () => { vi.mocked(setPref).mockRejectedValueOnce(new Error('quota')); const r = await addFontFile(fontFile('caveat', 'A.woff')) as { id: string }; expect(r).toMatchObject({ ok: true, kept: false }); expect(fontReady(r.id)).toBe(true); expect(await storedFontIds()).toEqual([]); });
+test('adding again a font that couldn’t be kept tries to keep it again, and says how that went', async () => {
+  vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
+  const a = await addFontFile(fontFile('caveat', 'A.woff')) as { id: string };
+  expect(a).toMatchObject({ ok: true, kept: false });
+  vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
+  expect(await addFontFile(fontFile('caveat', 'B.woff'))).toMatchObject({ ok: true, id: a.id, name: 'A', kept: false, existed: false });
+  expect(await storedFontIds()).toEqual([]);
+  expect(await addFontFile(fontFile('caveat', 'B.woff'))).toMatchObject({ ok: true, id: a.id, name: 'A', forms: 3, kept: true, existed: false });
+  expect(await storedFontIds()).toEqual([a.id]);
+  expect(await addFontFile(fontFile('caveat', 'B.woff'))).toMatchObject({ ok: true, kept: true, existed: true });
+  expect(FONTS.filter(f => f.group === 'mine')).toHaveLength(1);
+});
 test('a hand without letter alternates has one shape per letter', async () => { expect(await addFontFile(fontFile('labelle', 'L.woff'))).toMatchObject({ forms: 1 }); expect(FONTS.at(-1)!.forms).toBeUndefined(); });
 test('an empty name becomes Your font and a long one is cut to 40 characters', async () => {
   expect(await addFontFile(fontFile('labelle', '.woff'))).toMatchObject({ name: 'Your font' });
