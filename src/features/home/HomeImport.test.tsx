@@ -1,6 +1,6 @@
 // Import from Home: a file dropped anywhere, or chosen with the hero, opens the Import dialog; the document is
 // made only on Write it out.
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { closeImport } from '@/features/doc/actions';
 import { createDoc } from '@/store/documents';
@@ -30,7 +30,7 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn(), get
 fontsLoad();
 const files = (f: File) => ({ dataTransfer: { files: [f], types: ['Files'] } });
 beforeEach(() => { mem.docs = [{ id: 'a1', title: 'A', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }]; location.hash = '#/'; vi.mocked(createDoc).mockClear(); });
-afterEach(() => { closeImport(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); closeImport(); vi.restoreAllMocks(); }); // (unmounted first: closing Import under it is an update outside act)
 
 test('a file dropped anywhere on Home opens Import with it, and nothing is made until Write it out', async () => {
   render(<HomePage />); await screen.findByText('A'); act(() => { fireEvent.drop(window, files(new File(['x'], 'Essay.txt'))); });

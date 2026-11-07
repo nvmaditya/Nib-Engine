@@ -1,6 +1,6 @@
 // The Import dialog: a file read and shown as it will come across, its options, and writing it out (into the
 // open document as one undo step, or from Home as a new document made only then). Full screen on phones.
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Editor } from '@tiptap/core';
 import { toast as sonner } from 'sonner';
@@ -59,7 +59,8 @@ beforeEach(async () => {
   await flushSave(); vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear(); vi.mocked(sonner.getToasts).mockReset().mockReturnValue([]); vi.mocked(createDoc).mockClear();
   vi.mocked(readDocument).mockReset().mockResolvedValue(ESSAY);
 });
-afterEach(() => { window.matchMedia = wideMatchMedia; width(1200); closeImport(); });
+// (unmounted first: closing it under a mounted dialog would update the dialog after the test, outside act)
+afterEach(() => { cleanup(); window.matchMedia = wideMatchMedia; width(1200); closeImport(); });
 afterAll(async () => { await flushSave(); delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth; vi.unstubAllGlobals(); });
 
 test('a chosen file is read and shown as it will come across', async () => {

@@ -2,8 +2,9 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { drawSample } from '@/engine/core.js';
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
+import { FONTS } from '@/engine/config.js';
+import { drawSample, loadFont } from '@/engine/core.js';
 import { cleanSettings } from '@/engine/doc.js';
 import { paperTint } from '@/features/style/HandSample';
 import { useStylePrefs } from '@/features/style/prefs';
@@ -15,6 +16,8 @@ vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}), getPref: vi
 vi.mock('@/engine/core.js', async orig => ({ ...(await orig<typeof import('@/engine/core.js')>()), drawSample: vi.fn(() => 120) }));
 
 fontsLoad();
+// Every hand's file arrives first: a card whose hand arrived after its test ended would draw again outside act.
+beforeAll(async () => { await Promise.all(FONTS.map(f => loadFont(f.id))); });
 const NOW = new Date(2026, 10, 7);
 let value: ImportOptionsValue;
 function Harness({ target, parts = 1 }: { target: ImportTarget; parts?: number }) {

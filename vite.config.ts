@@ -17,6 +17,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   build: { target: 'es2020', chunkSizeWarningLimit: 1500 },
-  test: { environment: 'jsdom', setupFiles: ['src/test/setup.ts'], globals: true,
+  // The default reporter, wherever the tests run: some runners pick a quieter one that hides what a passing test
+  // prints, and a test's output should stay clean (no act warnings, no console noise).
+  test: { environment: 'jsdom', setupFiles: ['src/test/setup.ts'], globals: true, reporters: ['default'],
     exclude: [...configDefaults.exclude, '.claude/**', '.superpowers/**', BROWSER_TESTS] },
 });

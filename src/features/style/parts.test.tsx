@@ -43,7 +43,7 @@ test('each arrow key on a slider is one step', async () => {
   screen.getByRole('slider', { name: 'Letter size' }).focus();
   await userEvent.keyboard('{ArrowRight}{ArrowRight}');
   expect(get().S.size).toBe(32);
-  undo();
+  act(() => undo());
   expect(get().S.size).toBe(31);
 });
 
@@ -59,7 +59,7 @@ test('a drag after a key press is a step of its own', async () => {
   cleanups.push(() => { for (const m of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) delete proto[m]; });
   fireEvent.pointerDown(thumb.closest('[data-slot="slider"]')!); // jsdom has no layout, so this lands on the minimum
   expect(get().S.size).toBe(18);
-  undo();
+  act(() => undo());
   expect(get().S.size).toBe(31);
 });
 
