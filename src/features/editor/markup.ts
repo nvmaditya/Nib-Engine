@@ -2,7 +2,9 @@
 // "Lossless": canonical markup (everything toMarkup writes) round-trips byte for byte, any markup
 // round-trips to markup that lays out the same, and any editor content round-trips with every
 // non-space character keeping its marks. The one exception: an underline that starts or ends inside
-// a word, on a line that also has bold, widens to the whole word.
+// a word, on a line that also has bold, widens to the whole word. Code spans and links (hand-typed
+// Milestone 1 markup only; the editor makes neither) read as their plain words and are written back
+// that way, so one glued to its neighbours becomes one piece with them (`see[t](u)s` → `seets`).
 import type { JSONContent } from '@tiptap/core';
 import { parseInline, parseLine, type InlinePiece } from '@/engine/core.js';
 
