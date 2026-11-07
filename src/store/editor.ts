@@ -74,8 +74,6 @@ use(init.S, init.doc);
 const get = useEditor.getState;
 const history = new History<string>(100);
 let createdAt = 0;
-/** Counts every change to the undo history (a step recorded, taken back, undone, redone or cleared). */
-let historyTick = 0;
 let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 const cancelLayout = () => { clearTimeout(layoutTimer); layoutTimer = undefined; };
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -219,7 +217,7 @@ function readAgain(rec: DocRecord, lost: boolean): void {
   dismissMessages(); // a message's Undo was for the earlier copy
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
-  history.clear(); historyTick++;
+  history.clear();
   failing = null;
   adopt(rec, doc);
   clearMeasureCache();
@@ -334,7 +332,7 @@ export function openDocument(rec: DocRecord): void {
   dismissMessages(); // a message's Undo belongs to the document it was shown in
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
-  history.clear(); historyTick++;
+  history.clear();
   failing = null;
   adopt(rec, doc);
   clearMeasureCache();
@@ -360,7 +358,7 @@ export function closeDocument(): Promise<void> {
   const saved = flushSave(); // takes what to write now, before the state below changes
   cancelLayout();
   dismissMessages();
-  history.clear(); historyTick++;
+  history.clear();
   failing = null;
   followSeq++; // a look at storage for it is dropped
   useEditor.setState({
@@ -403,7 +401,6 @@ export function gesture(kind: string): Gesture {
     end() {
       // A step that came to nothing (moved and moved back) leaves no step; Redo is as it was before it.
       if (start !== null && history.newest === key && sameState(stateSnapshot(), start) && history.retract()) {
-        historyTick++;
         useEditor.setState(historyFlags());
       }
       start = null;
@@ -415,7 +412,7 @@ export function gesture(kind: string): Gesture {
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.
 export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOptions = {}): void {
   const { save = true, layout = 'now', history: hist } = opts;
-  if (save && hist !== false) { history.record(stateSnapshot(), hist ?? 'edit:' + ++edits); historyTick++; }
+  if (save && hist !== false) { history.record(stateSnapshot(), hist ?? 'edit:' + ++edits); }
   if (fn) fn(get());
   const s = get();
   use(s.S, s.doc);
@@ -465,11 +462,11 @@ function restore(snap: string, key: string | false): void {
 
 export function undo(): void {
   const snap = history.undo(stateSnapshot());
-  if (snap !== null) { historyTick++; restore(snap, false); takeDownUndoMessages(); }
+  if (snap !== null) { restore(snap, false); takeDownUndoMessages(); }
 }
 export function redo(): void {
   const snap = history.redo(stateSnapshot());
-  if (snap !== null) { historyTick++; restore(snap, false); takeDownUndoMessages(); }
+  if (snap !== null) { restore(snap, false); takeDownUndoMessages(); }
 }
 
 export function renameDocument(title: string): void {
