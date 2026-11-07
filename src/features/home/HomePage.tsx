@@ -1,39 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileUp, MoreHorizontal } from 'lucide-react';
+import { FileUp } from 'lucide-react';
 import { MEMORY_ID, navigate } from '@/app/route';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { loadUploadedFonts } from '@/features/style/fonts';
-import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, putDoc, type DocRecord } from '@/store/documents';
-import { SAVE_NEWER, closeDocument, toast, useEditor } from '@/store/editor';
+import { listDocs, type DocRecord } from '@/store/documents';
+import { closeDocument, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { createAndOpen, importIntoNewDoc, openImportPicker } from './actions';
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const dayStart = (t: number) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
-
-export function relativeTime(t: number, now = Date.now()): string {
-  const diff = Math.round((dayStart(now) - dayStart(t)) / 86400000);
-  if (diff <= 0) return 'Edited today';
-  if (diff === 1) return 'Edited yesterday';
-  const d = new Date(t);
-  return `Edited ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-const FAILED = 'That didn’t work. Try again.';
+import { RecentList } from './RecentList';
 
 export function HomePage() {
   const [docs, setDocs] = useState<DocRecord[] | 'unreadable' | null>(null);
-  const [renaming, setRenaming] = useState<DocRecord | null>(null);
-  const [name, setName] = useState('');
-  const [deleting, setDeleting] = useState<DocRecord | null>(null);
   const [over, setOver] = useState(false);
   const memory = useEditor(s => s.docId === MEMORY_ID);
   const memTitle = useEditor(s => s.title);
   const memDoc = useEditor(s => s.doc);
+  const memS = useEditor(s => s.S);
   // Reading a document cleans it, which drops a hand this page doesn't know, and a rename or duplicate
   // would write that loss. Another tab may have added one since this page started, so register it first.
   const reload = useCallback(async () => {
@@ -46,7 +28,7 @@ export function HomePage() {
     void closeDocument().then(reload);
   }, [reload, memory]);
   const shown = memory
-    ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: {} as DocRecord['settings'], doc: memDoc }]
+    ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: memS, doc: memDoc }]
     : docs;
 
   // A file dropped anywhere on Home starts a new document with the import dialog open.
@@ -66,25 +48,6 @@ export function HomePage() {
     window.addEventListener('dragover', dover); window.addEventListener('drop', drop);
     return () => { window.removeEventListener('dragenter', enter); window.removeEventListener('dragleave', leave); window.removeEventListener('dragover', dover); window.removeEventListener('drop', drop); };
   }, []);
-
-  const open = (d: DocRecord) => navigate({ name: 'doc', id: d.id, stage: 'write' });
-  const change = async (fn: () => Promise<unknown>) => {
-    try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : FAILED); }
-    await reload();
-  };
-  const doRename = async () => {
-    if (!renaming) return;
-    const d = renaming, title = name.trim() || 'Untitled';
-    setRenaming(null);
-    await change(() => putDoc({ ...d, title, updatedAt: Date.now() }));
-  };
-  const doDuplicate = (d: DocRecord) => change(() => loadUploadedFonts().then(() => duplicateDoc(d.id)));
-  const doDelete = async () => {
-    if (!deleting) return;
-    const d = deleting;
-    setDeleting(null);
-    await change(() => deleteDoc(d.id));
-  };
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-bg">
@@ -110,61 +73,13 @@ export function HomePage() {
               <Button onClick={() => { void createAndOpen(); }}>New document</Button>
             </div>
           ) : (
-            <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-              {shown.map(d => (
-                <li key={d.id} className="flex items-center gap-2 pr-2 hover:bg-surface-2">
-                  <button type="button" onClick={() => open(d)} className="flex min-w-0 flex-1 items-center justify-between gap-4 px-4 py-3 text-left">
-                    <span className="truncate font-semibold">{d.title}</span>
-                    <span className="flex flex-none gap-2 text-sm text-muted">
-                      <span>{d.doc.pageCount === 1 ? '1 page' : `${d.doc.pageCount} pages`}</span>
-                      <span aria-hidden>·</span>
-                      <span>{relativeTime(d.updatedAt)}</span>
-                    </span>
-                  </button>
-                  {!memory && <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label={`More for ${d.title}`}><MoreHorizontal /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => { setName(d.title); setRenaming(d); }}>Rename</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => { void doDuplicate(d); }}>Duplicate</DropdownMenuItem>
-                      <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(d)}>Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>}
-                </li>
-              ))}
-            </ul>
+            <RecentList docs={shown} readOnly={memory} onChange={reload} />
           )}
         </section>
 
         <p className="text-sm text-muted">Everything is saved on this device. Nothing is uploaded.</p>
       </div>
 
-      <Dialog open={!!renaming} onOpenChange={o => { if (!o) setRenaming(null); }}>
-        <DialogContent>
-          <form onSubmit={e => { e.preventDefault(); void doRename(); }} className="contents">
-            <DialogHeader><DialogTitle>Rename document</DialogTitle></DialogHeader>
-            <Input aria-label="Document name" value={name} onChange={e => setName(e.target.value)} autoFocus />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setRenaming(null)}>Cancel</Button>
-              <Button type="submit">Rename</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!deleting} onOpenChange={o => { if (!o) setDeleting(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{deleting?.title}”? This can’t be undone.</AlertDialogTitle>
-            <AlertDialogDescription className="sr-only">The document is removed from this device.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { void doDelete(); }}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </main>
   );
 }
