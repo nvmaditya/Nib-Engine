@@ -6,7 +6,7 @@ import { parseHash } from '@/app/route';
 import type { ImportPlace } from '@/features/doc/build';
 import { STYLE_LOOKS } from '@/features/style/looks';
 import { createDoc, getDoc } from '@/store/documents';
-import { flushSave, openDocument, undo } from '@/store/editor';
+import { flushSave, openDocument, redo, undo } from '@/store/editor';
 import { box, docOf, fontsLoad, get, lastToast, lastToastAction, lines, open, rec } from '@/test/docs';
 import { importAsNewDocument, importIntoOpenDocument, type ImportRequest } from './apply';
 
@@ -56,6 +56,14 @@ test('…and when the import was already undone, it records nothing', () => {
   const undoIt = lastToastAction()!;
   undo(); expect([get().canUndo, get().canRedo]).toEqual([false, true]);
   act(() => undoIt()); expect([get().canUndo, get().canRedo, get().doc.boxes[0].text]).toEqual([false, true, 'old']);
+});
+
+test('…however its blocks were written: two imports, Ctrl+Z, then the second one’s Undo records nothing and keeps Redo', () => {
+  open(docOf(box({ id: 'm', text: 'old' }))); importIntoOpenDocument(req()); importIntoOpenDocument(req({}, 'second'));
+  const undoSecond = lastToastAction()!;
+  undo(); expect([get().canUndo, get().canRedo, get().doc.boxes.map(b => b.text)]).toEqual([true, true, ['# Essay\nHello']]);
+  act(() => undoSecond()); expect([get().canUndo, get().canRedo]).toEqual([true, true]);
+  redo(); expect(get().doc.boxes.map(b => b.text)).toEqual(['second']);
 });
 
 test('as a new document: opened on Write, named after the file, with its look and header, and nothing to undo', async () => {
