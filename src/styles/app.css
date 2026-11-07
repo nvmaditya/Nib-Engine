@@ -405,11 +405,22 @@
   }
 }
 
-/* On a phone, while the Style or Export sheet is open, its pinned footer (Download and Share) is at the
-   bottom of the screen, so messages (like "Saved …" after a download) are lifted above it. */
+/* While the first-visit tips show, messages rise above the card, so they never cover its Got it: along the bottom
+   below 860 px, and in the bottom left corner up to 1028 px, where a centred message still reaches it. Tips.tsx sets
+   --tips-room, the card's height and the gap below it. (Under a stage's sheet the card is put away, and the
+   sheets' rule below places the messages.) */
+@media (width < 64.25rem) {
+  body:has([data-tips]) [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: calc(var(--tips-room, 0px) + 0.75rem);
+  }
+}
+
+/* On a phone, while a stage's sheet (Style, Export, Outline) rests at its peek or about half, messages rise above it,
+   clear of its handle: StageSheet.tsx sets --sheet-room, the height it covers and a gap. At the top there is no room
+   above it but the top bar's, so they sit over its foot, lifted above Export's pinned footer (Download and Share). */
 @media (width < 53.75rem) {
   body:has([data-vaul-drawer]) [data-sonner-toaster][data-y-position='bottom'] {
-    bottom: calc(var(--offset, 24px) + 96px + env(safe-area-inset-bottom));
+    bottom: var(--sheet-room, calc(var(--offset, 24px) + 96px + env(safe-area-inset-bottom)));
   }
 }
 

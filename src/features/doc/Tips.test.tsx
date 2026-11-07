@@ -241,9 +241,9 @@ test('the card sits out of the way: along the bottom on phones, in the bottom le
 
 /* ---------- Below 860 px: the stage's sheet, and room at the foot of the pages ---------- */
 
-/** app.css's rules about the tips (`[data-tips]`), as a page's stylesheet: jsdom applies them to getComputedStyle. */
+/** app.css's rules about the tips (`[data-tips]`, not the messages'), as a page's stylesheet: jsdom applies them to getComputedStyle. */
 function tipsRules(): HTMLStyleElement {
-  const rules = appCss.match(/^[^{}\n]*\[data-tips\][^{}]*\{[^}]*\}/gm) ?? [];
+  const rules = (appCss.match(/^[^{}\n]*\[data-tips\][^{}]*\{[^}]*\}/gm) ?? []).filter(r => !r.includes('[data-sonner-toaster]'));
   expect(rules).toHaveLength(1);
   const style = document.createElement('style');
   style.textContent = rules.join('\n');
@@ -299,4 +299,12 @@ test('leaving the document takes the room away with the card', async () => {
     await goHome();
     expect(document.documentElement.style.getPropertyValue('--tips-room')).toBe('');
   } finally { Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height); }
+});
+
+test('while the card shows, a message rises above it and never covers Got it: below 860 px, and up to 1028 px, where a centred message still reaches the card', () => {
+  // (--tips-room is the card's height and the gap below it; a stage's sheet puts the card away, and its own rule,
+  // later in the file, places the messages then.)
+  expect(appCss).toMatch(/@media \(width < 64\.25rem\) \{\s*body:has\(\[data-tips\]\) \[data-sonner-toaster\]\[data-y-position='bottom'\] \{\s*bottom: calc\(var\(--tips-room, 0px\) \+ 0\.75rem\);\s*\}\s*\}/);
+  const at = (rule: string) => appCss.indexOf(rule);
+  expect(at('body:has([data-tips]) [data-sonner-toaster]')).toBeLessThan(at('body:has([data-vaul-drawer]) [data-sonner-toaster]'));
 });
