@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TemplateGrid } from './TemplateGrid';
 import { openTemplate, TEMPLATES } from './templates';
-import { thumbFor } from './thumbs';
+import { thumbFor, thumbSig } from './thumbs';
 
 vi.mock('./thumbs', async orig => ({
   ...(await orig<typeof import('./thumbs')>()),
@@ -20,6 +20,16 @@ test('Start something new: six templates, each with its own page drawn', async (
     ['tpl:blank', 'labelle', 'ruled', 360], ['tpl:assignment', 'labelle', 'ruled', 360], ['tpl:notes', 'patrick', 'grid', 360],
     ['tpl:letter', 'cedarville', 'plain', 360], ['tpl:journal', 'caveat', 'yellow', 360], ['tpl:card', 'cedarville', 'plain', 360],
   ]);
+});
+
+test('Home shown again asks for the same pictures, so they come from the device instead of being drawn again', async () => {
+  const sigs = () => vi.mocked(thumbFor).mock.calls.map(c => thumbSig(c[1], c[2], c[3]));
+  vi.mocked(thumbFor).mockClear();
+  const first = render(<TemplateGrid />); await waitFor(() => expect(thumbFor).toHaveBeenCalledTimes(6));
+  const before = sigs(); first.unmount(); vi.mocked(thumbFor).mockClear();
+  render(<TemplateGrid />); await waitFor(() => expect(thumbFor).toHaveBeenCalledTimes(6));
+  expect(sigs()).toEqual(before);
+  await waitFor(() => expect(document.querySelectorAll('img[src^="data:image/jpeg"]')).toHaveLength(6));
 });
 
 test('a card makes that template’s document, and meanwhile the cards wait', async () => {

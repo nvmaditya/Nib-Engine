@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { matches, WIDE } from '@/lib/media';
 import { cn } from '@/lib/utils';
 import { placeCaret, useEditor } from '@/store/editor';
-import { importAsNewDocument, importIntoOpenDocument, type ImportRequest } from './apply';
+import { handsArriving, importAsNewDocument, importIntoOpenDocument, type ImportRequest } from './apply';
 import { ImportOptions } from './ImportOptions';
 import { ImportPreview, type PreviewHandle } from './ImportPreview';
 import { IMPORT_ACCEPT, initialOptions, lookById, type ImportOptionsValue, type ImportTarget } from './options';
@@ -144,6 +144,15 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
       // A header belongs at the top of page 1: never with Add after (its choice is hidden then, but kept).
       place: { where: options.where, look: lookById(options.look), header: target === 'new' || options.where === 'replace' ? options.header : null },
     };
+    // Add after places the text by where the writing ends in the look's hands: one still on its way is waited for.
+    const hands = target === 'open' ? handsArriving(req.place) : null;
+    if (hands) {
+      const at = reading.current;
+      setBusy(true);
+      await hands;
+      setBusy(false);
+      if (at !== reading.current) return; // closed (Cancel), or another file chosen, meanwhile
+    }
     if (target === 'open') {
       importIntoOpenDocument(req);
       // The caret goes where the imported text starts (the block it went into ends with it), ready to write on.

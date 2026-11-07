@@ -40,19 +40,38 @@ export function templateSettings(tpl: Template): Settings {
   return { ...cleanSettings(null, false), ...lookPatch(look, false), ...tpl.extra };
 }
 
-export function templateRecord(tpl: Template, now: Date = new Date()): { title: string; settings: Settings; doc: EngineDoc } {
+/**
+ * The template's document. Its blocks get new ids, as any new document's do, unless `idOf` names them (by their
+ * place): a card's picture is drawn from ids that stay the same, since the ids seed the handwriting's randomness
+ * and are part of what decides whether a kept picture can be shown.
+ */
+export function templateRecord(tpl: Template, now: Date = new Date(), idOf?: (i: number) => string): { title: string; settings: Settings; doc: EngineDoc } {
   const settings = templateSettings(tpl);
   const doc = newDocument(settings, tpl.text(now), tpl.header ? { name: '', class: '', date: today(now) } : null);
+  if (idOf) doc.boxes.forEach((b, i) => { b.id = idOf(i); });
   if (tpl.middle) doc.boxes[doc.boxes.length - 1].y = snapY(400, geomFor(settings));
   return { title: tpl.title, settings, doc };
 }
 
-/** Make the template's document and open it on Write with the caret at the end of its Main text. False, having said so, when it can't be made. */
-export async function openTemplate(id: TemplateId, now: Date = new Date()): Promise<boolean> {
-  const tpl = TEMPLATES.find(x => x.id === id)!;
-  const rec = templateRecord(tpl, now);
-  if (!(await createAndOpen(rec))) return false;
-  const main = rec.doc.boxes[rec.doc.boxes.length - 1];
-  placeCaret(main.id, main.text.length);
-  return true;
+/** The templates still making their document, by id. */
+const opening = new Map<TemplateId, Promise<boolean>>();
+
+/**
+ * Make the template's document and open it on Write with the caret at the end of its Main text. False, having said
+ * so, when it can't be made. Pressed again before the first one has opened (a double click on New document), it is
+ * the same press: each record gets new block ids, so only the template tells two presses apart.
+ */
+export function openTemplate(id: TemplateId, now: Date = new Date()): Promise<boolean> {
+  let made = opening.get(id);
+  if (!made) {
+    made = (async () => {
+      const rec = templateRecord(TEMPLATES.find(x => x.id === id)!, now);
+      if (!(await createAndOpen(rec))) return false;
+      const main = rec.doc.boxes[rec.doc.boxes.length - 1]; // (of the record this press made and opened)
+      placeCaret(main.id, main.text.length);
+      return true;
+    })().finally(() => { opening.delete(id); });
+    opening.set(id, made);
+  }
+  return made;
 }

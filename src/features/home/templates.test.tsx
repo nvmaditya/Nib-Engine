@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { parseHash } from '@/app/route';
 import { TopBar } from '@/shell/TopBar';
 import { matchLook, STYLE_LOOKS } from '@/features/style/looks';
-import { createDoc, getDoc } from '@/store/documents';
+import { createDoc, getDoc, listDocs } from '@/store/documents';
 import { get, lastToast } from '@/test/docs';
 import { openTemplate, TEMPLATES, templateRecord, templateSettings, type TemplateId } from './templates';
 
@@ -50,6 +50,39 @@ test('a template opens as a new document on Write, the caret at the end of its m
 test('New document in the top bar is a Blank page', async () => {
   location.hash = '#/'; render(<TopBar route={{ name: 'home' }} ready={false} />); await userEvent.click(screen.getByRole('button', { name: 'New document' }));
   await waitFor(() => expect(get().doc.boxes.map(b => [b.name, b.text])).toEqual([['Main text', '']])); expect(get().title).toBe('Untitled');
+});
+
+/** The documents made since `before` (a set of the ids there were), by title. */
+const madeSince = async (before: Set<string>) => (await listDocs()).filter(d => !before.has(d.id));
+const ids = async () => new Set((await listDocs()).map(d => d.id));
+
+test('New document pressed again before the first has opened makes one Blank page, with the caret in it', async () => {
+  const before = await ids();
+  expect(await Promise.all([openTemplate('blank'), openTemplate('blank')])).toEqual([true, true]); // a double click
+  const made = await madeSince(before);
+  expect(made.map(d => d.title)).toEqual(['Untitled']);
+  expect(get().docId).toBe(made[0].id);
+  expect(get().caret).toMatchObject({ boxId: made[0].doc.boxes[0].id, offset: 0 });
+});
+
+test('two different templates pressed close together make one document each', async () => {
+  const before = await ids();
+  await Promise.all([openTemplate('letter'), openTemplate('journal'), openTemplate('letter')]);
+  expect((await madeSince(before)).map(d => d.title).sort()).toEqual(['Journal page', 'Letter']);
+});
+
+test('each document a template makes has block ids of its own', async () => {
+  const before = await ids();
+  await openTemplate('assignment', NOW); await openTemplate('assignment', NOW);
+  const made = (await madeSince(before)).flatMap(d => d.doc.boxes.map(b => b.id));
+  expect(made).toHaveLength(4); expect(new Set(made).size).toBe(4);
+  expect(made.some(id => id.startsWith('tpl-'))).toBe(false); // (not the ids the cards’ pictures are drawn with)
+});
+
+test('once it has opened, New document makes another', async () => {
+  const before = await ids();
+  await openTemplate('blank'); await openTemplate('blank');
+  expect(await madeSince(before)).toHaveLength(2);
 });
 
 test('a template this device can’t store says so', async () => {

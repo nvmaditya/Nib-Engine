@@ -10,7 +10,7 @@ export function TemplateGrid() {
   const cards = useRef<Partial<Record<TemplateId, HTMLButtonElement | null>>>({});
   const day = today();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the day is the only thing the records read from the clock
-  const records = useMemo(() => TEMPLATES.map(t => templateRecord(t, new Date())), [day]);
+  const records = useMemo(() => TEMPLATES.map(t => templateRecord(t, new Date(), i => `tpl-${t.id}-${i}`)), [day]);
   const start = async (id: TemplateId) => {
     if (busy) return;
     setBusy(true);
