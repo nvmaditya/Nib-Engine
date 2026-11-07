@@ -38,6 +38,6 @@ export const SETTING_CONTROLS: Record<keyof Settings, SettingControl> = {
   ghost: { kind: 'switch', label: 'Show-through', block: false },
   crease: { kind: 'switch', label: 'Fold crease', block: false, onlyWhenOn: true },
   look: { kind: 'export', label: 'How it looks', block: false },
-  tilt: { kind: 'export', label: 'Camera tilt', block: false },
+  tilt: { kind: 'export', label: 'Slight camera tilt', block: false },
   seed: { kind: 'action', label: 'New variation', block: false },
 };
