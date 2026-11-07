@@ -1,18 +1,21 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Toaster, toast as sonner } from 'sonner';
-import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, putDoc } from '@/store/documents';
+import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, renameDoc } from '@/store/documents';
 import { HomePage } from './HomePage';
 
 const mem = vi.hoisted(() => ({ docs: [] as any[] }));
 vi.mock('@/store/documents', () => ({
   NewerDocumentError: class NewerDocumentError extends Error {},
+  MissingDocumentError: class MissingDocumentError extends Error {},
   listDocs: vi.fn(async () => [...mem.docs]),
   getDoc: vi.fn(async (id: string) => mem.docs.find(d => d.id === id)),
   createDoc: vi.fn(async (init: any = {}) => { const r = { id: 'new1', title: init.title ?? 'Untitled', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }; mem.docs.unshift(r); return r; }),
   duplicateDoc: vi.fn(),
   deleteDoc: vi.fn(async (id: string) => { mem.docs = mem.docs.filter(d => d.id !== id); }),
   putDoc: vi.fn(async (r: any) => { mem.docs = mem.docs.map(d => (d.id === r.id ? r : d)); }),
+  renameDoc: vi.fn(async (id: string, title: string) => { mem.docs = mem.docs.map(d => (d.id === id ? { ...d, title } : d)); }),
+  onDocsChanged: vi.fn(() => () => {}),
 }));
 
 const NOW = new Date(2026, 10, 6, 12).getTime();
@@ -65,7 +68,7 @@ test('when the documents can’t be read, Home says so instead of “No document
 test('a rename of a document a newer version of Nib saved says to reload', async () => {
   const user = userEvent.setup();
   render(<><HomePage /><Toaster /></>);
-  vi.mocked(putDoc).mockRejectedValueOnce(new NewerDocumentError());
+  vi.mocked(renameDoc).mockRejectedValueOnce(new NewerDocumentError());
   await user.click(await screen.findByRole('button', { name: 'More for A' }));
   await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
   const dlg = await screen.findByRole('dialog', { name: 'Rename document' });
@@ -82,7 +85,7 @@ test('a rename, duplicate or delete that fails says so and closes its dialog', a
     await user.click(await screen.findByRole('menuitem', { name: item }));
   };
 
-  vi.mocked(putDoc).mockRejectedValueOnce(new Error('no'));
+  vi.mocked(renameDoc).mockRejectedValueOnce(new Error('no'));
   await menu('Rename');
   const dlg = await screen.findByRole('dialog', { name: 'Rename document' });
   await user.clear(within(dlg).getByRole('textbox', { name: 'Document name' }));

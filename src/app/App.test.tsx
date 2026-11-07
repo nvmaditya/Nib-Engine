@@ -164,6 +164,46 @@ test('coming back to the tab shows the looks another tab saved', async () => {
   await waitFor(() => expect(useStylePrefs.getState().looks.map(l => l.name)).toEqual(['Theirs']));
 });
 
+// ---- Another tab with the same document open (src/store/tabs.test.ts has the details) ----
+
+/** Another tab: its own copy of the store's modules, on the same storage. */
+async function anotherTab() {
+  vi.resetModules();
+  const docs = await import('@/store/documents'), db = await import('@/store/db');
+  return { docs, close: () => db.resetDbForTests() };
+}
+
+test('a rename in another tab shows in the open document at once', async () => {
+  const rec = await createDoc({ title: 'First name' });
+  location.hash = `#/d/${rec.id}/outline`;
+  render(<App />);
+  await waitFor(async () => expect(await docName()).toHaveValue('First name'));
+  const other = await anotherTab();
+  try {
+    await other.docs.renameDoc(rec.id, 'From the other tab');
+    await waitFor(async () => expect(await docName()).toHaveValue('From the other tab'));
+    expect(await screen.findByText('Updated with changes from another tab.')).toBeInTheDocument();
+    expect(location.hash).toBe(`#/d/${rec.id}/outline`);
+  } finally { await other.close(); }
+});
+
+test('a document deleted in another tab goes Home at once with a message, and isn’t saved back', async () => {
+  const rec = await createDoc({ title: 'Doomed' });
+  location.hash = `#/d/${rec.id}/write`;
+  render(<App />);
+  await waitFor(async () => expect(await docName()).toHaveValue('Doomed'));
+  const other = await anotherTab();
+  try {
+    await other.docs.deleteDoc(rec.id);
+    expect(await screen.findByText('This document was deleted in another tab.')).toBeInTheDocument();
+    await waitFor(() => expect(location.hash).toBe('#/'));
+    await screen.findByRole('heading', { name: 'Recent' });
+    await act(() => flushSave());
+    expect(await getDoc(rec.id)).toBeUndefined();
+    expect(screen.queryByText('That document isn’t on this device.')).toBeNull();
+  } finally { await other.close(); }
+});
+
 // (Last: it loads a real hand's file, which stays loaded.)
 test('typing that adds a page, then Style before the pages are laid out again: no page notice for it', async () => {
   realFonts();
