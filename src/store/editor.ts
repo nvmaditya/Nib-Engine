@@ -184,7 +184,7 @@ function readAgain(rec: DocRecord, lost: boolean): void {
   const mine = lost ? s.doc.boxes.filter(b => b.text.trim() && savedText.get(b.id) !== b.text).map(b => b.text).join('\n\n') : '';
   clearTimeout(saveTimer); saveTimer = undefined; savePending = false; saveSeq++; // nothing of the earlier copy is written
   cancelLayout();
-  sonnerToast.dismiss(); // a message's Undo was for the earlier copy
+  dismissMessages(); // a message's Undo was for the earlier copy
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
   history.clear(); historyTick++;
@@ -258,7 +258,7 @@ export function flushSave(): Promise<void> {
 export function openDocument(rec: DocRecord): void {
   if (savePending) void saveNow(); // don't lose the last edits of the document being left
   cancelLayout();
-  sonnerToast.dismiss(); // a message's Undo belongs to the document it was shown in
+  dismissMessages(); // a message's Undo belongs to the document it was shown in
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
   history.clear(); historyTick++;
@@ -286,7 +286,7 @@ export function closeDocument(): Promise<void> {
   if (s.docId === null || s.docId === MEMORY_ID) return Promise.resolve();
   const saved = flushSave(); // takes what to write now, before the state below changes
   cancelLayout();
-  sonnerToast.dismiss();
+  dismissMessages();
   history.clear(); historyTick++;
   failing = null;
   followSeq++; // a look at storage for it is dropped
@@ -371,7 +371,19 @@ export function renameDocument(title: string): void {
   update(s => { s.title = t; }, { history: 'rename', layout: false });
 }
 
+const messages = new Set<string>(); // the messages said since they were last taken down (some may have gone already)
 const undoMessages = new Set<string>(); // the messages showing an Undo, so undoing or redoing can take them down
+
+/**
+ * Take down every message, one by one. Never with sonner's dismiss-all: a message said again right after that (its
+ * id is its text) is merged into the one going away, and doesn't show. A dismissal by id is cancelled by saying the
+ * same thing again, so that message stays up, with its new action.
+ */
+function dismissMessages(): void {
+  for (const id of messages) sonnerToast.dismiss(id);
+  messages.clear(); undoMessages.clear();
+}
+
 const takeDownUndoMessages = (): void => { for (const id of undoMessages) sonnerToast.dismiss(id); undoMessages.clear(); };
 
 /**
@@ -379,11 +391,12 @@ const takeDownUndoMessages = (): void => { for (const id of undoMessages) sonner
  * is its id, so saying the same thing again replaces the message showing instead of stacking a copy.
  */
 export function toast(msg: string, action?: ToastAction, o: { duration?: number } = {}): void {
+  messages.add(msg);
   if (action?.label === 'Undo') undoMessages.add(msg); else undoMessages.delete(msg);
-  sonnerToast(msg, {
+  sonnerToast(msg, { // (both always given: said again while it shows, the message is updated in place)
     id: msg,
-    ...(action && { action: { label: action.label, onClick: action.fn } }),
-    ...(o.duration !== undefined && { duration: o.duration }),
+    action: action && { label: action.label, onClick: action.fn },
+    duration: o.duration,
   });
 }
 

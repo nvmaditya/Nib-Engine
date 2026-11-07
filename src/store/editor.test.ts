@@ -89,11 +89,17 @@ test('closing a document writes its last edit and leaves nothing open', async ()
   expect(s.saving).toBe('saved');
 });
 
-test('opening and closing a document dismiss its messages', async () => {
+test('opening and closing a document take down its messages, one by one', async () => {
   openDocument(rec('A', 'a'));
-  expect(sonner.dismiss).toHaveBeenCalledTimes(1);
+  toast('One'); toast('Two', { label: 'Undo', fn: () => {} });
+  vi.mocked(sonner.dismiss).mockClear();
+  openDocument(rec('B', 'b'));
+  // Never all at once: sonner merges a message said again right after a dismiss-all into the one going away.
+  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['One'], ['Two']]);
+  toast('Three');
+  vi.mocked(sonner.dismiss).mockClear();
   await closeDocument();
-  expect(sonner.dismiss).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['Three']]);
 });
 
 test('a message’s Undo does nothing once another document is open', () => {

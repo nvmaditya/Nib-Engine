@@ -132,6 +132,7 @@ test('live follow: a tab with nothing waiting shows the other tab’s save in pl
   await b.ed.flushSave();
   await vi.waitFor(() => expect(state(a).S.size).toBe(40));
   const tick = state(b).layoutTick;
+  b.ed.toast('Did it.', b.ed.undoTo(b.ed.snapshot(), 'm')); // a message whose Undo is for this version
 
   type(a, ', told again');
   await a.ed.flushSave();
@@ -139,8 +140,8 @@ test('live follow: a tab with nothing waiting shows the other tab’s save in pl
   const s = state(b);
   expect([s.writeView, s.selectedId, s.scope, s.canUndo, s.saving]).toEqual(['outline', 'm', 'box', false, 'saved']);
   expect(s.layoutTick).toBeGreaterThan(tick);
-  expect(messages(b)).toEqual([FOLLOWED]);
-  expect(b.toast.dismiss).toHaveBeenCalled(); // messages whose Undo was for the old version go
+  expect(messages(b)).toEqual(['Did it.', FOLLOWED]);
+  expect(b.toast.dismiss.mock.calls).toEqual([['Did it.']]); // messages whose Undo was for the old version go, one by one
 });
 
 test('a message’s Undo from before a follow does nothing', async () => {
