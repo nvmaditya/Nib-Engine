@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { navigate } from '@/app/route';
 import { Button } from '@/components/ui/button';
@@ -16,8 +16,8 @@ import { RECENT_PX, forgetThumb } from './thumbs';
 
 const FAILED = 'That didn’t work. Try again.';
 
-function Row({ d, readOnly, onRename, onDuplicate, onDelete }: {
-  d: DocRecord; readOnly: boolean; onRename(): void; onDuplicate(): void; onDelete(): void;
+const Row = memo(function Row({ d, readOnly, onRename, onDuplicate, onDelete }: {
+  d: DocRecord; readOnly: boolean; onRename(d: DocRecord): void; onDuplicate(d: DocRecord): void; onDelete(d: DocRecord): void;
 }) {
   const saved = useStylePrefs(s => s.looks);
   const [pages, setPages] = useState<number | null>(null);
@@ -27,7 +27,7 @@ function Row({ d, readOnly, onRename, onDuplicate, onDelete }: {
         <PageThumb owner={'doc:' + d.id} S={d.settings} doc={d.doc} px={RECENT_PX} onPages={setPages} className="w-[52px] flex-none" />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold">{d.title}</span>
-          <span className="block truncate text-sm text-muted">{recentMeta(pages, lookNameOf(d.settings, saved), d.updatedAt)}</span>
+          <span className="block text-sm text-muted wide:truncate">{recentMeta(pages, lookNameOf(d.settings, saved), d.updatedAt)}</span>
         </span>
       </button>
       {!readOnly && <DropdownMenu>
@@ -35,30 +35,31 @@ function Row({ d, readOnly, onRename, onDuplicate, onDelete }: {
           <Button variant="ghost" size="icon" aria-label={`More for ${d.title}`}><MoreHorizontal /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onRename}>Rename</DropdownMenuItem>
-          <DropdownMenuItem onSelect={onDuplicate}>Duplicate</DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={onDelete}>Delete</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onRename(d)}>Rename</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onDuplicate(d)}>Duplicate</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onSelect={() => onDelete(d)}>Delete</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>}
     </li>
   );
-}
+});
 
 export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; readOnly: boolean; onChange(): Promise<void> }) {
   const [renaming, setRenaming] = useState<DocRecord | null>(null);
   const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<DocRecord | null>(null);
-  const change = async (fn: () => Promise<unknown>) => {
+  const change = useCallback(async (fn: () => Promise<unknown>) => {
     try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : FAILED); }
     await onChange();
-  };
+  }, [onChange]);
+  const startRename = useCallback((d: DocRecord) => { setName(d.title); setRenaming(d); }, []);
   const doRename = async () => {
     if (!renaming) return;
     const d = renaming, title = name.trim() || 'Untitled';
     setRenaming(null);
     await change(() => putDoc({ ...d, title, updatedAt: Date.now() }));
   };
-  const doDuplicate = (d: DocRecord) => change(() => loadUploadedFonts().then(() => duplicateDoc(d.id)));
+  const doDuplicate = useCallback((d: DocRecord) => change(() => loadUploadedFonts().then(() => duplicateDoc(d.id))), [change]);
   const doDelete = async () => {
     if (!deleting) return;
     const d = deleting;
@@ -71,9 +72,7 @@ export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; re
       <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
         {docs.map(d => (
           <Row key={d.id} d={d} readOnly={readOnly}
-            onRename={() => { setName(d.title); setRenaming(d); }}
-            onDuplicate={() => { void doDuplicate(d); }}
-            onDelete={() => setDeleting(d)} />
+            onRename={startRename} onDuplicate={doDuplicate} onDelete={setDeleting} />
         ))}
       </ul>
 
