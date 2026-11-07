@@ -144,7 +144,7 @@ test('saves that keep failing show one message for the run, and Not saved', asyn
     expect(useEditor.getState().saving).toBe('unsaved');
   }
   expect(sonner).toHaveBeenCalledTimes(1);
-  expect(sonner).toHaveBeenCalledWith(SAVE_FAILED, undefined);
+  expect(sonner).toHaveBeenCalledWith(SAVE_FAILED, { id: SAVE_FAILED });
 
   vi.mocked(putDoc).mockResolvedValue(undefined); // the run ends with a save that works
   update(s => { s.doc.boxes[0].text = 'ok'; });
@@ -282,7 +282,7 @@ test('a save refused because a newer Nib wrote the document says so', async () =
   update(s => { s.doc.boxes[0].text = 'y'; });
   await flushSave();
   expect(sonner).toHaveBeenCalledTimes(1);
-  expect(sonner).toHaveBeenCalledWith('This document was saved by a newer version of Nib. Reload the page to keep editing.', undefined);
+  expect(sonner).toHaveBeenCalledWith('This document was saved by a newer version of Nib. Reload the page to keep editing.', { id: 'This document was saved by a newer version of Nib. Reload the page to keep editing.' });
   expect(putDoc).toHaveBeenCalledTimes(2); // no retry for a newer-version refusal
 });
 
@@ -290,9 +290,35 @@ test('a message can stay up longer than the default, with or without an action',
   const fn = vi.fn();
   toast('Plain'); toast('With Undo', { label: 'Undo', fn }); toast('Longer', undefined, { duration: 15_000 }); toast('Both', { label: 'Share', fn }, { duration: 15_000 });
   expect(vi.mocked(sonner).mock.calls).toEqual([
-    ['Plain', undefined],
-    ['With Undo', { action: { label: 'Undo', onClick: fn } }],
-    ['Longer', { duration: 15_000 }],
-    ['Both', { action: { label: 'Share', onClick: fn }, duration: 15_000 }],
+    ['Plain', { id: 'Plain' }],
+    ['With Undo', { id: 'With Undo', action: { label: 'Undo', onClick: fn } }],
+    ['Longer', { id: 'Longer', duration: 15_000 }],
+    ['Both', { id: 'Both', action: { label: 'Share', onClick: fn }, duration: 15_000 }],
   ]);
+});
+
+test('a message said again replaces the one showing, whatever its action', () => {
+  toast('Same'); toast('Same'); toast('Other');
+  expect(vi.mocked(sonner).mock.calls.map(c => (c[1] as { id: string }).id)).toEqual(['Same', 'Same', 'Other']);
+});
+
+test('undoing or redoing dismisses the messages that offer Undo, and only those', () => {
+  openDocument(rec('A', 'a'));
+  vi.mocked(sonner.dismiss).mockClear();
+  update(s => { s.doc.boxes[0].text = 'a2'; });
+  toast('Did it', { label: 'Undo', fn: () => {} }); toast('Ready.', { label: 'Share', fn: () => {} }); toast('Plain');
+  undo();
+  const down = () => vi.mocked(sonner.dismiss).mock.calls.flat();
+  expect(down()).toContain('Did it'); expect(down()).not.toContain('Ready.'); expect(down()).not.toContain('Plain');
+  vi.mocked(sonner.dismiss).mockClear();
+  toast('Did it', { label: 'Undo', fn: () => {} });
+  redo();
+  expect(down()).toEqual(['Did it']);
+});
+
+test('an undo that changes nothing leaves the messages alone', () => {
+  openDocument(rec('A', 'a'));
+  vi.mocked(sonner.dismiss).mockClear();
+  undo();
+  expect(sonner.dismiss).not.toHaveBeenCalled();
 });

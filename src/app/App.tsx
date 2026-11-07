@@ -64,7 +64,7 @@ export function App() {
       )}
       <TopBar route={route} ready={route.name === 'doc' && openId === route.id} />
       {route.name === 'home' ? <HomePage /> : openId === route.id ? <DocumentView stage={route.stage} /> : null}
-      <Toaster position="bottom-center" />
+      <Toaster position="bottom-center" expand visibleToasts={3} />
     </>
   );
 }
