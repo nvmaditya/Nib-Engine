@@ -31,6 +31,12 @@ export const NIB_MANIFEST: Partial<ManifestOptions> = {
 const YEAR = 60 * 60 * 24 * 365;
 
 /**
+ * An empty page (public/), which Reload loads unseen when a new version it asked for still waits (src/app/updates.ts).
+ * It is never precached and never answered with the app, so loading it starts nothing: no second copy of Nib.
+ */
+export const KICK_PAGE = 'sw-kick.html';
+
+/**
  * The service worker precaches everything a document can need, so a hand, a reader or the paper never used on
  * this device still works offline: the app and engine, pdf.js and its worker, mammoth, every hand's font file,
  * the paper photo and the icons. The licences and the social image are left out. Google's web copies of the
@@ -38,12 +44,12 @@ const YEAR = 60 * 60 * 24 * 365;
  */
 export const PWA_WORKBOX: NonNullable<VitePWAOptions['workbox']> = {
   globPatterns: ['**/*.{js,css,html,svg,png,webp,woff,woff2,webmanifest}'],
-  globIgnores: ['fonts/licenses/**', 'icons/social.png'],
+  globIgnores: ['fonts/licenses/**', 'icons/social.png', KICK_PAGE],
   // Above the 1.3 MB app bundle and the 1.09 MB pdf.js worker (Workbox's default is 2 MiB).
   maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
   navigateFallback: 'index.html',
   // Files that are deployed but not precached are opened as themselves, not as the app.
-  navigateFallbackDenylist: [/\/fonts\/licenses\//, /\/icons\/social\.png$/],
+  navigateFallbackDenylist: [/\/fonts\/licenses\//, /\/icons\/social\.png$/, /\/sw-kick\.html$/],
   cleanupOutdatedCaches: true,
   clientsClaim: true,
   // A new version waits until a tab asks for it (src/app/pwa.ts): it is offered, never forced.

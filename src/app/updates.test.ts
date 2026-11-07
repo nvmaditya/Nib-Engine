@@ -12,7 +12,8 @@ import { NewerDocumentError, putDoc } from '@/store/documents';
 import { SAVE_FAILED, SAVE_NEWER, closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
 import { rec } from '@/test/docs';
 import { MEMORY_ID } from './route';
-import { CHECK_EVERY, GIVE_BACK_AFTER, NEW_VERSION, OFFLINE_READY, RELOAD_FALLBACK, resetUpdatesForTests, startUpdates, updateState } from './updates';
+import { KICK_PAGE } from './pwaManifest';
+import { CHECK_EVERY, GIVE_BACK_AFTER, KICK_AFTER, NEW_VERSION, OFFLINE_READY, RELOAD_FALLBACK, resetUpdatesForTests, startUpdates, updateState } from './updates';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => 1) }));
 
@@ -33,6 +34,23 @@ const reloadIn = (msg: string) => within(message(msg)!).getByRole('button', { na
 /** Press a message's button, as a click does in Chromium: it takes the focus, then is clicked. */
 const press = (b: HTMLElement) => act(() => { b.focus(); fireEvent.click(b); });
 
+/** A service worker as a registration holds it: its state changes, and it says so (statechange). */
+type FakeWorker = EventTarget & { state: ServiceWorkerState };
+const worker = (state: ServiceWorkerState = 'installed'): FakeWorker => Object.assign(new EventTarget(), { state });
+type FakeRegistration = EventTarget & { update: Mock<() => Promise<void>>; installing: FakeWorker | null; waiting: FakeWorker | null; active: FakeWorker | null };
+/** The registration vite-plugin-pwa hands over once registered (onRegisteredSW): `waiting` is a new version, until it takes over. */
+function registered(o: { waiting?: boolean; active?: boolean } = {}): FakeRegistration {
+  const reg: FakeRegistration = Object.assign(new EventTarget(), {
+    update: vi.fn(async () => {}), installing: null, waiting: o.waiting ? worker() : null, active: o.active === false ? null : worker('activated'),
+  });
+  act(() => opts.onRegisteredSW!('sw.js', reg as unknown as ServiceWorkerRegistration));
+  return reg;
+}
+/** Every iframe this page has had added (each is gone again once loaded). */
+let framesAdded: HTMLIFrameElement[] = [];
+let frameWatch: MutationObserver | undefined;
+const kicks = () => framesAdded.filter(f => f.getAttribute('src')?.endsWith(KICK_PAGE));
+
 beforeEach(async () => {
   await flushSave();
   vi.useFakeTimers();
@@ -44,8 +62,12 @@ beforeEach(async () => {
   resetUpdatesForTests(); applyUpdate = vi.fn(async () => {}); reload = vi.fn();
   startUpdates(o => { opts = o; return applyUpdate; }, { reload });
   render(createElement(Toaster, { expand: true, visibleToasts: 3 }));
+  framesAdded = [];
+  frameWatch = new MutationObserver(rs => { for (const r of rs) for (const n of r.addedNodes) if (n instanceof HTMLIFrameElement) framesAdded.push(n); });
+  frameWatch.observe(document.body, { childList: true, subtree: true });
 });
 afterEach(async () => {
+  frameWatch?.disconnect();
   act(() => closeImport());
   await closeDocument();
   if (useEditor.getState().docId === MEMORY_ID) useEditor.setState({ docId: null }); // (never closed: nothing would keep it)
@@ -114,6 +136,67 @@ test('if the new version never takes over, Reload reloads anyway after 3 s', asy
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
+// Chromium can leave a new version waiting after Reload asked it to take over: another tab fetching through the old
+// one as it is stopped restarts it, and the new one waits for the next page loaded in scope. Were that page this one
+// (a reload), it would never load. So a page of nothing is loaded, unseen, and the takeover reloads this one as usual.
+test('a new version still waiting a second after Reload is woken by an empty page loaded unseen, and this page reloads once it takes over', async () => {
+  const reg = registered({ waiting: true });
+  openDocument(rec('A', 'x'));
+  update(s => { s.doc.boxes[0].text = 'xy'; }); // typed, not yet written
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(1);
+  await settle(KICK_AFTER - 100);
+  expect(kicks()).toHaveLength(0); // (it usually takes over at once)
+  await settle(100);
+  expect(kicks()).toHaveLength(1);
+  const [kick] = kicks();
+  expect(kick.getAttribute('src')).toBe(`${import.meta.env.BASE_URL}${KICK_PAGE}`);
+  expect(kick.hidden).toBe(true);
+  act(() => { kick.dispatchEvent(new Event('load')); });
+  expect(kick.isConnected).toBe(false); // gone once loaded
+  expect(reload).not.toHaveBeenCalled();
+
+  await settle(RELOAD_FALLBACK - KICK_AFTER); // the 3 s, and it still waits
+  expect(reload).not.toHaveBeenCalled(); // a reload now is the page that never loads
+  expect(kicks()).toHaveLength(2); // woken once more
+  reg.waiting = null; // it takes over
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(putDoc).mock.calls.at(-1)![0].doc.boxes[0].text).toBe('xy');
+  expect(kicks().every(f => !f.isConnected)).toBe(true); // nothing is left behind
+});
+
+test('with nothing waiting any more by the 3 s, Reload reloads as before, without loading anything unseen', async () => {
+  const reg = registered({ waiting: true });
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  reg.waiting = null; // it is taking over (activating), and says so late, or not at all
+  await settle(RELOAD_FALLBACK + 100);
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(kicks()).toHaveLength(0);
+});
+
+test('a new version that never takes over leaves this page as it is, never reloaded onto the old one, and is offered again', async () => {
+  registered({ waiting: true });
+  const off = installFocusMemory();
+  const field = document.createElement('textarea'); document.body.append(field); field.focus();
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  await settle(GIVE_BACK_AFTER - 100);
+  expect(message(NEW_VERSION)).toBeNull(); // (still trying)
+  await settle(200); frames(300);
+  expect(reload).not.toHaveBeenCalled();
+  expect(document.body).not.toHaveAttribute('inert');
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument(); // to press again
+  expect(field).toHaveFocus(); // where the typing was
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(2);
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1);
+  off(); field.remove();
+});
+
 test('the first install says Nib works offline now', () => {
   act(() => opts.onOfflineReady!()); tick();
   expect(message(OFFLINE_READY)).not.toBeNull();
@@ -143,8 +226,7 @@ test('a document a newer Nib saved offers Reload, which goes to the new version'
 });
 
 test('checks for a new version every hour while shown', () => {
-  const swUpdate = vi.fn(async () => {});
-  act(() => opts.onRegisteredSW!('sw.js', { update: swUpdate } as unknown as ServiceWorkerRegistration));
+  const swUpdate = registered().update;
   tick(CHECK_EVERY - 1000);
   expect(swUpdate).not.toHaveBeenCalled();
   tick(1000);

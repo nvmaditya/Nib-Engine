@@ -5,15 +5,21 @@
 import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
 import { SAVE_FAILED, reloadAction, setReloader, takeDownMessage, toast, useEditor, writeBeforeReload } from '@/store/editor';
 import { giveFocusBack, rememberedFocus } from '@/lib/focus';
+import { KICK_PAGE } from './pwaManifest';
 import { MEMORY_ID } from './route';
 
 export const NEW_VERSION = 'A new version is ready.';
 export const OFFLINE_READY = 'Nib works offline now.';
 /** How often a page that is shown looks for a new version (ms). */
 export const CHECK_EVERY = 3_600_000;
-/** How long Reload waits for the new version to take over before it reloads anyway (ms). */
+/** How long Reload waits for the new version to take over before it wakes it (see `kick`) (ms). */
+export const KICK_AFTER = 1000;
+/** How long Reload waits for the new version to take over before it wakes it once more, or, with nothing waiting any more, reloads anyway (ms). */
 export const RELOAD_FALLBACK = 3000;
-/** A page still here this long after its reload began had it stopped (the browser's Stop, or Esc): it is given back (ms). */
+/**
+ * A page still here this long after its reload began had it stopped (the browser's Stop, or Esc): it is given back.
+ * A new version still waiting this long after Reload asked for it never took over: it is offered again (ms).
+ */
 export const GIVE_BACK_AFTER = 10_000;
 
 /** No new version known; one is waiting; one has taken over (this tab still runs the old one). */
@@ -26,7 +32,9 @@ let applyUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null; // ask
 let reload = (): void => location.reload();
 let asked = false; // this tab pressed Reload while a new version was waiting
 let reloading = false; // on its way: the last change is being written, then the page reloads
-let fallback: ReturnType<typeof setTimeout> | undefined;
+let registration: ServiceWorkerRegistration | null = null;
+let fallbacks: ReturnType<typeof setTimeout>[] = []; // what Reload does if the new version it asked for doesn't take over
+let kicking: HTMLIFrameElement | null = null; // the empty page loading unseen (see `kick`)
 let stopped: ReturnType<typeof setTimeout> | undefined; // gives the page back if the reload never happens
 let stopChecks = (): void => {};
 let putAway = false; // the Import dialog put the message away (as it does every message, for its footer on phones)
@@ -83,7 +91,7 @@ function keepPage(): void {
  * can't be written, the page stays.
  */
 async function reloadOnce(): Promise<void> {
-  clearTimeout(fallback);
+  stopWaiting();
   if (reloading) return;
   reloading = true;
   if (await writeBeforeReload({ pause: true }) === 'failed') {
@@ -145,7 +153,7 @@ export function startUpdates(register: Register, hooks: { reload(): void } = { r
       else offer(); // another tab did: nothing changes here but the message
     },
     onOfflineReady() { toast(OFFLINE_READY); },
-    onRegisteredSW(_url, registration) { if (registration) checkHourly(registration); },
+    onRegisteredSW(_url, r) { if (!r) return; registration = r; checkHourly(r); },
   });
 }
 
@@ -160,9 +168,40 @@ export async function reloadToNewVersion(): Promise<void> {
   if (await writeBeforeReload() === 'failed') { keepPage(); return; }
   if (state !== 'waiting' || !applyUpdate) { await reloadOnce(); return; }
   asked = true;
-  clearTimeout(fallback);
-  fallback = setTimeout(() => { void reloadOnce(); }, RELOAD_FALLBACK);
+  stopWaiting();
+  // Still waiting, it is woken; with nothing waiting any more, the page reloads as it would have; never reloaded
+  // while it waits (see `kick`). The takeover, when it comes, reloads the page (hearTakeover, onNeedReload).
+  const then = (ms: number, waits: () => void, gone: () => void) => fallbacks.push(setTimeout(() => {
+    if (asked && !reloading) (registration?.waiting ? waits : gone)();
+  }, ms));
+  then(KICK_AFTER, kick, () => {}); // (taking over now, most likely)
+  then(RELOAD_FALLBACK, kick, () => { void reloadOnce(); });
+  then(GIVE_BACK_AFTER, () => { stopWaiting(); asked = false; offer(); }, () => { void reloadOnce(); });
   try { await applyUpdate(true); } catch { await reloadOnce(); }
+}
+
+/**
+ * Wake a new version that Reload asked to take over and that still waits: load an empty page in its scope, unseen.
+ * Chromium can leave it waiting when another tab fetches through the old version as it is stopped for the new one
+ * (drawing a page or a thumbnail): the old one starts again, and the new one waits for the next page loaded in scope.
+ * Were that page this one (a reload), the new version would take over, but the page would never load. The empty page
+ * (public/sw-kick.html) is never the app, so nothing starts in it; it is taken out once loaded.
+ */
+function kick(): void {
+  kicking?.remove();
+  const frame = document.createElement('iframe');
+  frame.hidden = true;
+  frame.src = `${import.meta.env.BASE_URL}${KICK_PAGE}`;
+  frame.addEventListener('load', () => { frame.remove(); if (kicking === frame) kicking = null; }, { once: true });
+  kicking = frame;
+  document.body.append(frame);
+}
+
+/** Reload has what it waited for (or gave up): no more of what it does while the new version doesn't take over. */
+function stopWaiting(): void {
+  for (const t of fallbacks) clearTimeout(t);
+  fallbacks = [];
+  kicking?.remove(); kicking = null;
 }
 
 /** Look for a new version every hour while the page is shown, and when it is shown again an hour or more since. */
@@ -183,7 +222,7 @@ export function resetUpdatesForTests(): void {
   unhear(); unhear = () => {};
   document.body.removeAttribute('inert');
   clearTimeout(stopped); stopped = undefined;
-  clearTimeout(fallback); fallback = undefined;
+  stopWaiting(); registration = null;
   state = 'current'; applyUpdate = null; asked = false; reloading = false;
   reload = () => location.reload();
   setReloader(() => location.reload());
