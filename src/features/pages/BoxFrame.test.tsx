@@ -123,3 +123,18 @@ test('the name tag stays where it is when it fits', () => {
     expect(tagOf('Main text').style.left).toBe('');
   } finally { restore(); }
 });
+
+test('a tag that still ends past the page once the note is turned is moved in by what is left over', () => {
+  open(docOf(box({ id: 'n', kind: 'note', name: 'Margin note', x: 40, w: 40, text: 'x', style: { size: 40 } })));
+  const restore = tagSizes(794);
+  const rect = (right: number) => ({ left: 0, top: 0, bottom: 0, width: right, height: 0, x: 0, y: 0, right, toJSON() {} }) as DOMRect;
+  const r = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if ('paper' in this.dataset) return rect(200);
+    if (this.classList.contains('tag')) return rect(203 + (parseFloat(this.style.left || '0'))); // 3 px past the page
+    return rect(0);
+  });
+  try {
+    render(<div data-paper=""><BoxFrame sg={part('n', 0)} s={1} gap={34} selected parts={1} mode="style" /></div>);
+    expect(tagOf('Margin note').style.left).toBe('-3px');
+  } finally { r.mockRestore(); restore(); }
+});

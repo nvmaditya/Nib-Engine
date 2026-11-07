@@ -138,7 +138,7 @@ test('block outlines are drawn under the writing, so a selected block never hide
 test('a margin note’s frame turns with its writing', () => {
   open(docOf(box({ id: 'n', kind: 'note', name: 'Margin note', text: 'A note to self.' })));
   pages();
-  expect(frame('n:0').style.rotate).toMatch(/^-0\.0\d+rad$/);
+  expect(frame('n:0').style.getPropertyValue('--tilt')).toMatch(/^-0\.0\d+rad$/);
 });
 
 test('clicking a word asks for the caret there', () => {
@@ -191,10 +191,10 @@ test('Escape during a block drag puts the part back, keeps it selected, and drop
   const f = frame('w:0'), y0 = get().doc.boxes[0].y;
   fireEvent.pointerDown(f, { clientX: 300, clientY: 140, button: 0, pointerId: 1 });
   fireEvent.pointerMove(f, { clientX: 300, clientY: 290, pointerId: 1 });
-  expect(f.style.transform).not.toBe('');
+  expect(f.style.getPropertyValue('--shift')).not.toBe('');
   const ok = fireEvent.keyDown(f, { key: 'Escape' });
   expect(ok).toBe(false); // default prevented
-  expect(f.style.transform).toBe('');
+  expect(f.style.getPropertyValue('--shift')).toBe('');
   expect(drag.active).toBe(false);
   expect(get().selectedId).toBe('w'); // Escape ended the drag; it didn't also deselect
   fireEvent.pointerMove(f, { clientX: 300, clientY: 400, pointerId: 1 });
