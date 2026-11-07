@@ -121,3 +121,12 @@ test('Fit back and Dismiss move focus to the Style heading', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
   expect(screen.getByRole('heading', { name: 'Style' })).toHaveFocus();
 });
+
+test('when nothing fits, Fit back leaves focus on itself', async () => {
+  open(para(40));
+  const view = (n: number) => <ScopeBar notice={<PageCountNotice pages={n} />} />;
+  const { rerender } = render(view(2));
+  rerender(view(3));
+  await userEvent.click(fitButton());
+  expect(fitButton()).toHaveFocus();
+});

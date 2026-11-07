@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useStageActive } from '@/features/doc/StageHost';
 import { toast } from '@/store/editor';
 import { HandSample, paperTint } from './HandSample';
-import { currentLookValues, lookPatch, matchLook, pickLook, STYLE_LOOKS } from './looks';
+import { currentLookValues, lookMatches, lookPatch, matchLook, pickLook, STYLE_LOOKS } from './looks';
 import { Group } from './parts';
 import { addSavedLook, putBackSavedLook, removeSavedLook, useStylePrefs, type SavedLook } from './prefs';
 
@@ -53,7 +53,7 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
           const isSaved = saved.includes(look);
           return (
             <div key={look.id} className="relative">
-              <button type="button" aria-pressed={on === look} onClick={() => { if (on !== look) pickLook(look); }}
+              <button type="button" aria-pressed={on === look} onClick={() => { if (!lookMatches(look, V, S, blockScope)) pickLook(look); }}
                 className="flex w-full flex-col items-stretch gap-1.5 rounded-lg border border-line bg-surface p-1.5 text-left text-[13px] font-medium transition-colors outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:ring-1 aria-pressed:ring-primary">
                 <span className="flex h-[38px] items-center overflow-hidden rounded-md px-2" style={{ background: paperTint(look.v.paper ?? S.paper) }}>
                   <HandSample settings={{ ...V, ...lookPatch(look, false) }} text="Homework" height={30} fit="width" />

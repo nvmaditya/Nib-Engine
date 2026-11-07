@@ -9,7 +9,7 @@ import { setPref } from '@/store/documents';
 import { flushSave, undo, update, useEditor } from '@/store/editor';
 import { box, docOf, get, lastToast, lastToastAction, open } from '@/test/docs';
 import { LooksSection } from './LooksSection';
-import { lookPatch, matchLook, STYLE_LOOKS } from './looks';
+import { currentLookValues, lookPatch, matchLook, STYLE_LOOKS } from './looks';
 import { addSavedLook, useStylePrefs } from './prefs';
 
 const store = new Map<string, unknown>();
@@ -167,6 +167,17 @@ test('a saved Look can be pressed while it is chosen without a step', async () =
   await userEvent.click(screen.getByRole('button', { name: 'Mine' }));
   act(() => undo());
   expect(screen.getByRole('button', { name: 'Journal' })).toHaveAttribute('aria-pressed', 'true');
+  expect(get().canRedo).toBe(true);
+  await userEvent.click(screen.getByRole('button', { name: 'Journal' }));
+  expect(get().canRedo).toBe(true);
+});
+test('a built-in Look that a saved one matches records nothing when pressed', async () => {
+  open(docOf(box())); render(<Live />);
+  await userEvent.click(screen.getByRole('button', { name: 'Journal' }));
+  await act(async () => { await addSavedLook('Mine', currentLookValues()); });
+  await userEvent.click(screen.getByRole('button', { name: 'Exam answer' }));
+  act(() => undo()); // back to Journal's values, which "Mine" shows as chosen
+  expect(screen.getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true');
   expect(get().canRedo).toBe(true);
   await userEvent.click(screen.getByRole('button', { name: 'Journal' }));
   expect(get().canRedo).toBe(true);

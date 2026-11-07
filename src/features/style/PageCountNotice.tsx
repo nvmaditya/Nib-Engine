@@ -37,7 +37,7 @@ export function PageCountNotice({ pages }: { pages: number | null }) {
       {pages > was && (
         // (pointer events stay on while disabled, so its title shows on hover)
         <Button variant="outline" size="sm" className="h-7 px-2.5 text-[13px] disabled:pointer-events-auto disabled:hover:bg-surface" disabled={!ready}
-          title={ready ? undefined : 'Waiting for the handwriting to load'} onClick={e => { toHeading(e.currentTarget); fitBack(was); }}>
+          title={ready ? undefined : 'Waiting for the handwriting to load'} onClick={e => { const el = e.currentTarget; if (fitBack(was)) toHeading(el); }}>
           Fit back to {pagesWord(was)}
         </Button>
       )}

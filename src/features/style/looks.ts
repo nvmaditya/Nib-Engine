@@ -32,12 +32,14 @@ export function lookPatch(look: SavedLook, blockScope: boolean): Partial<Setting
  * it is the one the person chose, even where a built-in one (which holds fewer) matches too.
  */
 export function matchLook(V: Settings, S: Settings, looks: SavedLook[], blockScope: boolean): SavedLook | null {
-  const cur = V as unknown as Record<string, unknown>;
   const builtIn = (l: SavedLook) => STYLE_LOOKS.includes(l);
-  return [...looks.filter(l => !builtIn(l)), ...looks.filter(builtIn)].find(l => Object.entries(l.v).every(([k, val]) => {
-    if (k === 'paper') return blockScope || S.paper === val;
-    return cur[k] === val;
-  })) ?? null;
+  return [...looks.filter(l => !builtIn(l)), ...looks.filter(builtIn)].find(l => lookMatches(l, V, S, blockScope)) ?? null;
+}
+
+/** Whether every value in this Look is already what the panel shows, so pressing it would change nothing. */
+export function lookMatches(look: SavedLook, V: Settings, S: Settings, blockScope: boolean): boolean {
+  const cur = V as unknown as Record<string, unknown>;
+  return Object.entries(look.v).every(([k, val]) => (k === 'paper' ? blockScope || S.paper === val : cur[k] === val));
 }
 
 export const pickLook = (look: SavedLook): void => setV(lookPatch(look, !!scopeBox()), step('look'));
