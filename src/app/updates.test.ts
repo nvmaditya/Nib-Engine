@@ -12,7 +12,7 @@ import { NewerDocumentError, putDoc } from '@/store/documents';
 import { SAVE_FAILED, SAVE_NEWER, closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
 import { rec } from '@/test/docs';
 import { MEMORY_ID } from './route';
-import { CHECK_EVERY, NEW_VERSION, OFFLINE_READY, RELOAD_FALLBACK, resetUpdatesForTests, startUpdates, updateState } from './updates';
+import { CHECK_EVERY, GIVE_BACK_AFTER, NEW_VERSION, OFFLINE_READY, RELOAD_FALLBACK, resetUpdatesForTests, startUpdates, updateState } from './updates';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => 1) }));
 
@@ -49,8 +49,8 @@ afterEach(async () => {
   act(() => closeImport());
   await closeDocument();
   if (useEditor.getState().docId === MEMORY_ID) useEditor.setState({ docId: null }); // (never closed: nothing would keep it)
+  resetUpdatesForTests(); // (first: its timers go with it, so none says anything into the next test)
   act(() => { for (const t of sonner.getToasts()) sonner.dismiss(t.id); vi.runOnlyPendingTimers(); });
-  resetUpdatesForTests();
   vi.useRealTimers();
   Reflect.deleteProperty(document, 'visibilityState');
   Reflect.deleteProperty(navigator, 'serviceWorker');
@@ -352,5 +352,24 @@ test('once the page is on its way out, nothing takes the focus back into it', as
   expect(document.body).toHaveAttribute('inert');
   const at = document.activeElement;
   expect(at === document.body || !!at?.closest('[inert]')).toBe(true);
+  off(); field.remove();
+});
+
+test('a reload stopped on its way (the browser’s Stop) gives the page back, with the new version offered again', async () => {
+  const off = installFocusMemory();
+  const field = document.createElement('textarea'); document.body.append(field); field.focus();
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(document.body).toHaveAttribute('inert');
+  await settle(GIVE_BACK_AFTER - 500);
+  expect(document.body).toHaveAttribute('inert'); // the new page may just be slow
+  await settle(600); frames(300); // still here: the reload was stopped
+  expect(document.body).not.toHaveAttribute('inert');
+  expect(field).toHaveFocus();
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(2); // (the new version is in charge: it just reloads)
   off(); field.remove();
 });

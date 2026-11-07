@@ -4,6 +4,7 @@
 // was pressed reloads, after writing its last change; every other tab keeps its text and caret and says so.
 import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
 import { SAVE_FAILED, reloadAction, setReloader, takeDownMessage, toast, useEditor, writeBeforeReload } from '@/store/editor';
+import { giveFocusBack, rememberedFocus } from '@/lib/focus';
 import { MEMORY_ID } from './route';
 
 export const NEW_VERSION = 'A new version is ready.';
@@ -12,6 +13,8 @@ export const OFFLINE_READY = 'Nib works offline now.';
 export const CHECK_EVERY = 3_600_000;
 /** How long Reload waits for the new version to take over before it reloads anyway (ms). */
 export const RELOAD_FALLBACK = 3000;
+/** A page still here this long after its reload began had it stopped (the browser's Stop, or Esc): it is given back (ms). */
+export const GIVE_BACK_AFTER = 10_000;
 
 /** No new version known; one is waiting; one has taken over (this tab still runs the old one). */
 export type UpdateState = 'current' | 'waiting' | 'active';
@@ -24,6 +27,7 @@ let reload = (): void => location.reload();
 let asked = false; // this tab pressed Reload while a new version was waiting
 let reloading = false; // on its way: the last change is being written, then the page reloads
 let fallback: ReturnType<typeof setTimeout> | undefined;
+let stopped: ReturnType<typeof setTimeout> | undefined; // gives the page back if the reload never happens
 let stopChecks = (): void => {};
 let putAway = false; // the Import dialog put the message away (as it does every message, for its footer on phones)
 let unfollow = (): void => {};
@@ -87,9 +91,23 @@ async function reloadOnce(): Promise<void> {
     keepPage();
     return;
   }
+  const back = rememberedFocus();
   document.body.setAttribute('inert', ''); // (first: then nothing, sonner's own focus return included, can focus into it)
   (document.activeElement as HTMLElement | null)?.blur?.();
+  clearTimeout(stopped);
+  stopped = setTimeout(() => giveBack(back), GIVE_BACK_AFTER);
   reload();
+}
+
+/**
+ * The reload was stopped (the browser's Stop, or Esc) and this page is still here: everything is written, so give
+ * it back, with the focus where it was, and offer the new version again so Reload can be pressed again.
+ */
+function giveBack(back: HTMLElement | null): void {
+  document.body.removeAttribute('inert');
+  reloading = false; asked = false;
+  giveFocusBack(back);
+  if (state !== 'current') offer();
 }
 
 /**
@@ -101,8 +119,10 @@ function hearTakeover(): () => void {
   const container = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
   if (!container) return () => {};
   const onChange = () => {
-    if (asked) { void reloadOnce(); return; } // this tab pressed Reload
-    if (state === 'waiting') { state = 'active'; offer(); } // another tab did (a first install taking charge is no news)
+    if (state === 'current') return; // a first install taking charge is no news
+    state = 'active';
+    if (asked) void reloadOnce(); // this tab pressed Reload
+    else offer(); // another tab did
   };
   container.addEventListener('controllerchange', onChange);
   return () => container.removeEventListener('controllerchange', onChange);
@@ -162,6 +182,7 @@ export function resetUpdatesForTests(): void {
   unfollow(); unfollow = () => {}; putAway = false;
   unhear(); unhear = () => {};
   document.body.removeAttribute('inert');
+  clearTimeout(stopped); stopped = undefined;
   clearTimeout(fallback); fallback = undefined;
   state = 'current'; applyUpdate = null; asked = false; reloading = false;
   reload = () => location.reload();
