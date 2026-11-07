@@ -24,8 +24,11 @@ const ON = TOOLS.flatMap(t => (t !== 'sep' && t.on ? [t.on] : []));
 
 const STYLES: [TextStyle, string][] = [['paragraph', 'Normal'], ['h1', 'Title'], ['h2', 'Heading'], ['blockquote', 'Note']];
 
+// An editor in a stage or view that isn't shown (hidden and inert) can't be written in, so its tools are off.
+const usable = (e: Editor | null): e is Editor => !!e && !e.isDestroyed && !e.view.dom.closest('[inert]');
+
 // The selection's text style and active marks, as one string so the toolbar redraws only when they change.
-const snapshot = (e: Editor | null) => (e && !e.isDestroyed ? [textStyleOf(e), ...ON.filter(k => e.isActive(k))].join(' ') : '');
+const snapshot = (e: Editor | null) => (usable(e) ? [textStyleOf(e), ...ON.filter(k => e.isActive(k))].join(' ') : '');
 
 // Apple keyboards say ⌘ where others say Ctrl+.
 function modKey(): string {
@@ -44,12 +47,12 @@ export function FormatToolbar({ className }: { className?: string }) {
   }, [editor]);
   const snap = useSyncExternalStore(subscribe, () => snapshot(editor));
   const [style = 'paragraph', ...on] = snap ? snap.split(' ') : [];
-  const off = !editor || editor.isDestroyed, mod = modKey();
+  const off = !usable(editor), mod = modKey();
 
   return (
     <div role="toolbar" aria-label="Formatting" className={cn('flex flex-wrap items-center gap-0.5', className)}>
       <select aria-label="Text style" disabled={off} value={style}
-        onChange={e => { if (editor) setTextStyle(editor, e.target.value as TextStyle); }}
+        onChange={e => { if (usable(editor)) setTextStyle(editor, e.target.value as TextStyle); }}
         className={cn('h-8 rounded-md bg-transparent pr-1 pl-2 text-sm font-medium text-fg hover:bg-surface-2 disabled:opacity-40', ring)}>
         {STYLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
@@ -59,7 +62,7 @@ export function FormatToolbar({ className }: { className?: string }) {
           <button key={t.label} type="button" aria-label={t.label} title={t.keys ? `${t.label} (${mod}${t.keys})` : t.label} disabled={off}
             aria-pressed={t.on ? on.includes(t.on) : undefined}
             onMouseDown={e => e.preventDefault()} // keep the caret in the editor
-            onClick={() => { if (editor) t.run(editor); }}
+            onClick={() => { if (usable(editor)) t.run(editor); }}
             className={cn('inline-flex size-8 items-center justify-center rounded-md text-fg hover:bg-surface-2 aria-pressed:bg-primary-soft aria-pressed:text-primary disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4', ring)}>
             {t.icon}
           </button>

@@ -81,12 +81,12 @@ test('an inactive stage stays in the page but hidden', async () => {
 test('a caret request goes to the Write view on screen, not to a hidden one', async () => {
   location.hash = `#/d/${id}/outline`;
   render(<App />);
-  await screen.findByRole('textbox', { name: 'Block contents' });
+  const outlineEditor = await screen.findByRole('textbox', { name: 'Main text, all pages' }); // Outline's inspector
   await userEvent.click(stageButton('Style'));
   location.hash = `#/d/${id}/write`;
-  await waitFor(() => expect(screen.getAllByRole('textbox', { name: 'Block contents', hidden: true })).toHaveLength(2));
+  const shown = await screen.findByRole('textbox', { name: 'Block contents' }) as HTMLTextAreaElement;
+  expect(outlineEditor.closest('[data-stage]')).toHaveAttribute('data-stage', 'outline');
   act(() => placeCaret('b1', 5));
-  const shown = screen.getByRole('textbox', { name: 'Block contents' }) as HTMLTextAreaElement;
   await waitFor(() => expect(document.activeElement).toBe(shown));
   expect([shown.selectionStart, shown.selectionEnd]).toEqual([5, 5]);
   expect(shown.closest('[data-stage]')).toHaveAttribute('data-stage', 'write');
@@ -111,7 +111,7 @@ test('Escape in a rich-text editor doesn’t leave the block', async () => {
 test('Write goes back to the Write view you used last', async () => {
   location.hash = `#/d/${id}/outline`;
   render(<App />);
-  await screen.findByRole('textbox', { name: 'Block contents' });
+  await screen.findByRole('region', { name: 'Outline' });
   await userEvent.click(stageButton('Style'));
   await search();
   await userEvent.click(stageButton('Write'));
