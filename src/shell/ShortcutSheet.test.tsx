@@ -169,3 +169,90 @@ test('swapped for the palette, the sheet leaves the focus to it, and it comes ba
   fireEvent.keyDown(search, { key: 'Escape' });
   await waitFor(() => expect(document.activeElement).toBe(ed.view.dom));
 });
+
+/* ---------- Where the focus goes back to ---------- */
+
+const button = (name: string) => screen.getByRole('button', { name });
+const later = () => act(async () => { await new Promise(r => setTimeout(r, 20)); }); // the dialogs' closing focus has run
+
+test('a fast reopen still gives the focus back: the page itself, between the two, isn’t remembered', async () => {
+  render(<><Overlays /><button>Plain</button></>);
+  button('Plain').focus();
+  // Each key goes in before the last close has given the focus back (Radix does that on a timer).
+  fireEvent.keyDown(button('Plain'), { key: '/', ctrlKey: true });
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(document.activeElement).toBe(document.body);
+  fireEvent.keyDown(document.body, { key: '/', ctrlKey: true });
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(button('Plain'));
+});
+
+test('nor is a place inside an overlay', async () => {
+  render(<><Overlays /><button>Plain</button><div data-overlay="palette"><button>In the palette</button></div></>);
+  button('Plain').focus();
+  fireEvent.keyDown(button('Plain'), { key: 'k', ctrlKey: true }); // the palette (a stand-in here, with no focus of its own)
+  button('In the palette').focus();
+  fireEvent.keyDown(button('In the palette'), { key: 'k', ctrlKey: true });
+  fireEvent.keyDown(button('In the palette'), { key: '/', ctrlKey: true });
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(button('Plain'));
+});
+
+// Write's stage hidden and inert, and Style's shown, as going to another stage leaves them.
+function goToStyle() {
+  const write = document.querySelector<HTMLElement>('[data-stage="write"]')!, style = document.querySelector<HTMLElement>('[data-stage="style"]')!;
+  act(() => { write.hidden = true; write.setAttribute('inert', ''); style.hidden = false; style.removeAttribute('inert'); });
+}
+
+test('what had the focus is in a stage no longer shown: the focus goes to the first control of the stage on screen', async () => {
+  render(<>
+    <Overlays />
+    <header><a href="#/">Home</a></header>
+    <div data-stage="write"><button>In Write</button></div>
+    <div data-stage="style" hidden inert>
+      <p>Style</p><button disabled>Off</button><fieldset disabled><button>Off with its group</button></fieldset><button>New variation</button>
+    </div>
+  </>);
+  button('In Write').focus();
+  fireEvent.keyDown(button('In Write'), { key: '/', ctrlKey: true });
+  goToStyle();
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(button('New variation'));
+});
+
+test('with nothing to take it in the stage on screen, the top bar’s first control has it', async () => {
+  render(<>
+    <Overlays />
+    <header><a href="#/">Home</a><button>Menu</button></header>
+    <div data-stage="write"><button>In Write</button></div>
+    <div data-stage="style" hidden inert><p>Nothing to press yet</p></div>
+  </>);
+  button('In Write').focus();
+  fireEvent.keyDown(button('In Write'), { key: '/', ctrlKey: true });
+  goToStyle();
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Home' }));
+});
+
+test('and so does a closing that finds what had the focus gone', async () => {
+  const { rerender } = render(<><Overlays /><header><a href="#/">Home</a></header><button>Gone soon</button></>);
+  button('Gone soon').focus();
+  fireEvent.keyDown(button('Gone soon'), { key: '/', ctrlKey: true });
+  rerender(<><Overlays /><header><a href="#/">Home</a></header></>);
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Home' }));
+});
+
+test('or in a part made inert, though still shown', async () => {
+  render(<><Overlays /><header><a href="#/">Home</a></header><div data-stage="write"><div inert><button>Inert</button></div><button>Live</button></div></>);
+  act(() => { button('Inert').focus(); }); // (jsdom lets an inert control take the focus, so it gets here at all)
+  fireEvent.keyDown(document.activeElement!, { key: '/', ctrlKey: true });
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(button('Live'));
+});

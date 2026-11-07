@@ -6,10 +6,14 @@ export type Overlay = 'palette' | 'shortcuts';
 
 export const useOverlays = create<{ open: Overlay | null }>()(() => ({ open: null }));
 
-// What had the focus when the first overlay opened, to have it back when the last one closes.
+// What had the focus when the first overlay opened, to have it back when the last one closes. The page itself
+// and a place inside an overlay are never taken for it: a key that opens one again before the last one's
+// closing has given the focus back (Radix does that on a timer, which runs after the keys already waiting)
+// finds the focus there, and what had it before is still the place to go back to.
 let before: HTMLElement | null = null;
 function show(open: Overlay | null): void {
-  if (open && !useOverlays.getState().open) before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const el = document.activeElement;
+  if (open && !useOverlays.getState().open && el instanceof HTMLElement && el !== document.body && !el.closest('[data-overlay]')) before = el;
   useOverlays.setState({ open });
 }
 
@@ -21,17 +25,30 @@ export const toggleOverlay = (o: Overlay): void => show(useOverlays.getState().o
 
 export const closeOverlay = (): void => show(null);
 
+const CONTROLS = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+
+// Focus `el` if it can take the focus (still in the page, and not in a stage or part that is hidden or inert,
+// where focus() does nothing); whether it took it.
+function focusOn(el: HTMLElement | null): boolean {
+  if (!el?.isConnected || el.closest('[inert], [hidden]')) return false;
+  el.focus({ preventScroll: true });
+  return document.activeElement === el;
+}
+const focusFirstIn = (root: Element | null): boolean => !!root && [...root.querySelectorAll<HTMLElement>(CONTROLS)].some(focusOn);
+
 /**
  * An overlay's `onCloseAutoFocus`. A modal Radix dialog gives the focus to its trigger when it closes, and the
  * overlays have none, so the focus would be left on the page itself. Instead it goes back to what had it before
- * the first overlay opened (if that is still there), or stays in the overlay that took this one's place.
+ * the first overlay opened, or stays in the overlay that took this one's place. When that can't take it any more
+ * (gone, or in a stage no longer shown), it goes to the first control in the stage on screen, else the top bar's.
  */
 export function focusBack(e: Event): void {
   e.preventDefault();
   if (useOverlays.getState().open) return;
   const el = before;
   before = null;
-  if (el?.isConnected) el.focus({ preventScroll: true });
+  if (!el || focusOn(el)) return;
+  if (!focusFirstIn(document.querySelector('[data-stage]:not([hidden])'))) focusFirstIn(document.querySelector('header'));
 }
 
 // Another dialog or menu: not a sheet that stays open beside the page (aria-modal="false") and not one of ours.
