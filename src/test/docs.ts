@@ -5,6 +5,8 @@ import { vi } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
 import { computeLayout, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Layout, Settings } from '@/engine/types';
+import { getDb } from '@/store/db';
+import * as documents from '@/store/documents';
 import type { DocRecord } from '@/store/documents';
 import { closeDocument, openDocument, useEditor } from '@/store/editor';
 
@@ -33,10 +35,29 @@ export function layoutOf(doc: EngineDoc, S: Settings = cleanSettings(null, false
 /**
  * Open `doc` as document `dA`. Every test opens that same id, so whatever is open is left first (as
  * Home does): what is kept for the open document only, Style's panel say, starts afresh each time.
+ *
+ * It is put in storage too, as it was opened, so its saves go through: one that found it missing would close
+ * it as deleted in another tab, as soon as a test ran past the 400 ms a save waits. Storage writes in the order
+ * writes start, so the save of the document left above comes first, and any save from here on after this one.
+ * Nothing is stored where saves don't really write (the test file mocks putDoc), nor under fake timers, which
+ * fake-indexeddb's own timers would wait on.
  */
 export function open(doc: EngineDoc): void {
   void closeDocument();
-  openDocument(rec('A', doc));
+  const r = rec('A', doc);
+  if (savesWrite() && !vi.isFakeTimers()) void store(r);
+  openDocument(r);
+}
+
+/** Saves really write here: the test file doesn't mock putDoc. (A mock of the module without it saves nowhere either.) */
+function savesWrite(): boolean {
+  try { return !vi.isMockFunction(documents.putDoc); } catch { return false; }
+}
+
+/** `r` put in storage as a document no session has saved yet. (Storage blocked on purpose stays blocked: its saves fail, as there.) */
+async function store(r: DocRecord): Promise<void> {
+  const copy = { ...structuredClone(r), schema: documents.DOC_SCHEMA };
+  try { await (await getDb()).put('documents', copy); } catch { /* as above */ }
 }
 
 /**
