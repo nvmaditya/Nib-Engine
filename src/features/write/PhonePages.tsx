@@ -141,7 +141,7 @@ export function PhonePages({ layout }: { layout: PageLayout | null }) {
                   <Button variant="ghost" size="icon" aria-label="Next page" title="Next page" disabled={cur >= pages - 1} onClick={() => go(cur + 1)}>
                     <ChevronRight />
                   </Button>
-                  <PageMenu page={cur} pages={pages} onMoved={setWant} />
+                  <PageMenu page={cur} pages={pages} onShow={setWant} />
                 </div>
                 <div className="ml-auto">
                   <Segmented label="Show">
