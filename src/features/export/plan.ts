@@ -1,5 +1,6 @@
 import { PAGE_H, PAGE_W } from '@/engine/config.js';
 import { cleanName } from '@/engine/core.js';
+import type { Seg } from '@/engine/types';
 import { pagesWord } from '@/features/style/fit';
 
 export type Format = 'pdf' | 'png' | 'jpg';
@@ -81,6 +82,18 @@ export function failMessage(plan: ExportPlan): string {
 }
 
 export const savedMessage = (names: string[]): string => (names.length === 1 ? `Saved ${names[0]}` : `Saved ${names.length} images`);
+
+/**
+ * The page the size estimate measures: of the `chosen` pages, the one with the most writing, counted as
+ * the rows its parts write on (a blank row writes nothing), so a short cover page doesn't make the size
+ * read low. On a tie, the first of them; null with no page chosen.
+ */
+export function fullestPage(segs: readonly Pick<Seg, 'page' | 'rows'>[], chosen: readonly number[]): number | null {
+  if (!chosen.length) return null;
+  const rows = new Map<number, number>();
+  for (const s of segs) rows.set(s.page, (rows.get(s.page) ?? 0) + s.rows.filter(r => r.kind !== 'blank').length);
+  return chosen.reduce((best, p) => ((rows.get(p) ?? 0) > (rows.get(best) ?? 0) ? p : best));
+}
 
 export const PDF_OVERHEAD = { base: 300, perPage: 480 };
 

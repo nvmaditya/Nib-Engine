@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest';
 import { PAGE_H, PAGE_W } from '@/engine/config.js';
+import type { Row } from '@/engine/types';
 import {
-  chosenPages, downloadLabel, downloadNames, estimateBytes, exportBase, failMessage, formatSize, PRINT_RATIO, QUALITY,
+  chosenPages, downloadLabel, downloadNames, estimateBytes, exportBase, failMessage, formatSize, fullestPage, PRINT_RATIO, QUALITY,
   planOf, savedMessage, suffixShown, whatIsMade, zipNames, type ExportPlan, type Sample,
 } from './plan';
 
@@ -55,3 +56,24 @@ test('planOf gathers the choices', () => {
 });
 test('whatIsMade', () => expect([P(), P({ format: 'png' }), P({ format: 'jpg', zip: false }), P({ format: 'jpg', pages: [0] }), P({ format: 'png', pages: [] })].map(whatIsMade))
   .toEqual(['PDF', 'ZIP', 'images', 'JPG', 'PNG']));
+
+/** A part on `page` writing on `text` rows, with `blank` empty rows and `hr` drawn lines among them. */
+const part = (page: number, text: number, blank = 0, hr = 0) => ({
+  page, rows: [...Array(text).fill('text'), ...Array(blank).fill('blank'), ...Array(hr).fill('hr')].map((kind): Row => ({ kind, ruleY: 0, src: { li: 0, tok: 0 } })),
+});
+test('the estimate measures the chosen page with the most writing, not a short cover page', () => {
+  const segs = [part(0, 1), part(1, 28), part(2, 12)];
+  expect(fullestPage(segs, [0, 1, 2])).toBe(1);
+  expect(fullestPage(segs, [0, 2])).toBe(2); // the fullest left out: the fullest of the rest
+  expect(fullestPage(segs, [0])).toBe(0);
+  expect(fullestPage(segs, [])).toBeNull();
+});
+test('a page’s writing is every part on it, and a blank row writes nothing', () => {
+  expect(fullestPage([part(0, 10), part(1, 6), part(1, 5, 0, 1)], [0, 1])).toBe(1); // a margin note and a text block, and a drawn line
+  expect(fullestPage([part(0, 10), part(1, 2, 20)], [0, 1])).toBe(0);
+});
+test('on a tie, or with nothing written, it is the first chosen page', () => {
+  expect(fullestPage([part(0, 5), part(1, 5)], [1, 0])).toBe(1);
+  expect(fullestPage([], [2, 3])).toBe(2);
+  expect(fullestPage([part(0, 5)], [2, 3])).toBe(2); // pages with no part on them
+});
