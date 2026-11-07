@@ -3,13 +3,7 @@
 import { useEffect } from 'react';
 import { isModKey } from '@/lib/keys';
 import { openOverlay, otherModalOpen, toggleOverlay } from './overlays';
-
-// A field or an editor, where `?` is just typed (M1's rule, as in useUndoShortcuts).
-const typing = (t: EventTarget | null): boolean => {
-  const el = t as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable || !!el.closest?.('[contenteditable="true"], [contenteditable=""]');
-};
+import { typing } from './typing';
 
 export function useAppShortcuts(): void {
   useEffect(() => {

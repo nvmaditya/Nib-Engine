@@ -1,11 +1,6 @@
 import { useEffect } from 'react';
 import { undo, redo } from '@/store/editor';
-
-const typing = (t: EventTarget | null): boolean => {
-  const el = t as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable;
-};
+import { typing } from './typing';
 
 export function useUndoShortcuts(): void {
   useEffect(() => {
