@@ -193,3 +193,29 @@ test('the choices outlive the panel, so crossing 860 px keeps them', () => {
   expect(screen.getByRole('checkbox', { name: 'Include page 1' })).not.toBeChecked();
   expect(useExportPrefs.getState().format).toBe('png');
 });
+
+test('a page left out past the end stays forgotten when the document grows again', () => {
+  useExportPick.setState({ choose: false, out: [] }); open(docOf(box({ id: 'm', text: lines(60) }))); // 3 pages
+  const three = pageLayout();
+  const { rerender } = render(<ExportStage layout={three} />);
+  act(() => { setChoose(true); togglePage(2); });
+  expect(screen.getByText('Page 3 of 3 · left out')).toBeInTheDocument();
+  rerender(<ExportStage layout={{ ...three, pages: 2 }} />);
+  rerender(<ExportStage layout={three} />);
+  expect(screen.getByText('Page 3 of 3')).toBeInTheDocument();
+  expect(useExportPick.getState().out).toEqual([]);
+  expect(screen.getByText('Click a page to leave it out or put it back. 3 of 3 chosen.')).toBeInTheDocument();
+});
+
+test('while the handwriting loads, no page count is shown and the choice is kept', () => {
+  useExportPick.setState({ choose: false, out: [] }); open(docOf(box({ id: 'm', text: lines(60) })));
+  const { rerender } = render(<ExportStage layout={pageLayout()} />);
+  act(() => { setChoose(true); togglePage(2); });
+  rerender(<ExportStage layout={null} />);
+  expect(useExportPick.getState().out).toEqual([2]);
+  expect(screen.getByRole('radio', { name: 'All pages' })).toBeInTheDocument();
+  expect(screen.queryByText(/chosen\./)).toBeNull();
+  expect(screen.queryByRole('button', { name: /1 page/ })).toBeNull();
+  rerender(<ExportStage layout={pageLayout()} />);
+  expect(screen.getByText('Page 3 of 3 · left out')).toBeInTheDocument();
+});

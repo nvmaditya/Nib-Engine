@@ -41,6 +41,10 @@ export const setChoose = (on: boolean): void => useExportPick.setState({ choose:
 export const togglePage = (i: number): void =>
   useExportPick.setState(s => ({ out: s.out.includes(i) ? s.out.filter(p => p !== i) : [...s.out, i].sort((a, b) => a - b) }));
 
+/** The document has `pages` pages now: pages left out past its end are forgotten, so they don't come back if it grows again. */
+export const forgetPast = (pages: number): void =>
+  useExportPick.setState(s => (s.out.some(i => i >= pages) ? { out: s.out.filter(i => i < pages) } : s));
+
 useEditor.subscribe((s, prev) => {
   if (s.docId !== prev.docId) useExportPick.setState({ choose: false, out: [] });
 });

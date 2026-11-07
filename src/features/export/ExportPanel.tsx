@@ -62,7 +62,8 @@ function Toggle({ name, checked, onChange }: { name: string; checked: boolean; o
   );
 }
 
-export function ExportPanel({ pages }: { pages: number }) {
+/** `pages` is null while the handwriting loads: the page count isn't known, so the panel shows none. */
+export function ExportPanel({ pages }: { pages: number | null }) {
   const active = useStageActive();
   useEditor(s => (active ? s.version : -1)); // redraw on every change only while the stage is shown
   useEditor(s => s.fontTick); // a hand's file arriving lets Download go
@@ -85,13 +86,14 @@ export function ExportPanel({ pages }: { pages: number }) {
     if (b.isConnected && (!now || now === document.body)) b.focus();
   }, [busy]);
 
-  const plan = planOf({ format, zip, quality }, { choose, out }, pages, fileName, title);
+  const known = pages !== null;
+  const plan = planOf({ format, zip, quality }, { choose, out }, pages ?? 1, fileName, title);
   const n = plan.pages.length;
   const sample = useSizeEstimate(plan.pages[0] ?? null);
   const progress = making(run);
-  const size = !progress && n && sample ? formatSize(estimateBytes(plan, sample)) : null;
+  const size = known && !progress && n && sample ? formatSize(estimateBytes(plan, sample)) : null;
   const waiting = !fontsInUse().every(fontReady);
-  const off = !n || run.kind !== null || waiting;
+  const off = !known || !n || run.kind !== null || waiting;
   const why = waiting ? WAITING : undefined;
 
   // One edit of the name, from its first keystroke to leaving the field, is one undo step.
@@ -110,7 +112,7 @@ export function ExportPanel({ pages }: { pages: number }) {
           <Segmented label="Format">
             {FORMATS.map(([f, name]) => <SegButton key={f} pressed={format === f} onClick={() => setExportPrefs({ format: f })}>{name}</SegButton>)}
           </Segmented>
-          {format !== 'pdf' && n > 1 && (
+          {known && format !== 'pdf' && n > 1 && (
             <>
               <Toggle name="Put the images in one ZIP" checked={zip} onChange={v => setExportPrefs({ zip: v })} />
               <Hint>{`One file to send or upload, instead of ${n}.`}</Hint>
@@ -120,10 +122,10 @@ export function ExportPanel({ pages }: { pages: number }) {
 
         <Group title="Pages">
           <RadioGroup value={choose ? 'choose' : 'all'} aria-label="Pages" className="gap-2.5" onValueChange={v => setChoose(v === 'choose')}>
-            <Label className="cursor-pointer font-normal"><RadioGroupItem value="all" />{`All pages (${pages})`}</Label>
+            <Label className="cursor-pointer font-normal"><RadioGroupItem value="all" />{known ? `All pages (${pages})` : 'All pages'}</Label>
             <Label className="cursor-pointer font-normal"><RadioGroupItem value="choose" />Choose pages</Label>
           </RadioGroup>
-          {choose && <Hint>{`Click a page to leave it out or put it back. ${n} of ${pages} chosen.`}</Hint>}
+          {choose && <Hint>{known ? `Click a page to leave it out or put it back. ${n} of ${pages} chosen.` : 'Click a page to leave it out or put it back.'}</Hint>}
         </Group>
 
         <Group title="How it looks">
@@ -160,13 +162,13 @@ export function ExportPanel({ pages }: { pages: number }) {
         </Group>
       </div>
 
-      <div className="flex-none border-t border-line px-5 pt-3 pb-[calc(0.875rem+env(safe-area-inset-bottom))]">
+      <div className="flex-none border-t border-line px-5 pt-3 pb-[calc(0.875rem+env(safe-area-inset-bottom))] wide:pb-3.5">
         <div className="flex gap-2">
           {/* (pointer events stay on while disabled, so the title shows on hover) */}
           <Button size="lg" className="min-w-0 flex-1 px-4 disabled:pointer-events-auto disabled:hover:bg-primary" disabled={off} title={why}
             onClick={e => { pressed.current = e.currentTarget; void download(); }}>
             {run.kind ? <Loader2 className="animate-spin" /> : <Download />}
-            <span className="min-w-0 truncate">{progress ?? downloadLabel(plan)}</span>
+            <span className="min-w-0 truncate">{progress ?? (known ? downloadLabel(plan) : format === 'pdf' ? 'Download PDF' : 'Download')}</span>
             {size && <>{' '}<span className="flex-none font-normal opacity-80">{size}</span></>}
           </Button>
           {/* (Its name shows as its title: with the word beside it, the Download button would have no room
