@@ -122,6 +122,17 @@ test('…and only the block it carries on loses its blank end', () => {
   expect(layoutOf(r.doc, S).segs.some(s => s.pushed)).toBe(false);
 });
 
+test('…and starts after every other block’s end, blank lines and all', () => {
+  const r = append(docOf(box({ id: 'a', name: 'Main text', w: 300, text: lines(5) + '\n'.repeat(30) }), box({ id: 'b', name: 'Text block', color: 1, x: 440, w: 300, text: lines(20) })));
+  expect([r.joined, r.firstPage, r.target.page, r.doc.boxes.map(b => b.text)]).toEqual([false, 2, 2, [lines(5) + '\n'.repeat(30), lines(20), 'x']]);
+  expect(layoutOf(r.doc, S).segs.some(s => s.pushed)).toBe(false);
+});
+
+test('…and a block it doesn’t go into in the end keeps its blank lines', () => {
+  const r = append(docOf(box({ id: 'm', name: 'Main text', text: '\n\n' }), box({ id: 'n', kind: 'note', name: 'Margin note', color: 1, x: 520, y: 416, w: 220, text: 'note' })));
+  expect([r.joined, r.target.page, r.doc.boxes.map(b => b.text)]).toEqual([false, 1, ['\n\n', 'note', 'x']]);
+});
+
 test('…an empty block below a header beside it starts on the line under the header, and pushes nothing', () => {
   const d = newDocument(S, '', null), h = newBlock(S, d, 'header', 0) as Box;
   const r = append(d, lines(600)), L = layoutOf(r.doc, S), main = r.doc.boxes[0], m = partsOf(L, main.id);
