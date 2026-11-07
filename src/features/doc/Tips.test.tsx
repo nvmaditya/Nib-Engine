@@ -301,10 +301,35 @@ test('leaving the document takes the room away with the card', async () => {
   } finally { Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height); }
 });
 
+/** app.css's rule that lifts the messages above the card; its selector is the first group. */
+const LIFT = /@media \(width < 64\.25rem\) \{\s*(body:has\(\[data-tips\]\)[^{]* \[data-sonner-toaster\]\[data-y-position='bottom'\]) \{\s*bottom: calc\(var\(--tips-room, 0px\) \+ 0\.75rem\);\s*\}\s*\}/;
+
 test('while the card shows, a message rises above it and never covers Got it: below 860 px, and up to 1028 px, where a centred message still reaches the card', () => {
   // (--tips-room is the card's height and the gap below it; a stage's sheet puts the card away, and its own rule,
   // later in the file, places the messages then.)
-  expect(appCss).toMatch(/@media \(width < 64\.25rem\) \{\s*body:has\(\[data-tips\]\) \[data-sonner-toaster\]\[data-y-position='bottom'\] \{\s*bottom: calc\(var\(--tips-room, 0px\) \+ 0\.75rem\);\s*\}\s*\}/);
+  expect(appCss).toMatch(LIFT);
   const at = (rule: string) => appCss.indexOf(rule);
-  expect(at('body:has([data-tips]) [data-sonner-toaster]')).toBeLessThan(at('body:has([data-vaul-drawer]) [data-sonner-toaster]'));
+  expect(at('body:has([data-tips])')).toBeLessThan(at('body:has([data-vaul-drawer]) [data-sonner-toaster]'));
+});
+
+test('…but not while a dialog covers the card (the palette, the shortcut sheet, Import): a message stays along the bottom, never mid-way down the dialog', () => {
+  const selector = appCss.match(LIFT)![1];
+  // What the dialog adds weighs nothing (:where), so under a stage's sheet the sheets' rule, as heavy and later in
+  // the file, still places the messages.
+  expect(selector).toMatch(/^body:has\(\[data-tips\]\):where\(.+\) \[data-sonner-toaster\]\[data-y-position='bottom'\]$/);
+  const page = document.createElement('div');
+  page.innerHTML = '<aside data-tips></aside><section data-sonner-toaster data-y-position="bottom"></section>';
+  document.body.append(page);
+  const toaster = page.querySelector('[data-sonner-toaster]')!;
+  try {
+    expect(toaster.matches(selector)).toBe(true);
+    for (const slot of ['dialog-overlay', 'alert-dialog-overlay']) {
+      const overlay = document.createElement('div');
+      overlay.dataset.slot = slot;
+      document.body.append(overlay); // (Radix puts a dialog's overlay in a portal at the end of the page)
+      expect(toaster.matches(selector)).toBe(false);
+      overlay.remove();
+    }
+    expect(toaster.matches(selector)).toBe(true);
+  } finally { page.remove(); }
 });
