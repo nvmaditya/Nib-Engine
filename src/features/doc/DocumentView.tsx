@@ -15,7 +15,7 @@ import { ImportDialog } from '@/features/import/ImportDialog';
 import { closeImport, openImport, select } from './actions';
 import { StageHost } from './StageHost';
 import { Tips } from './Tips';
-import { showTipsIfDue } from './tips';
+import { showTipsIfDue } from './tipsSeen';
 
 /** Fetch the font files the document needs, and lay the pages out again once they arrive. */
 function usePageLayout(): PageLayout | null {

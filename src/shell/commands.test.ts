@@ -8,7 +8,7 @@ import { setThemePref } from '@/lib/theme';
 import { get, rec } from '@/test/docs';
 import { flushSave, openDocument } from '@/store/editor';
 import { paletteCommands, type CommandContext } from './commands';
-import { closeOverlay, openOverlay, useOverlays } from './overlays';
+import { closeOverlay, openOverlay, useOverlays } from './overlayStore';
 
 vi.mock('@/features/doc/actions', async orig => ({ ...(await orig<typeof import('@/features/doc/actions')>()), openImport: vi.fn() }));
 vi.mock('@/features/home/actions', async orig => ({ ...(await orig<typeof import('@/features/home/actions')>()), openImportPicker: vi.fn() }));

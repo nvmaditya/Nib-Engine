@@ -10,7 +10,7 @@ import { openTemplate } from '@/features/home/templates';
 import { pickDocumentLook, STYLE_LOOKS } from '@/features/style/looks';
 import type { SavedLook } from '@/features/style/prefs';
 import { setThemePref, type ThemePref } from '@/lib/theme';
-import { focusBeforeOverlay, openOverlay } from './overlays';
+import { focusBeforeOverlay, openOverlay } from './overlayStore';
 
 export type CommandGroupName = 'Go to' | 'Documents' | 'Create' | 'Export' | 'Looks for the whole document' | 'Theme' | 'Help';
 

@@ -1,6 +1,6 @@
 // The app's own overlays and the keys that open them, mounted once outside the stages.
 import { CommandPalette } from './CommandPalette';
-import { closeOverlay, openOverlay, useOverlays } from './overlays';
+import { closeOverlay, openOverlay, useOverlays } from './overlayStore';
 import { ShortcutSheet } from './ShortcutSheet';
 import { useAppShortcuts } from './useAppShortcuts';
 

@@ -104,7 +104,7 @@ test('the card showing takes no focus from what has it', async () => {
   noTips();
   const field = await nameField();
   act(() => field.focus());
-  const { showTipsIfDue } = await import('./tips'); // this page's own copy
+  const { showTipsIfDue } = await import('./tipsSeen'); // this page's own copy
   localStorage.removeItem('nib.tips');
   act(() => showTipsIfDue());
   expect(await tips()).toBeInTheDocument();

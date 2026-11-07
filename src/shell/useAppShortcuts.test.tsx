@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { closeOverlay, otherModalOpen, useOverlays } from './overlays';
+import { closeOverlay, otherModalOpen, useOverlays } from './overlayStore';
 import { useAppShortcuts } from './useAppShortcuts';
 
 function Harness() { useAppShortcuts(); return <><input aria-label="Field" /><div contentEditable aria-label="Editor" /><button>Plain</button></>; }
