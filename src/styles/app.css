@@ -134,9 +134,11 @@
     background: transparent;
     box-shadow: none;
   }
+  /* Greyed as well as faded: on the light desk, fading alone leaves a pale page that still looks chosen. */
   .sheet.left-out .paper > :not(.pick) {
     opacity: 0.35;
-    transition: opacity 150ms;
+    filter: grayscale(1);
+    transition: opacity 150ms, filter 150ms;
   }
   .paper {
     position: relative;

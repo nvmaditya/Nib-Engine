@@ -86,6 +86,23 @@ test('on a phone, the sheet opens up to just below the stage switcher, rests as 
   } finally { restore(); }
 });
 
+test('on a phone with a home indicator, the sheet rests that much higher, so its footer shows above it', async () => {
+  phone(); const restore = stageAt89('export');
+  const css = window.getComputedStyle;
+  // (The home indicator's height is what env(safe-area-inset-bottom) comes to, read from an element padded by it.)
+  const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, p) =>
+    el instanceof HTMLElement && el.dataset.safeBottom !== undefined ? ({ paddingBottom: '34px' } as CSSStyleDeclaration) : css.call(window, el, p));
+  try {
+    await openApp('export');
+    await screen.findByRole('dialog', { name: 'Export' });
+    screen.getByRole('button', { name: 'Drag to show more or less of Export' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(room()).toBe('679px'));
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(room()).toBe('202px'));
+  } finally { spy.mockRestore(); restore(); }
+});
+
 test('on a phone, Style still rests as low as 148 px', async () => {
   phone(); const restore = stageAt89('style');
   try {
@@ -97,6 +114,35 @@ test('on a phone, Style still rests as low as 148 px', async () => {
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(room()).toBe('148px'));
   } finally { restore(); }
+});
+
+test('on a phone, Style and Export each keep the height their sheet was left at', async () => {
+  phone();
+  const rect = HTMLElement.prototype.getBoundingClientRect;
+  const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return this.parentElement?.dataset.stage ? new DOMRect(0, 89, 390, 679) : rect.call(this);
+  });
+  try {
+    await openApp('export');
+    await screen.findByRole('dialog', { name: 'Export' });
+    screen.getByRole('button', { name: 'Drag to show more or less of Export' }).focus();
+    await userEvent.keyboard('{Enter}'); // Export's to the top
+    await waitFor(() => expect(room()).toBe('679px'));
+    await userEvent.click(stageButton('Style'));
+    await screen.findByRole('dialog', { name: 'Style' });
+    expect(room()).toBe('55dvh'); // Style's starts at about half, whatever Export's is at
+    screen.getByRole('button', { name: 'Drag to show more or less of Style' }).focus();
+    await userEvent.keyboard('{Enter}'); // Style's to the top, then down to its lowest
+    await waitFor(() => expect(room()).toBe('679px'));
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(room()).toBe('148px'));
+    await userEvent.click(stageButton('Export'));
+    await screen.findByRole('dialog', { name: 'Export' });
+    expect(room()).toBe('679px');
+    await userEvent.click(stageButton('Style'));
+    await screen.findByRole('dialog', { name: 'Style' });
+    expect(room()).toBe('148px');
+  } finally { spy.mockRestore(); }
 });
 
 test('on a phone, the sheet doesn’t keep Escape from leaving the block', async () => {

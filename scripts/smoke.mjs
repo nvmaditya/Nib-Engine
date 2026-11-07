@@ -183,7 +183,7 @@ async function main() {
       await page.getByRole('navigation', { name: 'Stages' }).getByRole('button', { name: /Export$/ }).click();
       const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 30000 }),
-        page.getByRole('button', { name: 'Download PDF' }).click(),
+        page.getByRole('button', { name: /^Download PDF/ }).click(),
       ]);
       const name = download.suggestedFilename();
       if (!name.endsWith('.pdf')) fail(`the download is called ${name}`);

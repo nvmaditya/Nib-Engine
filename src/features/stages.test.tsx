@@ -64,10 +64,10 @@ test('a document with the fold crease on can turn it off, and then the switch go
 test('Export shows the download controls', async () => {
   location.hash = `#/d/${id}/export`;
   render(<App />);
-  expect(await screen.findByRole('button', { name: 'Download PDF' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Download page 1 as PNG' })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /^Download PDF · 1 page/ })).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'Format' })).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: 'File name' })).toBeInTheDocument();
-  expect(screen.getByRole('switch', { name: 'Camera tilt' })).toBeInTheDocument();
+  expect(screen.getByRole('switch', { name: 'Slight camera tilt' })).toBeInTheDocument();
 });
 
 test('switching stages keeps the Style search', async () => {
