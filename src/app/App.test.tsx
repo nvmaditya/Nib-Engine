@@ -5,17 +5,26 @@ import { FONTS } from '@/engine/config.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { addFontFile, FONT_KEY_PREFIX, fontId } from '@/features/style/fonts';
 import { useStylePrefs } from '@/features/style/prefs';
-import { box, docOf } from '@/test/docs';
+import { box, docOf, rec as record } from '@/test/docs';
 import { fontFile, paragraphs, realFonts } from '@/test/fonts';
 import { deleteBlock } from '@/features/doc/actions';
 import { createDoc, getDoc, setPref } from '@/store/documents';
-import { flushSave, update, useEditor } from '@/store/editor';
+import { closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { App } from './App';
 import { parseHash } from './route';
 
-// Messages outlive a test (sonner keeps them in a module); start each test without any.
-afterEach(() => { act(() => { sonner.dismiss(); }); });
+// Messages outlive a test: sonner keeps them in a module, and the editor the ones it said, to take them down by id when
+// a document opens next. Sonner hands that to its Toaster a frame later, so the next test's Toaster would redraw then,
+// outside act if that test is awaiting another tab, say. So each test starts without any, before its app is there:
+// opening a document takes the editor's down (whatever was open), and a frame lets sonner do it with no Toaster to redraw.
+beforeEach(async () => {
+  await flushSave();
+  openDocument(record('Before', ''));
+  await closeDocument();
+  sonner.dismiss();
+  await new Promise(r => requestAnimationFrame(r));
+});
 
 const docName = () => screen.findByRole('textbox', { name: 'Document name' });
 const openId = () => { const r = parseHash(location.hash); return r.name === 'doc' ? r.id : ''; };
