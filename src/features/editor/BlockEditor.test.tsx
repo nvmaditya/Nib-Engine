@@ -76,6 +76,21 @@ test('Ctrl+Z in the editor undoes through the app history and puts the caret at 
   expect(text()).toMatch(/^# The Water Cycle!/);
 });
 
+test('a paste and each formatting change are undo steps of their own, between bursts of typing', async () => {
+  setup('');
+  type('one');
+  act(() => { ed.view.pasteText(' two'); });
+  type(' three');
+  select(0, 3);
+  await userEvent.click(screen.getByRole('button', { name: 'Bold' }));
+  fireEvent.keyDown(ed.view.dom, { key: 'u', ctrlKey: true });
+  await userEvent.click(screen.getByRole('button', { name: 'Numbered list' }));
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Text style' }), 'Heading');
+  const steps = [text()];
+  while (get().canUndo) { act(() => undo()); steps.push(text()); }
+  expect(steps).toEqual(['## **_one_** two three', '1. **_one_** two three', '**_one_** two three', '**one** two three', 'one two three', 'one two', 'one', '']);
+});
+
 test('undo from the browser menu goes through the app history too', () => {
   setup();
   act(() => { ed.commands.insertContentAt(16, '!'); });

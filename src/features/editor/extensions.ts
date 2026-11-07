@@ -4,7 +4,7 @@
 import { Extension, markInputRule, type AnyExtension, type Editor, type Range } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey, Selection, type Transaction } from '@tiptap/pm/state';
-import { canSplit } from '@tiptap/pm/transform';
+import { AddMarkStep, canSplit, RemoveMarkStep } from '@tiptap/pm/transform';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Placeholder } from '@tiptap/extensions';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
@@ -22,6 +22,18 @@ function historyStep(boxId: string, again: boolean): boolean {
   const after = textOf(boxId);
   if (before !== null && after !== null && before !== after) placeCaret(boxId, firstDiff(before, after));
   return true; // never the browser's own undo
+}
+
+/** Meta for a change made by a formatting command (a tool, a text style, a list, a page break, an indent). */
+export const FORMAT_STEP = 'nibFormatStep';
+
+/**
+ * Whether a change is an undo step of its own rather than part of a burst of typing: a paste, drop or cut,
+ * a formatting command, or a change of marks alone (Ctrl+B on a selection).
+ */
+export function ownStep(tr: Transaction): boolean {
+  if (tr.getMeta('paste') || ['paste', 'drop', 'cut'].includes(tr.getMeta('uiEvent')) || tr.getMeta(FORMAT_STEP)) return true;
+  return tr.steps.length > 0 && tr.steps.every(st => st instanceof AddMarkStep || st instanceof RemoveMarkStep);
 }
 
 /* ---------- Page breaks ---------- */
@@ -76,7 +88,7 @@ export function pageBreakInto(tr: Transaction): boolean {
     at = $from.pos + $from.depth;
   } else at = $from.after(1);
   continueNumbering(tr, at);
-  tr.insert(at, type.create());
+  tr.insert(at, type.create()).setMeta(FORMAT_STEP, true);
   if (sel instanceof NodeSelection || !$from.parent.isTextblock) tr.setSelection(Selection.near(tr.doc.resolve(at + 1)));
   tr.scrollIntoView();
   return true;
@@ -96,7 +108,7 @@ export function textStyleOf(e: Editor): TextStyle {
 
 /** Make the selected lines Normal, Title, Heading or Note (replacing `range` first, for the / menu). */
 export function setTextStyle(e: Editor, style: TextStyle, range?: Range): boolean {
-  let c = e.chain().focus();
+  let c = e.chain().focus().setMeta(FORMAT_STEP, true);
   if (range) c = c.deleteRange(range);
   if (style === 'paragraph') c = c.clearNodes();
   else if (style === 'blockquote') c = e.isActive('blockquote') ? c : c.clearNodes().setBlockquote();
@@ -109,7 +121,7 @@ export function setTextStyle(e: Editor, style: TextStyle, range?: Range): boolea
 export interface SlashItem { label: string; run(e: Editor, range: Range): void }
 
 const list = (name: 'bulletList' | 'orderedList') => (e: Editor, r: Range) => {
-  const c = e.chain().focus().deleteRange(r);
+  const c = e.chain().focus().setMeta(FORMAT_STEP, true).deleteRange(r);
   if (e.isActive(name)) c.run();
   else (name === 'bulletList' ? c.toggleBulletList() : c.toggleOrderedList()).run();
 };
@@ -169,7 +181,7 @@ function indentBy(e: Editor, d: number): boolean {
     const n = Math.max(0, Math.min(3, (node.attrs.indent ?? 0) + d));
     if (n !== node.attrs.indent) tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: n });
   }
-  if (tr.docChanged) e.view.dispatch(tr);
+  if (tr.docChanged) e.view.dispatch(tr.setMeta(FORMAT_STEP, true));
   return true;
 }
 

@@ -4,19 +4,22 @@ import type { Editor } from '@tiptap/core';
 import { Bold, Highlighter, List, ListOrdered, SeparatorHorizontal, Strikethrough, Underline } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActiveEditor } from './active';
-import { insertPageBreak, setTextStyle, textStyleOf, type TextStyle } from './extensions';
+import { FORMAT_STEP, insertPageBreak, setTextStyle, textStyleOf, type TextStyle } from './extensions';
 
 // `keys` is the shortcut after the modifier (Ctrl+ or ⌘), shown in the tooltip.
 interface Tool { label: string; keys?: string; icon: ReactNode; on?: string; run(e: Editor): void }
 
+// Each tool's change is an undo step of its own.
+const tool = (e: Editor) => e.chain().focus().setMeta(FORMAT_STEP, true);
+
 const TOOLS: (Tool | 'sep')[] = [
-  { label: 'Bold', keys: 'B', icon: <Bold />, on: 'bold', run: e => e.chain().focus().toggleBold().run() },
-  { label: 'Underline', keys: 'U', icon: <Underline />, on: 'underline', run: e => e.chain().focus().toggleUnderline().run() },
-  { label: 'Cross out', icon: <Strikethrough />, on: 'strike', run: e => e.chain().focus().toggleStrike().run() },
-  { label: 'Highlight', icon: <Highlighter />, on: 'highlight', run: e => e.chain().focus().toggleHighlight().run() },
+  { label: 'Bold', keys: 'B', icon: <Bold />, on: 'bold', run: e => tool(e).toggleBold().run() },
+  { label: 'Underline', keys: 'U', icon: <Underline />, on: 'underline', run: e => tool(e).toggleUnderline().run() },
+  { label: 'Cross out', icon: <Strikethrough />, on: 'strike', run: e => tool(e).toggleStrike().run() },
+  { label: 'Highlight', icon: <Highlighter />, on: 'highlight', run: e => tool(e).toggleHighlight().run() },
   'sep',
-  { label: 'Bulleted list', icon: <List />, on: 'bulletList', run: e => e.chain().focus().toggleBulletList().run() },
-  { label: 'Numbered list', icon: <ListOrdered />, on: 'orderedList', run: e => e.chain().focus().toggleOrderedList().run() },
+  { label: 'Bulleted list', icon: <List />, on: 'bulletList', run: e => tool(e).toggleBulletList().run() },
+  { label: 'Numbered list', icon: <ListOrdered />, on: 'orderedList', run: e => tool(e).toggleOrderedList().run() },
   'sep',
   { label: 'Page break', keys: 'Enter', icon: <SeparatorHorizontal />, run: insertPageBreak },
 ];

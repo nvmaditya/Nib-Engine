@@ -4,13 +4,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { EditorContent, Extension, useEditor as useTiptap, type Editor } from '@tiptap/react';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import { cn } from '@/lib/utils';
 import { consumeCaret, update, useEditor } from '@/store/editor';
 import { activeEditor, setActiveEditor } from './active';
-import { editorExtensions, type SlashItem } from './extensions';
+import { editorExtensions, ownStep, type SlashItem } from './extensions';
 import { fromMarkup, keepCounting, toMarkup } from './markup';
 import { cleanPastedHTML } from './paste';
 import { lineOf, lineStart, offsetAt, posAt } from './positions';
@@ -162,14 +162,16 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
   };
 
   // Each change is written into the block's lines, if the block still exists. A numbered list that runs on
-  // past them keeps counting on from them.
-  const write = (e: Editor) => {
+  // past them keeps counting on from them. Typing is one undo step per burst; a paste or a formatting change
+  // is a step of its own.
+  const write = (e: Editor, tr: Transaction) => {
     const sh = shownIn(e), b = useEditor.getState().doc.boxes.find(x => x.id === boxId);
     if (!sh || !b) return;
     const md = toMarkup(e.getJSON()), n = lineCount(md);
     const next = sh.whole ? md : keepCounting(b.text, sh.end, replaceLines(b.text, { first: sh.first, end: sh.end }, md), sh.first + n);
     shown.current = { ...sh, text: next, end: sh.first + n, slice: md };
-    if (next !== b.text) update(s => { const x = s.doc.boxes.find(y => y.id === boxId); if (x) x.text = next; }, { layout: 'soon', history: 'type:' + boxId });
+    const history = ownStep(tr) ? undefined : 'type:' + boxId;
+    if (next !== b.text) update(s => { const x = s.doc.boxes.find(y => y.id === boxId); if (x) x.text = next; }, { layout: 'soon', history });
     live.current.onLineCount?.(n);
   };
 
@@ -203,7 +205,7 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     editorProps,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
-    onUpdate: ({ editor: e }) => write(e),
+    onUpdate: ({ editor: e, transaction }) => write(e, transaction),
     onFocus: ({ editor: e }) => {
       setActiveEditor(e, boxId);
       const sh = shownIn(e);
