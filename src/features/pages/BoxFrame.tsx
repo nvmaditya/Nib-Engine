@@ -23,7 +23,9 @@ export interface BoxFrameProps {
 
 export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordClick }: BoxFrameProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const down = useRef<{ x: number; y: number } | null>(null);
+  // Where the pointer went down, and whether a click there may put the caret at a word: decided at
+  // pointerdown, since a drag captures the pointer and its click then lands on the frame itself.
+  const down = useRef<{ x: number; y: number; word: boolean } | null>(null);
   const box = sg.box, write = mode === 'write';
   // Delete takes only this page's part of a block on several pages, else the block. A header's text
   // comes from its fields, so a header is deleted whole.
@@ -39,20 +41,20 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
     const t = e.target as HTMLElement;
     if (t.closest('.tag-menu')) return; // the tag's menu button
     e.stopPropagation();
-    down.current = { x: e.clientX, y: e.clientY };
+    down.current = { x: e.clientX, y: e.clientY, word: write && !t.closest('.tag, .rz') };
     if (!selected) select(box.id);
     const isRz = write && !!t.closest('.rz'), isGrip = !!t.closest('.grip');
     if (e.pointerType === 'touch' && !isRz && !isGrip) return; // let touch scroll the page; a tap is a click
     e.preventDefault();
-    if (ref.current) startBlockDrag(e, sg, { s, frame: ref.current, mode: isRz ? 'resize' : 'move' });
+    if (ref.current) startBlockDrag(e, sg, { s, frame: ref.current, mode: isRz ? 'resize' : 'move', onStart: () => { down.current = null; } });
   };
 
-  // A click that didn't drag, on the writing (not the tag or the resize handle), puts the caret at that word.
+  // A click that didn't drag, which went down on the writing (not the tag or the resize handle), puts
+  // the caret at that word.
   const onClick = (e: ReactMouseEvent<HTMLDivElement>) => {
-    const t = e.target as HTMLElement, d = down.current;
+    const d = down.current;
     down.current = null;
-    if (!write || t.closest('.tag, .rz')) return;
-    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) >= 3) return;
+    if (!d?.word || Math.hypot(e.clientX - d.x, e.clientY - d.y) >= 3) return;
     const paper = ref.current?.closest<HTMLElement>('[data-paper]');
     if (!paper) return;
     const r = paper.getBoundingClientRect();

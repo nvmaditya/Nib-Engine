@@ -6,7 +6,7 @@ import { useStageActive } from '@/features/doc/StageHost';
 import { cn } from '@/lib/utils';
 import { update, useEditor } from '@/store/editor';
 import { drag } from './drag';
-import { ScanContext, Sheet, type PageMode } from './Sheet';
+import { dprNow, ScanContext, Sheet, type PageMode } from './Sheet';
 
 export type PageLayout = Layout & { tick: string };
 export type { PageMode };
@@ -85,7 +85,7 @@ export const PageView = memo(function PageView({ layout, mode, tagMenu, onWordCl
   useEditor(s => (active ? s.version : -1)); // the engine objects change in place; redraw on every change while shown
   const pagesRef = useRef<HTMLDivElement>(null), sheetsRef = useRef<HTMLDivElement>(null);
   const [cssW, setCssW] = useState(0);
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const dpr = dprNow();
 
   useLayoutEffect(() => {
     const el = pagesRef.current;

@@ -1,6 +1,6 @@
 // The handwritten pages: drawn only near the viewport, coloured name tags, click-a-word, drops and nudges.
 import type { ReactNode } from 'react';
-import { act, render, within } from '@testing-library/react';
+import { act, fireEvent, render, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
@@ -132,6 +132,42 @@ test('clicking a word asks for the caret there', () => {
   wordClick(layoutOf(docOf(b)).segs[0], 216, 139);
   expect(get().selectedId).toBe('w');
   expect(get().caret).toMatchObject({ boxId: 'w', offset: 10 });
+});
+
+test('clicking the writing puts the caret there; the grip, the tag, the resize handle and a drag don’t', () => {
+  open(docOf(box({ id: 'w', name: 'Notes', text: words(30) })));
+  pages();
+  const f = frame('w:0');
+  const tap = (el: Element, travel = 0) => {
+    fireEvent.pointerDown(el, { clientX: 300, clientY: 140, button: 0, pointerId: 1 });
+    if (travel) fireEvent.pointerMove(el, { clientX: 300, clientY: 140 + travel, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 300, clientY: 141, pointerId: 1 });
+    fireEvent.click(f, { clientX: 300, clientY: 141 }); // the drag captured the pointer, so the click lands on the frame
+  };
+  tap(within(f).getByRole('button', { name: 'Move Notes' }));
+  tap(within(f).getByText('Notes'));
+  tap(f.querySelector('.rz')!);
+  tap(f, 40); // dragged away and back again
+  fireEvent.click(f, { clientX: 300, clientY: 141 }); // no pointerdown before it
+  expect(get().caret).toBeNull();
+  tap(f);
+  expect(get().caret).toMatchObject({ boxId: 'w' });
+});
+
+test('the sheet a part is dragged from stays drawn when the drag carries it far from view, and lets go after', () => {
+  vi.stubGlobal('IntersectionObserver', FakeIO);
+  open(docOf(m()));
+  pages();
+  report(true);
+  const sheet = (i: number) => document.querySelectorAll('.sheet')[i];
+  const f = frame('m:0');
+  fireEvent.pointerDown(f, { clientX: 300, clientY: 200, button: 0, pointerId: 1 });
+  fireEvent.pointerMove(f, { clientX: 300, clientY: 260, pointerId: 1 });
+  report(false); // auto-scroll took both sheets far away
+  expect(inkCanvases(sheet(0)).length).toBeGreaterThan(0);
+  expect(inkCanvases(sheet(1))).toHaveLength(0);
+  fireEvent.pointerUp(f, { clientX: 300, clientY: 260, pointerId: 1 });
+  expect(inkCanvases(sheet(0))).toHaveLength(0);
 });
 
 test('a continuation dropped on another page stays and says why', () => {

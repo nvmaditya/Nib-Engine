@@ -16,7 +16,8 @@ export type PageMode = 'write' | 'style' | 'export';
 /** Lets a sheet that has just been drawn ask its page column for the exact scan preview again. */
 export const ScanContext = createContext<() => void>(() => {});
 
-const dprNow = () => Math.min(window.devicePixelRatio || 1, 2.5);
+/** Canvas pixels per CSS pixel for the pages (capped, so very dense screens don't cost too much memory). */
+export const dprNow = (): number => Math.min(window.devicePixelRatio || 1, 2.5);
 const release = (c: HTMLCanvasElement | null) => { if (c) { c.width = 0; c.height = 0; delete c.dataset.k; } };
 
 function PaperCanvas({ i, pages, pxW, near }: { i: number; pages: number; pxW: number; near: boolean }) {
@@ -58,7 +59,8 @@ export interface SheetProps {
 
 export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClick, caption }: SheetProps) {
   const figRef = useRef<HTMLElement>(null), paperRef = useRef<HTMLDivElement>(null);
-  const near = useNearViewport(figRef);
+  // The sheet a part is dragged from stays drawn, even if auto-scroll carries it far away: its ink follows the pointer.
+  const near = useNearViewport(figRef) || (drag.active && !!figRef.current?.classList.contains('dragging'));
   const gap = useEditor(s => s.S.gap);
   const selectedId = useEditor(s => s.selectedId);
   const rescan = useContext(ScanContext);

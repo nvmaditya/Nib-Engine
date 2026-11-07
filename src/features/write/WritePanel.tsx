@@ -37,7 +37,7 @@ export function WritePanel() {
   const active = useStageActive();
   const caret = useEditor(s => s.caret);
   const boxes = useEditor(s => s.doc.boxes);
-  useEditor(s => s.version);
+  useEditor(s => (active ? s.version : -1)); // redraw on every change only while the stage is shown
   const box = selectedBox();
 
   // A caret request for the block shown here (a clicked word, Edit, a new block) focuses the editor

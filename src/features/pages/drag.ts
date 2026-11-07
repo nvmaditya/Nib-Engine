@@ -67,8 +67,10 @@ export function wordClick(sg: Seg, x: number, y: number): void {
  * Drag a part by `frame` (its outline on a page): `move` follows the pointer, snapping to the ruled lines,
  * over any page in the same `[data-sheets]` column, and drops with `dropPart`; `resize` pulls its right
  * edge. One undo step per drag. The pages are `[data-paper]` elements whose value is the page index.
+ * `onStart` is called once the pointer has moved far enough (3 px) for this to be a drag, not a click.
  */
-export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode }: { s: number; frame: HTMLElement; mode: 'move' | 'resize' }): void {
+export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode, onStart }:
+  { s: number; frame: HTMLElement; mode: 'move' | 'resize'; onStart?: () => void }): void {
   const paperEl = frame.closest<HTMLElement>('[data-paper]');
   if (!paperEl) return;
   const fig = frame.closest<HTMLElement>('.sheet') ?? paperEl;
@@ -89,8 +91,11 @@ export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode }
 
   const move = (ev: PointerEvent) => {
     const dx = ev.clientX - st.x, dy = ev.clientY - st.y;
-    if (!st.moved && Math.hypot(dx, dy) < 3) return;
-    st.moved = true;
+    if (!st.moved) {
+      if (Math.hypot(dx, dy) < 3) return;
+      st.moved = true;
+      onStart?.();
+    }
     if (mode === 'resize') {
       const nw = Math.round(Math.max(60, Math.min(PAGE_W - f0.x - 6, f0.w + dx / s)));
       if (nw !== st.w) {
@@ -126,7 +131,8 @@ export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode }
     if (!st.moved) { shift(''); return; }
     if (mode === 'resize') { resize(st2 => { const p = live(st2, sg); if (p) setFrame(p, { w: st.w }); }); return; }
     // A refused or cancelled drop puts the part back; a drop that moves it is redrawn in its new place.
-    if (ev.type !== 'pointerup' || !dropPart(sg, target.page, target.x, target.y)) shift('');
+    // Either way the pages draw again, so a sheet kept drawn for the drag lets go if it is now far from view.
+    if (ev.type !== 'pointerup' || !dropPart(sg, target.page, target.x, target.y)) { shift(''); update(null, { save: false, layout: false }); }
   };
   frame.addEventListener('pointermove', move); frame.addEventListener('pointerup', end); frame.addEventListener('pointercancel', end);
 }

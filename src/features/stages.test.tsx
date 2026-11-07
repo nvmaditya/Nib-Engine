@@ -1,10 +1,16 @@
+import { Profiler } from 'react';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { createDoc } from '@/store/documents';
 import { App } from '@/app/App';
+import type { Stage } from '@/app/route';
+import { StageHost } from '@/features/doc/StageHost';
+import { ExportPanel } from '@/features/export/ExportPanel';
+import { StylePanel } from '@/features/style/StylePanel';
+import { WritePanel } from '@/features/write/WritePanel';
 import { select } from '@/features/doc/actions';
-import { placeCaret, useEditor } from '@/store/editor';
+import { placeCaret, update, useEditor } from '@/store/editor';
 
 let id = '';
 beforeAll(async () => {
@@ -110,4 +116,21 @@ test('Write goes back to the Write view you used last', async () => {
   await search();
   await userEvent.click(stageButton('Write'));
   expect(location.hash).toBe(`#/d/${id}/outline`);
+});
+
+test('a hidden stage’s panel doesn’t redraw on every change', () => {
+  const renders: Partial<Record<Stage, number>> = {};
+  const panel = (s: Stage) => (
+    <Profiler id={s} onRender={() => { renders[s] = (renders[s] ?? 0) + 1; }}>
+      {s === 'write' ? <WritePanel /> : s === 'style' ? <StylePanel /> : <ExportPanel pages={1} />}
+    </Profiler>
+  );
+  const host = (stage: Stage) => <StageHost stage={stage} render={panel} />;
+  const { rerender } = render(host('write'));
+  rerender(host('style'));
+  rerender(host('export'));
+  for (const k of Object.keys(renders) as Stage[]) renders[k] = 0;
+  act(() => update(null, { save: false, layout: false }));
+  expect([renders.write, renders.style]).toEqual([0, 0]);
+  expect(renders.export).toBeGreaterThan(0);
 });
