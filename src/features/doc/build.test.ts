@@ -7,7 +7,7 @@ import { STYLE_LOOKS } from '@/features/style/looks';
 import type { SavedLook } from '@/features/style/prefs';
 import { box, docOf, get, layoutOf, lines, open } from '@/test/docs';
 import { geomFor, headerBlock, importInto, newDocument, withLook } from './build';
-import { newBlock } from './model';
+import { fieldValue, newBlock, setHeaderField } from './model';
 
 const S = cleanSettings(null, false), journal = STYLE_LOOKS.find(l => l.id === 'journal')!;
 const partsOf = (L: Layout, id: string) => L.segs.filter(s => s.box.id === id).map(s => [s.page, s.idx]);
@@ -27,6 +27,12 @@ test('with a header, Name, Class and Date sit at the top right of page 1 and the
 test('a header’s values are one line each, of at most 80 characters', () => {
   const h = headerBlock(docOf(), S, { name: 'Asha\nK', class: 'x'.repeat(90), date: '' });
   expect([h.fields, h.text]).toEqual([{ name: 'Asha K', class: 'x'.repeat(80), date: '' }, `Name: Asha K\nClass: ${'x'.repeat(80)}\nDate:`]);
+});
+
+test('a header block from an import writes each value as typing into its field does', () => {
+  const v = 'Asha\r\nK ' + 'x'.repeat(90), h = headerBlock(docOf(), S, { name: v }), typed = box({ kind: 'header', fields: {} });
+  setHeaderField(typed, 'name', v);
+  expect(h.fields!.name).toBe(fieldValue(v)); expect(h.fields).toEqual(typed.fields);
 });
 
 test('a long import is one block that flows page by page, nothing pushed', () => {

@@ -4,7 +4,7 @@ import { geom, snapY, use } from '@/engine/core.js';
 import { DEFAULT_NAMES, HEADER_FIELDS, headerText, uid } from '@/engine/doc.js';
 import type { Box, EngineDoc, Geom, HeaderFields, Layout, Seg, Settings } from '@/engine/types';
 import { newBlockName, nextColor } from '@/features/doc/blocks';
-import { layoutFor } from '@/features/doc/model';
+import { fieldValue, layoutFor } from '@/features/doc/model';
 import { lookPatch } from '@/features/style/looks';
 import type { SavedLook } from '@/features/style/prefs';
 import { useEditor } from '@/store/editor';
@@ -34,12 +34,12 @@ export function geomFor(S: Settings): Geom {
 /** A look applied to the whole document, as Style applies one, paper included. The same settings when there is none. */
 export const withLook = (S: Settings, look: SavedLook | null): Settings => (look ? { ...S, ...lookPatch(look, false) } : S);
 
-/** Each field on one line, as a header writes it, at most 80 characters. */
+/** Each field's value as the header keeps it (as typing into the field writes it). */
 function oneLine(fields: HeaderFields): HeaderFields {
   const f: HeaderFields = {};
   for (const [k] of HEADER_FIELDS) {
     const v = fields[k];
-    if (typeof v === 'string') f[k] = v.replace(/[\r\n]+/g, ' ').slice(0, 80);
+    if (typeof v === 'string') f[k] = fieldValue(v);
   }
   return f;
 }
