@@ -57,3 +57,11 @@ test('the oldest Longhand save is migrated too', () => {
   localStorage.setItem(OLD_KEY, JSON.stringify({ text: 'a short note', s: {} }));
   try { expect(loadSaved().doc.boxes.map(b => [b.kind, b.name, b.text])).toEqual([['text', 'Main text', 'a short note']]); } finally { localStorage.clear(); }
 });
+
+test('fromSep checking does not backtrack on a long near-miss', () => {
+  const t = performance.now();
+  const d = cleanDoc({ boxes: [{ id: 'a', text: 'a' }, { id: 'b', text: 'b', from: 'a', fromSep: '  \\newpage\n'.repeat(40) + 'x' }] });
+  expect(performance.now() - t).toBeLessThan(50);
+  expect(d!.boxes[1].fromSep).toBeUndefined();
+  expect(cleanDoc({ boxes: [{ id: 'a', text: 'a' }, { id: 'b', text: 'b', from: 'a', fromSep: '  \\newpage\n'.repeat(3) }] })!.boxes[1].fromSep).toBe('  \\newpage\n'.repeat(3));
+});
