@@ -2,11 +2,12 @@
 import { expect, test } from 'vitest';
 import { frameRange, settings } from '@/engine/core.js';
 import { cleanSettings } from '@/engine/doc.js';
-import type { EngineDoc, Layout } from '@/engine/types';
+import type { Box, EngineDoc, Layout } from '@/engine/types';
 import { STYLE_LOOKS } from '@/features/style/looks';
 import type { SavedLook } from '@/features/style/prefs';
 import { box, docOf, get, layoutOf, lines, open } from '@/test/docs';
 import { geomFor, headerBlock, importInto, newDocument, withLook } from './build';
+import { newBlock } from './model';
 
 const S = cleanSettings(null, false), journal = STYLE_LOOKS.find(l => l.id === 'journal')!;
 const partsOf = (L: Layout, id: string) => L.segs.filter(s => s.box.id === id).map(s => [s.page, s.idx]);
@@ -103,9 +104,32 @@ test('…or on the last page itself when that page is blank', () => { const r = 
 
 test('…and never onto a page where something else is written, when only blank lines ran onto it', () => {
   const d = docOf(box({ id: 'm', name: 'Main text', text: 'abc' + '\n'.repeat(40) }), box({ id: 'n', kind: 'note', name: 'Margin note', color: 1, page: 1, x: 520, w: 220, text: 'note' }));
+  const pushed = (L: Layout) => L.segs.filter(s => s.pushed).map(s => [s.box.id, s.idx]), before = pushed(layoutOf(d, S)); // the note, by Main text's blank lines
   const r = append(d), L = layoutOf(r.doc, S);
-  expect([r.joined, r.firstPage, r.target.page, r.doc.boxes[0].text]).toEqual([false, 2, 2, 'abc']);
+  expect([r.joined, r.firstPage, r.target.page, r.doc.boxes[0].text]).toEqual([false, 2, 2, 'abc' + '\n'.repeat(40)]);
+  expect(pushed(L)).toEqual(before);
+});
+
+test('…and only the block it carries on loses its blank end', () => {
+  const r = append(docOf(box({ id: 'a', name: 'Main text', w: 300, text: lines(5) + '\n\n' }), box({ id: 'b', name: 'Text block', color: 1, x: 440, w: 300, text: lines(6) })));
+  expect([r.target.id, r.doc.boxes.map(b => b.text)]).toEqual(['b', [lines(5) + '\n\n', lines(6) + '\n\\newpage\nx']]);
+  expect(layoutOf(r.doc, S).segs.some(s => s.pushed)).toBe(false);
+});
+
+test('…an empty block below a header beside it starts on the line under the header, and pushes nothing', () => {
+  const d = newDocument(S, '', null), h = newBlock(S, d, 'header', 0) as Box;
+  const r = append(d, lines(600)), L = layoutOf(r.doc, S), main = r.doc.boxes[0], m = partsOf(L, main.id);
+  expect([r.target.id, r.joined, r.firstPage, main.y]).toEqual([main.id, true, 0, 76 + 3 * 34]);
+  expect(partsOf(L, h.id)).toEqual([[0, 0]]); expect(m.length).toBeGreaterThan(15); expect(m).toEqual(m.map((_, i) => [i, i]));
   expect(L.segs.some(s => s.pushed)).toBe(false);
+});
+
+test('…but with a margin note beside or below it, the text is a block of its own after it, and the note stays where it was', () => {
+  const d = newDocument(S, '', null), n = newBlock(S, d, 'note', 0) as Box;
+  const at = (L: Layout) => L.segs.filter(s => s.box.id === n.id).map(s => [s.page, s.x, s.top]), before = at(layoutOf(d, S));
+  const r = append(d, lines(600)), L = layoutOf(r.doc, S);
+  expect([r.joined, r.firstPage, r.target.page, r.doc.boxes[0].text]).toEqual([false, 1, 1, '']);
+  expect(at(L)).toEqual(before); expect(L.segs.some(s => s.pushed)).toBe(false);
 });
 
 test('Add after the last page takes no header, and brings the look', () => { const r = importInto(S, docOf(box({ id: 'm', text: 'a' })), 'x', { where: 'append', look: journal, header: { name: 'A', class: '', date: '' } }); expect([r.doc.boxes.map(b => b.kind), r.S.font]).toEqual([['text'], 'caveat']); });
