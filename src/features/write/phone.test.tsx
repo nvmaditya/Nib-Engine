@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vi
 import { cleanSettings } from '@/engine/doc.js';
 import { App } from '@/app/App';
 import type { Route } from '@/app/route';
+import type { EngineDoc } from '@/engine/types';
 import { addPageAt, deletePageAt } from '@/features/doc/actions';
 import { TopBar } from '@/shell/TopBar';
 import { createDoc } from '@/store/documents';
@@ -219,21 +220,35 @@ async function pageMenu(page: number, name: string): Promise<void> {
   await userEvent.click(await screen.findByRole('menuitem', { name }));
 }
 
-test('Add a page after this one turns to the new page', async () => {
+const EMPTY = 'Empty page. Use + Add, or drag a block here in Outline.';
+test('Add a page after this one turns to the new blank page, after the text that runs on', async () => {
+  await pageMenu(1, 'Add a page after this one'); // Main text runs onto page 2
+  expect(await screen.findByText('Page 3 of 3')).toBeInTheDocument();
+  expect(screen.getByText(EMPTY)).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Main text, page 2' })).toBeNull();
+  await openDoc(docOf(box({ id: 'm', name: 'Main text', text: lines(70) }))); // runs onto page 3
   await pageMenu(1, 'Add a page after this one');
-  expect(await screen.findByText('Page 2 of 3')).toBeInTheDocument();
+  expect(await screen.findByText('Page 4 of 4')).toBeInTheDocument();
+  expect(screen.getByText(EMPTY)).toBeInTheDocument();
+  await openPages(3); // nothing runs on: the blank page is right after this one
+  await pageMenu(1, 'Add a page after this one');
+  expect(await screen.findByText('Page 2 of 4')).toBeInTheDocument();
+  expect(screen.getByText(EMPTY)).toBeInTheDocument();
 });
 
-/** Open a document whose pages hold one short block each: First, Second, Third… */
-async function openPages(n: number): Promise<void> {
+/** Open `doc` in Write, on its first page. */
+async function openDoc(doc: EngineDoc): Promise<void> {
   cleanup();
-  const names = ['First', 'Second', 'Third'];
-  const doc = { ...docOf(...names.slice(0, n).map((name, page) => box({ id: name, name, text: name.toLowerCase(), page }))), pageCount: n };
   const id = (await createDoc({ title: 'M', settings: cleanSettings(null, false), doc })).id;
   location.hash = `#/d/${id}/write`;
   render(<App />);
-  await screen.findByText(`Page 1 of ${n}`);
+  await screen.findByText(/^Page 1 of \d+$/);
 }
+/** Open a document whose pages hold one short block each: First, Second, Third… */
+const openPages = (n: number): Promise<void> => {
+  const names = ['First', 'Second', 'Third'];
+  return openDoc({ ...docOf(...names.slice(0, n).map((name, page) => box({ id: name, name, text: name.toLowerCase(), page }))), pageCount: n });
+};
 
 test('Merge into previous page turns to the page it went to', async () => {
   await openPages(2);

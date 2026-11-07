@@ -133,6 +133,8 @@ const restructuring: [string, () => EngineDoc, () => void][] = [
   ['deletePageAt', withN(), () => deletePageAt(1)],
   ['addPageAt', long, () => addPageAt()],
   ['addPageAt(0)', long, () => addPageAt(0)],
+  ['addPageAt after a page whose text runs on', long, () => addPageAt(1)],
+  ['addPageAt beside a continuation', beside, () => addPageAt(1)],
   ['addBlock text', long, () => addBlock('text', 0)],
   ['addBlock note', long, () => addBlock('note', 1)],
   ['addBlock header', long, () => addBlock('header', 0)],
@@ -316,6 +318,37 @@ test('a block added where there is a free line says only what it added', () => {
   addBlock('header', 0);
   expect(lastToast()).toBe('Added a header block.');
 });
+// Add a page after this one: the new page is always blank, after whatever this page's text runs on to.
+/** The parts each page shows, as block id + part index. */
+const shown = () => {
+  const L = layoutFor(get().S, get().doc);
+  return Array.from({ length: L.pages }, (_, p) => L.segs.filter(s => s.page === p).map(s => s.box.id + s.idx));
+};
+test('a page added after a page whose text runs on is blank, after the run-on, and says so', () => {
+  open(long());
+  expect(addPageAt(1)).toBe(2);
+  expect(lastToast()).toBe('Added a blank page.');
+  expect(shown()).toEqual([['m0'], ['m1'], []]);
+});
+test('a page added where a block sits beside a continuation is really blank; Undo and Redo are one step each', () => {
+  open(beside());
+  const before = json();
+  expect(addPageAt(1)).toBe(2);
+  expect(lastToast()).toBe('Added a blank page.');
+  expect(shown()).toEqual([['m0'], ['m1', 'n0'], []]);
+  const after = json();
+  undo();
+  expect([json(), get().canUndo]).toEqual([before, false]);
+  redo();
+  expect(json()).toBe(after);
+});
+test('Add page at the end, and a page before the first, are blank too', () => {
+  open(beside());
+  expect(addPageAt()).toBe(2);
+  expect(addPageAt(0)).toBe(0);
+  expect(shown()).toEqual([[], ['m0'], ['m1', 'n0'], []]);
+});
+
 test('a header added from a later page goes to the top of page 1, and says only that', () => {
   open({ ...docOf(box({ id: 'a', text: lines(28) })), pageCount: 3 });
   addBlock('header', 2); // Add → Header with page 3 on screen

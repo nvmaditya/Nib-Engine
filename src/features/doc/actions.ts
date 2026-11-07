@@ -186,9 +186,17 @@ export function deletePageAt(i: number): void {
   restructure('delete-page', s => { deletePage(s.S, s.doc, i); return `Deleted page ${i + 1} and everything on it.`; });
 }
 
-/** A blank page at position `at` (0-based), or after the last page. */
-export function addPageAt(at?: number): void {
-  restructure('add-page', s => { insertPage(s.S, s.doc, at === undefined ? Infinity : Math.floor(at)); return 'Added a blank page.'; });
+/**
+ * A blank page at position `at` (0-based), or after the last page. When text runs on across `at`, it goes after
+ * where that text ends. Returns the blank page's index (null if nothing was added).
+ */
+export function addPageAt(at?: number): number | null {
+  let where = -1;
+  const added = restructure('add-page', s => {
+    where = insertPage(s.S, s.doc, at === undefined ? Infinity : Math.floor(at));
+    return 'Added a blank page.';
+  });
+  return added ? where : null;
 }
 
 const ADDED: Record<BlockKind, string> = { text: 'Added a text block.', note: 'Added a margin note.', header: 'Added a header block.' };

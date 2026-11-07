@@ -121,9 +121,10 @@ export function removeBlock(doc: EngineDoc, boxId: string): Box | null {
 // Two notions of a block's page. Its stored page (box.page) is where the person put it; layout rule 2
 // can push its first part onto a later page without changing that. A page's own blocks are the parts it
 // shows: moving, merging and deleting pages go by those, never by what is stored on a page but shown elsewhere.
-// - Moving pages: a block keeps its stored place (and y, even if pushed down) when it shows on its stored
-//   page, or when its stored and shown pages move alike, so layout pushes it there again. Otherwise it goes
-//   with the page it shows on, pinned to where it shows.
+// - Moving and adding pages (`restore`): a block keeps its stored place (and y, even if pushed down) when it
+//   shows on its stored page, or when its stored and shown pages move alike, so layout pushes it there again.
+//   Otherwise it goes with the page it shows on, pinned to where it shows.
+// - Adding a page: it goes in at the first place no text runs across, so it is always blank.
 // - Merging: the blocks that start on the page go to the page before, pinned to where they show. When the
 //   page would still show the same parts (the page before is full), nothing changes.
 
@@ -144,6 +145,19 @@ function startPage(L: Layout, b: Box): { page: number; seg?: Seg } {
 function place(b: Box, seg: Seg | undefined, page: number): void {
   if (seg && seg.page !== b.page) b.y = seg.top;
   b.page = page;
+}
+
+/**
+ * Store each block for a new order of pages, laid out in `L` before it: page `p` goes to `next(p)`. A block keeps
+ * its stored place when it shows there, or when its stored and shown pages go alike; otherwise it goes with the
+ * page it shows on, pinned where it shows (see the comment above pageRefusal).
+ */
+function restore(L: Layout, doc: EngineDoc, next: (p: number) => number): void {
+  for (const b of doc.boxes) {
+    const { page: shown, seg } = startPage(L, b);
+    if (shown === b.page || next(shown) - shown === next(b.page) - b.page) b.page = next(b.page); // pushed there again
+    else place(b, seg, next(shown));
+  }
 }
 
 /** Where page `p` ends up when page `from` moves to position `to`. */
@@ -167,12 +181,7 @@ export function movePage(S: Settings, doc: EngineDoc, from: number, to: number):
   if (no) return no;
   doc.pageCount = pages;
   const going = doc.boxes.filter(b => startPage(L, b).page === from);
-  const to_ = (p: number) => moved(p, from, to);
-  for (const b of doc.boxes) {
-    const { page: shown, seg } = startPage(L, b); // where its first part shows before the move
-    if (shown === b.page || to_(shown) - shown === to_(b.page) - b.page) b.page = to_(b.page); // pushed there again
-    else place(b, seg, to_(shown)); // it goes with the page it shows on
-  }
+  restore(L, doc, p => moved(p, from, to));
   const after = layoutFor(S, doc);
   for (const b of going) {
     const next = partOf(after, b, 1);
@@ -213,7 +222,7 @@ export function mergeIntoPrevious(S: Settings, doc: EngineDoc, i: number): { ran
   const trial = structuredClone(doc);
   merge(S, trial, i);
   if (was !== '[]' && shownOn(layoutFor(S, trial), i) === was) { // (an empty page always goes)
-    use(S, doc); // the engine lays out the document again, not the copy
+    layoutFor(S, doc); // the engine's last layout (what it draws and finds parts in) is the document's again, not the copy's
     return 'full';
   }
   merge(S, doc, i, L); // (L is still the document's own layout: only the copy changed)
@@ -244,11 +253,21 @@ export function deletePage(S: Settings, doc: EngineDoc, i: number): void {
   doc.pageCount = Math.max(1, L.pages - 1);
 }
 
-/** A blank page at position `at`: blocks starting there or later move down a page. */
-export function insertPage(S: Settings, doc: EngineDoc, at: number): void {
-  const pages = layoutFor(S, doc).pages, where = Math.max(0, Math.min(pages, at));
-  for (const b of doc.boxes) if (b.page >= where) b.page++;
+/** Whether a block that starts before page `w` runs on to page `w` or later. */
+const runsAcross = (L: Layout, w: number): boolean => L.segs.some(s => s.idx > 0 && s.page >= w && startPage(L, s.box).page < w);
+
+/**
+ * A blank page at position `at`, or, when text from the pages before runs on across `at` (rule 1: a later part
+ * follows its start), right after where that text ends. The blocks that start from there on move down a page.
+ * Returns the blank page's index.
+ */
+export function insertPage(S: Settings, doc: EngineDoc, at: number): number {
+  const L = layoutFor(S, doc), pages = L.pages;
+  let where = Math.max(0, Math.min(pages, at));
+  while (where < pages && runsAcross(L, where)) where++;
+  restore(L, doc, p => (p >= where ? p + 1 : p));
   doc.pageCount = pages + 1;
+  return where;
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

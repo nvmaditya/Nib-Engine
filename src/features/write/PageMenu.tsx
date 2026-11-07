@@ -13,7 +13,8 @@ interface Props {
   trigger?: ReactElement;
   /**
    * The page (0-based) a pager should show next: the page's new index after Move up or Move down, the new
-   * page after Add a page after this one, and the page before after Merge into previous page.
+   * blank page after Add a page after this one (after any text that runs on from this page), and the page
+   * before after Merge into previous page.
    */
   onShow?: (page: number) => void;
 }
@@ -26,6 +27,10 @@ export function PageMenu({ page, pages, trigger, onShow }: Props) {
     run();
     if (useEditor.getState().version !== v) onShow?.(next);
   };
+  const add = () => {
+    const blank = addPageAt(page + 1);
+    if (blank !== null) onShow?.(blank);
+  };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger ?? <OptionsButton label={`Options for page ${page + 1}`} />}</DropdownMenuTrigger>
@@ -33,7 +38,7 @@ export function PageMenu({ page, pages, trigger, onShow }: Props) {
         <DropdownMenuItem disabled={first} onSelect={then(() => movePageTo(page, page - 1), page - 1)}>Move up</DropdownMenuItem>
         <DropdownMenuItem disabled={last} onSelect={then(() => movePageTo(page, page + 1), page + 1)}>Move down</DropdownMenuItem>
         <DropdownMenuItem disabled={first} onSelect={then(() => mergeIntoPreviousPage(page), page - 1)}>Merge into previous page</DropdownMenuItem>
-        <DropdownMenuItem onSelect={then(() => addPageAt(page + 1), page + 1)}>Add a page after this one</DropdownMenuItem>
+        <DropdownMenuItem onSelect={add}>Add a page after this one</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => deletePageAt(page)}>Delete page</DropdownMenuItem>
       </DropdownMenuContent>

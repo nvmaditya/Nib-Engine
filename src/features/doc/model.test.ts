@@ -1,8 +1,8 @@
 // Restructuring, on documents laid out by the engine (8 px per character; 28 lines fill page 1).
 import { expect, test } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
-import { computeLayout } from '@/engine/core.js';
-import type { Box } from '@/engine/types';
+import { computeLayout, framesOf } from '@/engine/core.js';
+import type { Box, EngineDoc } from '@/engine/types';
 import { box, docOf, lines, words } from '@/test/docs';
 import {
   appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock, pageRefusal,
@@ -313,6 +313,8 @@ test('a full page beside a part that runs on is still full', () => {
 test('a merge that can’t empty the page leaves the engine on the document, not on its trial copy', () => {
   const d = { ...docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })), pageCount: 2 };
   mergeIntoPrevious(S, d, 1);
+  // Without laying out again: what the engine last laid out (and draws pages and finds parts from) is the document.
+  expect([framesOf(d.boxes[0]).length, framesOf(d.boxes[1]).length]).toEqual([1, 1]);
   expect(computeLayout().segs.every(s => d.boxes.includes(s.box))).toBe(true);
 });
 test('merging an empty last page still removes it', () => {
@@ -320,3 +322,50 @@ test('merging an empty last page still removes it', () => {
   expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false });
   expect([d.pageCount, layoutFor(S, d).pages]).toEqual([1, 1]);
 });
+
+// Adding a page always gives a blank page: right after whatever runs on from the pages before it.
+/** What each page shows: its parts as block id + part index. */
+const pagesOf = (d: EngineDoc): string[][] => {
+  const L = layoutFor(S, d);
+  return Array.from({ length: L.pages }, (_, p) => L.segs.filter(s => s.page === p).map(s => s.box.id + s.idx));
+};
+const INSERTS: Record<string, () => EngineDoc> = {
+  'one block a page': () => ({ ...docOf(box({ id: 'a', text: 'a' }), box({ id: 'b', page: 1, text: 'b' }), box({ id: 'c', page: 2, text: 'c' })), pageCount: 3 }),
+  'Main text running onto page 2': () => docOf(m()),
+  'Main text running onto page 3': () => docOf(box({ id: 'm', name: 'Main text', text: lines(70) })),
+  'a block beside a continuation': () => docOf(box({ id: 'm', name: 'Main text', w: 300, text: lines(40) }), box({ id: 'c', page: 1, x: 450, y: 600, w: 290, text: 'c' })),
+  'a block pushed onto the next page': () => docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })),
+  'a header, a run-on and a later page': () => ({ ...docOf(hdr(0), m(), box({ id: 'z', page: 3, text: 'z' })), pageCount: 4 }),
+};
+test('a page added after a page whose text runs on goes after the run-on, and is blank', () => {
+  const d = docOf(m());
+  expect(insertPage(S, d, 1)).toBe(2);
+  expect(pagesOf(d)).toEqual([['m0'], ['m1'], []]);
+  const e = INSERTS['Main text running onto page 3']();
+  expect(insertPage(S, e, 1)).toBe(3);
+  expect(pagesOf(e)).toEqual([['m0'], ['m1'], ['m2'], []]);
+});
+test('a block beside a continuation stays beside it, and the added page is blank', () => {
+  const d = INSERTS['a block beside a continuation']();
+  expect(pagesOf(d)).toEqual([['m0'], ['m1', 'c0']]);
+  expect(insertPage(S, d, 1)).toBe(2);
+  expect(pagesOf(d)).toEqual([['m0'], ['m1', 'c0'], []]);
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['m', 0, 110], ['c', 1, 600]]);
+});
+test('a block pushed onto the page after goes along with that page, pinned where it shows', () => {
+  const d = INSERTS['a block pushed onto the next page']();
+  expect(insertPage(S, d, 1)).toBe(1);
+  expect(pagesOf(d)).toEqual([['a0'], [], ['n0']]);
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 2, 110]]);
+});
+for (const [name, mk] of Object.entries(INSERTS)) {
+  test(`adding a page anywhere gives a blank page, and leaves every other page as it was: ${name}`, () => {
+    const pages = pagesOf(mk()).length;
+    for (let at = 0; at <= pages; at++) {
+      const d = mk(), was = pagesOf(d);
+      const p = insertPage(S, d, at);
+      expect(p, `at ${at}`).toBeGreaterThanOrEqual(at);
+      expect(pagesOf(d), `at ${at}`).toEqual([...was.slice(0, p), [], ...was.slice(p)]);
+    }
+  });
+}

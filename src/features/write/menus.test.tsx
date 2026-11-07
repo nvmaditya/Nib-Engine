@@ -189,6 +189,12 @@ test('the page menu tells a pager which page to show next, only when the documen
   await choose(1, 'Add a page after this one');
   expect(onShow).toHaveBeenLastCalledWith(2);
   unmount();
+  // Page 1's Main text runs onto page 2, so the blank page goes after that: the pager turns to page 3, not 2.
+  const first = render(<PageMenu page={0} pages={3} onShow={onShow} />);
+  await choose(0, 'Add a page after this one');
+  expect(onShow).toHaveBeenLastCalledWith(2);
+  expect(layoutFor(get().S, get().doc).segs.filter(s => s.page === 2)).toEqual([]);
+  first.unmount();
   const three = () => ({ ...docOf(box({ id: 'a', text: 'a' }), box({ id: 'b', page: 1, text: 'b' }), box({ id: 'c', page: 2, text: 'c' })), pageCount: 3 });
   act(() => open(three()));
   onShow.mockClear();
