@@ -1,5 +1,6 @@
 // Write's Pages view: the Write bar, then a row per page with its typed copy (edited in place) beside its
 // handwritten copy, then Add page. What it shows (side by side, typed or handwritten) is kept on this device.
+// Below 860 px it shows one page at a time instead (PhonePages).
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { Seg } from '@/engine/types';
@@ -7,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { addPageAt } from '@/features/doc/actions';
 import { useStageActive } from '@/features/doc/StageHost';
 import type { PageLayout } from '@/features/pages/PageView';
+import { useWide } from '@/lib/media';
 import { update, useEditor } from '@/store/editor';
 import { PageRow } from './PageRow';
+import { PhonePages } from './PhonePages';
 import { PartMenu } from './TypedPage';
 import { WriteBar, type WriteMode } from './WriteBar';
 
@@ -34,6 +37,10 @@ function copyWidth(w: number, mode: WriteMode): number {
 const tagMenu = (sg: Seg) => <PartMenu sg={sg} />;
 
 export const PagesView = memo(function PagesView({ layout }: { layout: PageLayout | null }) {
+  return useWide() ? <WidePages layout={layout} /> : <PhonePages layout={layout} />;
+});
+
+function WidePages({ layout }: { layout: PageLayout | null }) {
   const active = useStageActive();
   const scrollToPage = useEditor(s => s.scrollToPage);
   const [mode, setModeState] = useState<WriteMode>(readMode);
@@ -102,4 +109,4 @@ export const PagesView = memo(function PagesView({ layout }: { layout: PageLayou
       </main>
     </div>
   );
-});
+}

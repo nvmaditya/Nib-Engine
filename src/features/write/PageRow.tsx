@@ -77,9 +77,12 @@ export const PageRow = memo(function PageRow({ i, pages, segs, cssW, mode, tagMe
   );
 });
 
-/** The handwritten copy, drawn again on every change while the stage is shown (the engine's objects change in place). */
-function HandSheet(props: Omit<SheetProps, 'mode' | 'caption'>) {
+/**
+ * The handwritten copy, drawn again on every change while the stage is shown (the engine's objects change in
+ * place). Its caption is `Handwritten` unless one is given (null for none).
+ */
+export function HandSheet({ caption = 'Handwritten', ...props }: Omit<SheetProps, 'mode'>) {
   const active = useStageActive();
   useEditor(s => (active ? s.version : -1));
-  return <Sheet {...props} mode="write" caption="Handwritten" />;
+  return <Sheet {...props} mode="write" caption={caption} />;
 }

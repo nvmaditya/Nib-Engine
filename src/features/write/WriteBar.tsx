@@ -20,11 +20,12 @@ function goTo(stage: 'write' | 'outline'): void {
   if (id !== null) navigate({ name: 'doc', id, stage });
 }
 
-function Segmented({ label, children }: { label: string; children: ReactNode }) {
+/** A row of pressed/unpressed buttons, named `label`. */
+export function Segmented({ label, children }: { label: string; children: ReactNode }) {
   return <div role="group" aria-label={label} className="inline-flex flex-none gap-0.5 rounded-[10px] bg-surface-2 p-[3px]">{children}</div>;
 }
 
-function SegButton({ pressed, onClick, children }: { pressed: boolean; onClick(): void; children: ReactNode }) {
+export function SegButton({ pressed, onClick, children }: { pressed: boolean; onClick(): void; children: ReactNode }) {
   return (
     <button type="button" aria-pressed={pressed} onClick={onClick}
       className="inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2.5 text-[13px] font-medium whitespace-nowrap text-muted hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none aria-pressed:bg-surface aria-pressed:text-fg aria-pressed:shadow-[0_0_0_1px_var(--line),0_1px_2px_rgba(0,0,0,0.06)] [&_svg]:size-4">

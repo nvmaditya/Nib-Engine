@@ -37,3 +37,18 @@ if (typeof Element !== 'undefined') {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
 }
 if (typeof document !== 'undefined' && !document.elementFromPoint) document.elementFromPoint = () => null;
+
+// jsdom has no matchMedia. Tests run in a wide window (jsdom's 1024 px): `(min-width: …)` and
+// `(max-width: …)` queries are answered from window.innerWidth, and every other query doesn't match.
+// A phone test puts its own in place.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  const px = (v: string, unit: string) => parseFloat(v) * (unit === 'rem' || unit === 'em' ? 16 : 1);
+  window.matchMedia = (query: string) => {
+    const m = /^\(\s*(min|max)-width:\s*([\d.]+)(px|rem|em)\s*\)$/.exec(query.trim());
+    const w = window.innerWidth, matches = !!m && (m[1] === 'min' ? w >= px(m[2], m[3]) : w <= px(m[2], m[3]));
+    return {
+      matches, media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    } as MediaQueryList;
+  };
+}

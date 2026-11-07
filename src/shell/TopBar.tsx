@@ -32,20 +32,20 @@ function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-        className="h-8 min-w-0 flex-1 border-transparent bg-transparent font-semibold shadow-none hover:border-line md:max-w-56"
+        className="h-8 min-w-0 flex-1 border-transparent bg-transparent font-semibold shadow-none hover:border-line wide:max-w-56"
       />
       {/* "Not saved" shows on phones too; "Saved" and "Saving…" only where there is room. */}
       <span className={cn('shrink-0 text-xs', saving === 'unsaved' ? 'font-medium text-danger' : 'hidden text-muted sm:inline')} role="status">
         {ready ? (saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : 'Not saved') : ''}
       </span>
-      <div className="hidden flex-1 md:block" />
+      <div className="hidden flex-1 wide:block" />
       {/* Narrow screens: the stages get a full-width row of their own under the name. */}
-      <StageNav id={id} stage={stage} className="order-last w-full md:order-none md:w-auto" />
+      <StageNav id={id} stage={stage} className="order-last w-full wide:order-none wide:w-auto" />
       <div className="flex items-center">
         <Button variant="ghost" size="icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!ready || !canUndo} onClick={undo}><Undo2 /></Button>
         <Button variant="ghost" size="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!ready || !canRedo} onClick={redo}><Redo2 /></Button>
       </div>
-      <Button className="hidden md:inline-flex" onClick={() => navigate({ name: 'doc', id, stage: 'export' })}>Export</Button>
+      <Button className="hidden wide:inline-flex" onClick={() => navigate({ name: 'doc', id, stage: 'export' })}>Export</Button>
     </>
   );
 }
@@ -53,7 +53,7 @@ function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name
 /** `ready`: the document named by the route is the one open in the editor. */
 export function TopBar({ route, ready }: { route: Route; ready: boolean }) {
   return (
-    <header className="flex min-h-14 flex-none flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface px-4 py-2 md:h-14 md:flex-nowrap md:py-0">
+    <header className="flex min-h-14 flex-none flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface px-4 py-2 wide:h-14 wide:flex-nowrap wide:py-0">
       {route.name === 'home' ? (
         <>
           <a href="#/" className="flex items-center gap-2 text-xl"><Logo size={30} /><Wordmark /></a>
