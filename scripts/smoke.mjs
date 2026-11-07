@@ -830,10 +830,19 @@ async function main() {
     a.on('requestfailed', r => { if (r.url().startsWith(BASE)) errors.push(`${r.url()} failed: ${r.failure()?.errorText}`); });
     const NEW_VERSION = 'A new version is ready.';
 
-    await step('Update: a new deploy is offered in every tab, and Reload reloads only the tab that asked', async () => {
+    await step('Update: a new deploy is offered in every tab, and Reload reloads only the tab that asked, even while another tab fetches', async () => {
       await a.goto(BASE);
       await a.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 60000 });
       await a.getByText('Nib works offline now.').waitFor({ timeout: 30000 });
+      // The empty page Reload may load unseen to wake a waiting version (src/app/updates.ts) is that file, never the app:
+      // nothing of Nib starts in it.
+      const kick = await a.evaluate(() => new Promise(res => {
+        const f = document.createElement('iframe');
+        f.hidden = true; f.src = './sw-kick.html';
+        f.onload = () => { const d = f.contentDocument; res({ scripts: d.scripts.length, root: !!d.getElementById('root'), text: d.body?.textContent.trim() }); f.remove(); };
+        document.body.append(f);
+      }));
+      if (kick.scripts || kick.root || kick.text) fail(`the page Reload loads unseen is not empty: ${JSON.stringify(kick)}`);
       const b = watch(await pwa.newPage());
       try {
         await b.goto(BASE);
@@ -843,21 +852,40 @@ async function main() {
         await main.click();
         await b.keyboard.press('Control+End');
         await b.keyboard.type(' (still typing)');
-        await b.evaluate(() => { window.__stay = 1; });
+        for (const p of [a, b]) await p.evaluate(() => { window.__stay = 1; });
         appendFileSync(join(root, 'dist/sw.js'), `\n// redeploy ${Date.now()}`);
         for (const p of [a, b]) await p.evaluate(async () => { await (await navigator.serviceWorker.getRegistration()).update(); });
         for (const p of [a, b]) await p.getByText(NEW_VERSION).waitFor({ timeout: 20000 });
+        // B presses Reload with a change typed a moment ago, not yet written, while Home in A fetches hands through the
+        // old version (as it does drawing a thumbnail). Chromium can then leave the new version waiting, and a page that
+        // reloaded itself to wake it would never load: B must be on the new version well before its 10 s give-back.
+        await main.click();
+        await b.keyboard.press('Control+End');
+        await b.keyboard.type(' and more');
+        const burst = a.evaluate(ms => new Promise(res => {
+          const end = performance.now() + ms, hands = ['labelle', 'caveat', 'kalam', 'zeyada'];
+          let n = 0;
+          const go = () => { if (performance.now() > end) return res(n); fetch(`./fonts/${hands[n++ % 4]}.woff`).finally(() => setTimeout(go, 2)); };
+          go();
+        }), 400);
+        const t0 = Date.now();
+        await Promise.all([
+          b.waitForEvent('load', { timeout: 8000 }).catch(() => fail(`tab B had not reloaded ${Date.now() - t0} ms after Reload, with tab A fetching`)),
+          b.getByRole('button', { name: 'Reload' }).click(),
+        ]);
+        if (!(await burst)) fail('tab A fetched nothing while Reload was pressed');
+        if (await b.evaluate(() => window.__stay) !== undefined) fail('tab B did not reload');
+        // (Reload wrote the last change first.)
+        await b.getByRole('textbox', { name: 'Main text, page 1' }).filter({ hasText: '(still typing) and more' }).waitFor({ timeout: 15000 });
+        if (await b.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting)) fail('the new version still waits');
+        await a.waitForTimeout(1000);
+        if (await a.evaluate(() => window.__stay) !== 1) fail('tab A reloaded by itself');
+        if (!(await a.getByText(NEW_VERSION).count())) fail(`tab A no longer says “${NEW_VERSION}”`);
+        // A's Reload: the new version is in charge already, so A just reloads.
         await Promise.all([a.waitForEvent('load', { timeout: 15000 }), a.getByRole('button', { name: 'Reload' }).click()]);
         await a.getByText('The Water Cycle').waitFor({ timeout: 15000 });
         await a.waitForTimeout(1000);
         if (await a.getByText(NEW_VERSION).count()) fail(`tab A still says “${NEW_VERSION}” after reloading`);
-        if (await b.evaluate(() => window.__stay) !== 1) fail('tab B reloaded by itself');
-        if (!(await main.textContent()).includes('(still typing)')) fail('tab B lost what was typed');
-        if (!(await b.getByText(NEW_VERSION).count())) fail(`tab B no longer says “${NEW_VERSION}”`);
-        await Promise.all([b.waitForEvent('load', { timeout: 15000 }), b.getByRole('button', { name: 'Reload' }).click()]);
-        if (await b.evaluate(() => window.__stay) !== undefined) fail('tab B did not reload');
-        // (Reload wrote the last change first.)
-        await b.getByRole('textbox', { name: 'Main text, page 1' }).filter({ hasText: '(still typing)' }).waitFor({ timeout: 15000 });
       } finally { await b.close(); }
     });
 

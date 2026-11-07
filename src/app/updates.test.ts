@@ -8,13 +8,17 @@ import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
 import { closeImport, openImport } from '@/features/doc/actions';
 import { ImportDialog } from '@/features/import/ImportDialog';
 import { installFocusMemory } from '@/lib/focus';
-import { NewerDocumentError, putDoc } from '@/store/documents';
-import { SAVE_FAILED, SAVE_NEWER, closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
+import { NewerDocumentError, StaleDocumentError, getDoc, putDoc } from '@/store/documents';
+import { COPY_LOST, NOT_KEPT, SAVE_FAILED, SAVE_NEWER, closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
 import { rec } from '@/test/docs';
 import { MEMORY_ID } from './route';
-import { CHECK_EVERY, GIVE_BACK_AFTER, NEW_VERSION, OFFLINE_READY, RELOAD_FALLBACK, resetUpdatesForTests, startUpdates, updateState } from './updates';
+import { KICK_PAGE } from './pwaManifest';
+import { CHECK_EVERY, GIVE_BACK_AFTER, KICK_AFTER, NEW_VERSION, OFFLINE_READY, RELOAD_FALLBACK, resetUpdatesForTests, startUpdates, updateState } from './updates';
 
-vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => 1) }));
+vi.mock('@/store/documents', async orig => {
+  const real = await orig<typeof import('@/store/documents')>();
+  return { ...real, putDoc: vi.fn(async () => 1), getDoc: vi.fn(real.getDoc) };
+});
 
 let opts: RegisterSWOptions, applyUpdate: Mock<(reloadPage?: boolean) => Promise<void>>, reload: Mock<() => void>;
 let shown: DocumentVisibilityState = 'visible';
@@ -33,6 +37,23 @@ const reloadIn = (msg: string) => within(message(msg)!).getByRole('button', { na
 /** Press a message's button, as a click does in Chromium: it takes the focus, then is clicked. */
 const press = (b: HTMLElement) => act(() => { b.focus(); fireEvent.click(b); });
 
+/** A service worker as a registration holds it: its state changes, and it says so (statechange). */
+type FakeWorker = EventTarget & { state: ServiceWorkerState };
+const worker = (state: ServiceWorkerState = 'installed'): FakeWorker => Object.assign(new EventTarget(), { state });
+type FakeRegistration = EventTarget & { update: Mock<() => Promise<void>>; installing: FakeWorker | null; waiting: FakeWorker | null; active: FakeWorker | null };
+/** The registration vite-plugin-pwa hands over once registered (onRegisteredSW): `waiting` is a new version, until it takes over. */
+function registered(o: { waiting?: boolean; active?: boolean } = {}): FakeRegistration {
+  const reg: FakeRegistration = Object.assign(new EventTarget(), {
+    update: vi.fn(async () => {}), installing: null, waiting: o.waiting ? worker() : null, active: o.active === false ? null : worker('activated'),
+  });
+  act(() => opts.onRegisteredSW!('sw.js', reg as unknown as ServiceWorkerRegistration));
+  return reg;
+}
+/** Every iframe this page has had added (each is gone again once loaded). */
+let framesAdded: HTMLIFrameElement[] = [];
+let frameWatch: MutationObserver | undefined;
+const kicks = () => framesAdded.filter(f => f.getAttribute('src')?.endsWith(KICK_PAGE));
+
 beforeEach(async () => {
   await flushSave();
   vi.useFakeTimers();
@@ -44,8 +65,12 @@ beforeEach(async () => {
   resetUpdatesForTests(); applyUpdate = vi.fn(async () => {}); reload = vi.fn();
   startUpdates(o => { opts = o; return applyUpdate; }, { reload });
   render(createElement(Toaster, { expand: true, visibleToasts: 3 }));
+  framesAdded = [];
+  frameWatch = new MutationObserver(rs => { for (const r of rs) for (const n of r.addedNodes) if (n instanceof HTMLIFrameElement) framesAdded.push(n); });
+  frameWatch.observe(document.body, { childList: true, subtree: true });
 });
 afterEach(async () => {
+  frameWatch?.disconnect();
   act(() => closeImport());
   await closeDocument();
   if (useEditor.getState().docId === MEMORY_ID) useEditor.setState({ docId: null }); // (never closed: nothing would keep it)
@@ -114,6 +139,67 @@ test('if the new version never takes over, Reload reloads anyway after 3 s', asy
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
+// Chromium can leave a new version waiting after Reload asked it to take over: another tab fetching through the old
+// one as it is stopped restarts it, and the new one waits for the next page loaded in scope. Were that page this one
+// (a reload), it would never load. So a page of nothing is loaded, unseen, and the takeover reloads this one as usual.
+test('a new version still waiting a second after Reload is woken by an empty page loaded unseen, and this page reloads once it takes over', async () => {
+  const reg = registered({ waiting: true });
+  openDocument(rec('A', 'x'));
+  update(s => { s.doc.boxes[0].text = 'xy'; }); // typed, not yet written
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(1);
+  await settle(KICK_AFTER - 100);
+  expect(kicks()).toHaveLength(0); // (it usually takes over at once)
+  await settle(100);
+  expect(kicks()).toHaveLength(1);
+  const [kick] = kicks();
+  expect(kick.getAttribute('src')).toBe(`${import.meta.env.BASE_URL}${KICK_PAGE}`);
+  expect(kick.hidden).toBe(true);
+  act(() => { kick.dispatchEvent(new Event('load')); });
+  expect(kick.isConnected).toBe(false); // gone once loaded
+  expect(reload).not.toHaveBeenCalled();
+
+  await settle(RELOAD_FALLBACK - KICK_AFTER); // the 3 s, and it still waits
+  expect(reload).not.toHaveBeenCalled(); // a reload now is the page that never loads
+  expect(kicks()).toHaveLength(2); // woken once more
+  reg.waiting = null; // it takes over
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(putDoc).mock.calls.at(-1)![0].doc.boxes[0].text).toBe('xy');
+  expect(kicks().every(f => !f.isConnected)).toBe(true); // nothing is left behind
+});
+
+test('with nothing waiting any more by the 3 s, Reload reloads as before, without loading anything unseen', async () => {
+  const reg = registered({ waiting: true });
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  reg.waiting = null; // it is taking over (activating), and says so late, or not at all
+  await settle(RELOAD_FALLBACK + 100);
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(kicks()).toHaveLength(0);
+});
+
+test('a new version that never takes over leaves this page as it is, never reloaded onto the old one, and is offered again', async () => {
+  registered({ waiting: true });
+  const off = installFocusMemory();
+  const field = document.createElement('textarea'); document.body.append(field); field.focus();
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  await settle(GIVE_BACK_AFTER - 100);
+  expect(message(NEW_VERSION)).toBeNull(); // (still trying)
+  await settle(200); frames(300);
+  expect(reload).not.toHaveBeenCalled();
+  expect(document.body).not.toHaveAttribute('inert');
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument(); // to press again
+  expect(field).toHaveFocus(); // where the typing was
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(2);
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1);
+  off(); field.remove();
+});
+
 test('the first install says Nib works offline now', () => {
   act(() => opts.onOfflineReady!()); tick();
   expect(message(OFFLINE_READY)).not.toBeNull();
@@ -143,8 +229,7 @@ test('a document a newer Nib saved offers Reload, which goes to the new version'
 });
 
 test('checks for a new version every hour while shown', () => {
-  const swUpdate = vi.fn(async () => {});
-  act(() => opts.onRegisteredSW!('sw.js', { update: swUpdate } as unknown as ServiceWorkerRegistration));
+  const swUpdate = registered().update;
   tick(CHECK_EVERY - 1000);
   expect(swUpdate).not.toHaveBeenCalled();
   tick(1000);
@@ -161,6 +246,64 @@ test('checks for a new version every hour while shown', () => {
   expect(swUpdate).toHaveBeenCalledTimes(2);
 });
 
+/** A new version found (an update check here or in another tab): it installs, then waits, as the registration says. */
+function deploy(reg: FakeRegistration): FakeWorker {
+  const next = worker('installing');
+  reg.installing = next;
+  act(() => { reg.dispatchEvent(new Event('updatefound')); });
+  next.state = 'installed'; reg.installing = null;
+  if (reg.active) reg.waiting = next; else { reg.active = next; next.state = 'activating'; } // (a first install goes on)
+  act(() => { next.dispatchEvent(new Event('statechange')); });
+  return next;
+}
+const swipeAway = () => { act(() => { for (const t of sonner.getToasts()) sonner.dismiss(t.id); }); frames(500); };
+
+// workbox-window (7.4.1) stops listening for new versions after the first one it hears of, or after one found more
+// than a minute after the page registered: vite-plugin-pwa's onNeedRefresh never comes for a later deploy.
+test('a later deploy is offered too, in a tab whose first offer was swiped away', () => {
+  const reg = registered();
+  reg.waiting = worker(); act(() => opts.onNeedRefresh!()); frames(100); // deploy 2, as vite-plugin-pwa says it
+  swipeAway();
+  expect(message(NEW_VERSION)).toBeNull();
+  deploy(reg); frames(100); // deploy 3: only the registration says so
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
+  expect(updateState()).toBe('waiting');
+});
+
+test('a new version is offered once, however many say it is waiting', async () => {
+  const reg = registered();
+  deploy(reg); frames(100);
+  expect(message(NEW_VERSION)).not.toBeNull();
+  swipeAway();
+  act(() => opts.onNeedRefresh!()); frames(100); // vite-plugin-pwa, a moment later (twice, for one found in another tab)
+  act(() => opts.onNeedRefresh!()); frames(100);
+  tick(CHECK_EVERY); await settle(0); frames(100); // the hourly check finds it waiting
+  expect(reg.update).toHaveBeenCalledTimes(1);
+  expect(message(NEW_VERSION)).toBeNull(); // swiped away, it stays away
+});
+
+test('one offered before the page knew its registration isn’t offered again by the hourly check', async () => {
+  act(() => opts.onNeedRefresh!()); frames(100); // (waiting before the page registered: said first)
+  registered({ waiting: true });
+  swipeAway();
+  tick(CHECK_EVERY); await settle(0); frames(100);
+  expect(message(NEW_VERSION)).toBeNull();
+});
+
+test('the hourly check offers a new version it finds waiting that no one said was there', async () => {
+  const reg = registered();
+  reg.waiting = worker();
+  tick(CHECK_EVERY); await settle(0); frames(100);
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
+});
+
+test('the first install is not a new version', () => {
+  const reg = registered({ active: false });
+  deploy(reg); frames(100);
+  expect(message(NEW_VERSION)).toBeNull();
+  expect(updateState()).toBe('current');
+});
+
 /** The Import dialog, open while the store says so, as Home and a document show it. */
 function Import() {
   const open = useEditor(s => s.importOpen);
@@ -172,6 +315,18 @@ test('Import puts the message away while it is open, and closing it brings the m
   act(() => opts.onNeedRefresh!()); frames(100);
   act(() => openImport()); frames(500); // (it puts away every message, so none covers Write it out on a phone)
   expect(screen.getByRole('dialog', { name: 'Import a document' })).toBeInTheDocument();
+  expect(message(NEW_VERSION)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); frames(500);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
+});
+
+test('a new version found while Import is open waits for it to close, so nothing covers its buttons on a phone', () => {
+  render(createElement(Import));
+  act(() => openImport()); frames(500);
+  act(() => opts.onNeedRefresh!()); frames(500);
+  expect(message(NEW_VERSION)).toBeNull(); // (it would sit over Cancel and Write it out, under the dialog's cover)
+  act(() => opts.onNeedReload!()); frames(500); // and another tab taking it, the same
   expect(message(NEW_VERSION)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); frames(500);
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -308,6 +463,43 @@ test('a change that can’t be written when the new version takes over keeps the
   expect(vi.mocked(putDoc).mock.calls[0][0].doc.boxes[0].text).toBe('x and more');
   expect(reload).toHaveBeenCalledTimes(1);
   expect(applyUpdate).toHaveBeenCalledTimes(1); // (the new version is in charge already)
+});
+
+test('a change another tab’s save refused as the new version takes over keeps the page, with Copy, and Reload is offered again', async () => {
+  openDocument(rec('A', 'x'));
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(1);
+  update(s => { s.doc.boxes[0].text = 'x, mine'; }); // typed while it takes over
+  vi.mocked(putDoc).mockRejectedValue(new StaleDocumentError()); // another tab saved the document first
+  vi.mocked(getDoc).mockResolvedValueOnce({ ...rec('A', 'x, theirs'), rev: 4 });
+  act(() => opts.onNeedReload!()); await settle(1000); frames(500);
+  expect(reload).not.toHaveBeenCalled(); // which would take the message, and the words, away
+  expect(useEditor.getState().doc.boxes[0].text).toBe('x, theirs');
+  expect(within(message(NOT_KEPT)!).getByRole('button', { name: COPY_LOST })).toBeInTheDocument();
+  expect(message(SAVE_FAILED)).toBeNull(); // (it isn't a failure to save)
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument(); // to reload once the words are copied
+  expect(document.body).not.toHaveAttribute('inert');
+  await settle(GIVE_BACK_AFTER);
+  expect(reload).not.toHaveBeenCalled();
+
+  vi.mocked(putDoc).mockReset().mockResolvedValue(5);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1); // (the new version is in charge already)
+});
+
+test('…and so does one refused when Reload is pressed, before the new version is asked for', async () => {
+  openDocument(rec('A', 'x'));
+  update(s => { s.doc.boxes[0].text = 'x, mine'; }); // waiting for a pause in typing
+  vi.mocked(putDoc).mockRejectedValue(new StaleDocumentError());
+  vi.mocked(getDoc).mockResolvedValueOnce({ ...rec('A', 'x, theirs'), rev: 4 });
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(1000); frames(500);
+  expect(applyUpdate).not.toHaveBeenCalled();
+  expect(reload).not.toHaveBeenCalled();
+  expect(message(NOT_KEPT)).not.toBeNull();
+  expect(message(SAVE_FAILED)).toBeNull();
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
 });
 
 test('a tab that had no service worker when it opened reloads as soon as the new version takes over', async () => {
