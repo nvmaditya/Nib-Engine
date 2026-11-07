@@ -7,8 +7,7 @@ export function SizeSection({ V, S, blockScope }: { V: Settings; S: Settings; bl
   return (
     <Group title="Size and spacing">
       <Range id="size" V={V} />
-      <Range id="gap" V={S} />
-      {blockScope && <p className="mt-1 text-xs text-muted">Line spacing: <span>shared by every page</span></p>}
+      <Range id="gap" V={S} meta={blockScope ? 'shared by every page' : undefined} />
       <Fold id="spacing" title="Letter and word spacing">
         <Range id="track" V={V} step={0.5} />
         <Range id="words" V={V} step={5} />

@@ -40,9 +40,9 @@ export function PaperSection({ S, blockScope }: { S: Settings; blockScope: boole
             return (
               <div key={k} className="flex flex-col gap-0.5">
                 <label className={cn('flex items-center gap-2 text-sm', works ? 'cursor-pointer' : 'cursor-not-allowed text-muted')}>
-                  <Switch checked={works && !!S[k]} disabled={!works} onCheckedChange={v => setS(k, v)} aria-label={label} />{label}
+                  <Switch checked={works && !!S[k]} disabled={!works} onCheckedChange={v => setS(k, v)} aria-label={label} aria-describedby={works ? undefined : 'why-' + k} />{label}
                 </label>
-                {!works && <span className="pl-11 text-xs text-muted">Not on this paper</span>}
+                {!works && <span id={'why-' + k} className="pl-11 text-xs text-muted">Not on this paper</span>}
               </div>
             );
           })}

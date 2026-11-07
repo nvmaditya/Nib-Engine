@@ -2,7 +2,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { DEFAULTS } from '@/engine/config.js';
+import { DEFAULTS, LIMITS } from '@/engine/config.js';
 import { select, view } from '@/features/doc/actions';
 import { flushSave, undo, update, useEditor } from '@/store/editor';
 import { box, docOf, get, open } from '@/test/docs';
@@ -148,6 +148,46 @@ test('Fine-tune holds the five realism sliders, folded away', async () => {
   expect(screen.queryByRole('slider', { name: 'Mistakes' })).toBeNull();
   await fold('Fine-tune');
   expect(['Natural movement', 'Vary each letter', 'Letter wobble', 'Ink flow', 'Mistakes'].map(n => screen.getByRole('slider', { name: n }))).toHaveLength(5);
+});
+
+test('in Only scope, Line spacing is the document’s: it moves S.gap, not the block, and says so', async () => {
+  open(docOf(box({ id: 'n' })));
+  update(s => { s.doc.boxes[0].style = { gap: 40 } as never; }, { history: false }); // as if the block carried a stray gap
+  styleBox('n'); render(<Live />);
+  const s = screen.getByRole('slider', { name: 'Line spacing' });
+  expect(s).toHaveAttribute('aria-valuenow', String(DEFAULTS.gap));
+  s.focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(get().S.gap).toBe(DEFAULTS.gap + 1);
+  expect(get().doc.boxes[0].style).toEqual({ gap: 40 });
+  expect(screen.getByRole('slider', { name: 'Line spacing' })).toHaveAttribute('aria-valuenow', String(DEFAULTS.gap + 1));
+  expect(screen.getAllByText('shared by every page')).toHaveLength(2);
+});
+
+test.each([
+  ['Letter size', 'size'], ['Line spacing', 'gap'], ['Line weight', 'weight'], ['Natural movement', 'mess'], ['Vary each letter', 'variety'],
+  ['Letter wobble', 'wobble'], ['Ink flow', 'flow'], ['Mistakes', 'mistakes'], ['Letter spacing', 'track'], ['Word spacing', 'words'],
+] as const)('%s slider spans the full range and shows the view value', async (name, key) => {
+  open(docOf(box())); render(<Live />);
+  await fold('Fine-tune'); await fold('Letter and word spacing');
+  const s = screen.getByRole('slider', { name });
+  expect([s.getAttribute('aria-valuemin'), s.getAttribute('aria-valuemax'), s.getAttribute('aria-valuenow')])
+    .toEqual([String(LIMITS[key][0]), String(LIMITS[key][1]), String(view()[key])]);
+});
+
+test.each([['Letter spacing', 'track', 0.5], ['Word spacing', 'words', 5]] as const)('%s moves by %s per key press', async (name, key, by) => {
+  open(docOf(box())); render(<Live />);
+  await fold('Letter and word spacing');
+  screen.getByRole('slider', { name }).focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(get().S[key]).toBe(DEFAULTS[key] + by);
+});
+
+test('a switch this paper can’t show points at its reason', async () => {
+  open(docOf(box())); render(<Live />);
+  await fold('Paper effects');
+  await userEvent.click(screen.getByRole('button', { name: 'Spiral' }));
+  expect(screen.getByRole('switch', { name: 'Punch holes' })).toHaveAccessibleDescription('Not on this paper');
 });
 
 test('letter and word spacing are folded away', async () => {
