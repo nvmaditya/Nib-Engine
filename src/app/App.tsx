@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
+import { bootStyle } from '@/features/style/prefs';
 import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
 import { closeDocument, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
@@ -16,7 +17,8 @@ export function App() {
 
   useEffect(() => {
     let live = true;
-    void bootstrapDocuments().then(r => {
+    // Uploaded fonts are registered before any document is read, so no document loses its hand.
+    void Promise.all([bootstrapDocuments(), bootStyle()]).then(([r]) => {
       if (!live) return;
       if (!r.ok) {
         const S = cleanSettings(null, false);

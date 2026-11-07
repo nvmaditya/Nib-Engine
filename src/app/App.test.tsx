@@ -1,7 +1,10 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast as sonner } from 'sonner';
+import { FONTS } from '@/engine/config.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
+import { addFontFile } from '@/features/style/fonts';
+import { fontFile } from '@/test/fonts';
 import { deleteBlock } from '@/features/doc/actions';
 import { createDoc, getDoc } from '@/store/documents';
 import { flushSave, useEditor } from '@/store/editor';
@@ -122,4 +125,13 @@ test('while a document opens its name field says Opening…', () => {
   expect(f).toHaveValue('');
   expect(screen.queryByText('Saved')).toBeNull();
   expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+});
+
+test('a document that uses an uploaded hand opens with it on a fresh page', async () => {
+  const r = await addFontFile(fontFile('caveat', 'Mine.woff')) as { id: string };
+  const rec = await createDoc({ title: 'U', settings: { ...cleanSettings(null, false), font: r.id } });
+  FONTS.splice(FONTS.findIndex(f => f.id === r.id), 1); // as a fresh page has it: not registered yet
+  location.hash = `#/d/${rec.id}/write`; render(<App />);
+  await waitFor(() => expect(useEditor.getState().docId).toBe(rec.id));
+  expect(useEditor.getState().S.font).toBe(r.id);
 });
