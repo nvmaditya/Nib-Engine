@@ -1,6 +1,7 @@
 // The first-visit tips: a card in a corner (along the bottom on phones), a landmark a screen reader can find, and
-// never something that takes the focus. Sheets (z-40) and dialogs (z-50) cover it. Mounted once beside the stages.
-import { useEffect, useId, useRef, type FocusEvent } from 'react';
+// never something that takes the focus. Dialogs (z-50) cover it; a stage's sheet (z-40) puts it away (app.css).
+// Mounted once beside the stages.
+import { useEffect, useId, useLayoutEffect, useRef, type FocusEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { chordLabel } from '@/lib/keys';
 import { matches } from '@/lib/media';
@@ -32,7 +33,28 @@ export function Tips() {
   const card = useRef<HTMLElement>(null);
   const from = useRef<Element | null>(null); // what had the focus before it came into the card
 
-  useEffect(() => dismissTips, []); // leaving the document puts them away: they show once
+  // Leaving the document puts them away: they show once. This cleanup runs before DocumentView's own effects are
+  // torn down, and showTipsIfDue (tips.ts) marks the tips shown on this page before it opens them. So under
+  // React's StrictMode, whose development run mounts, unmounts and mounts every effect again, the tips would
+  // open, be put away by this cleanup, and not open again (they have shown on this page): they would never be
+  // seen. The app doesn't use StrictMode; if it ever does, this needs another way to tell a real unmount.
+  useEffect(() => dismissTips, []);
+
+  // While the card shows, the pages below 860 px leave room for it: its height and the gap below it (app.css).
+  // Hidden under a stage's sheet, it has no height and takes no room.
+  useLayoutEffect(() => {
+    const el = card.current, root = document.documentElement.style;
+    if (!el) return;
+    const room = () => {
+      const h = el.offsetHeight;
+      if (h) root.setProperty('--tips-room', `calc(${h}px + 0.75rem + env(safe-area-inset-bottom))`);
+      else root.removeProperty('--tips-room');
+    };
+    room();
+    const watch = new ResizeObserver(room);
+    watch.observe(el);
+    return () => { watch.disconnect(); root.removeProperty('--tips-room'); };
+  }, [open]);
 
   if (!open) return null;
 
@@ -52,6 +74,7 @@ export function Tips() {
   return (
     <aside
       ref={card}
+      data-tips
       aria-labelledby={id}
       onFocus={onFocus}
       className="fixed z-30 rounded-xl border border-line bg-surface p-4 shadow-lg inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] wide:inset-x-auto wide:bottom-4 wide:left-4 wide:w-80"

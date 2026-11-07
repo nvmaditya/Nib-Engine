@@ -2,9 +2,14 @@
 // the focus, put away for good by Got it (or by leaving the document). Each test is a page of its own, loaded
 // afresh (vi.resetModules), so the tips' memory of having shown on this page starts empty; IndexedDB and
 // localStorage keep what they hold, as they do across a reload.
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { answer } from '@/test/media';
+import { answer, resizableWindow } from '@/test/media';
+
+const appCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../styles/app.css'), 'utf8');
 
 // Home's document pictures are drawn in the background, one by one, and have nothing to do with the tips.
 vi.mock('@/features/home/PageThumb', () => ({ PageThumb: () => null }));
@@ -109,10 +114,15 @@ test('the card showing takes no focus from what has it', async () => {
 test('Got it puts them away, and they don’t come back', async () => {
   const user = userEvent.setup();
   await openFirst('First');
-  expect(document.activeElement).toBe(document.body);
+  const field = await nameField();
+  act(() => field.focus());
+  const blurred = vi.fn();
+  field.addEventListener('blur', blurred);
   await user.click(within(await tips()).getByRole('button', { name: 'Got it' }));
   noTips();
-  expect(document.activeElement).toBe(document.body); // a click leaves the focus where it was: it never went into the card
+  expect(field).toHaveFocus(); // a click leaves the focus where it was: it never went into the card
+  expect(blurred).not.toHaveBeenCalled();
+  act(() => field.blur()); // (a name field with the focus keeps what is typed in it when another document opens)
   await openNext('Second');
   noTips();
 
@@ -227,4 +237,66 @@ test('the card sits out of the way: along the bottom on phones, in the bottom le
   const aside = await tips();
   for (const c of ['fixed', 'z-30', 'inset-x-3', 'bottom-[calc(0.75rem+env(safe-area-inset-bottom))]', 'wide:inset-x-auto', 'wide:bottom-4', 'wide:left-4', 'wide:w-80', 'bg-surface', 'border-line']) expect(aside).toHaveClass(c);
   expect(aside.closest('[data-stage]')).toBeNull(); // outside the stages, so a hidden stage never hides it
+});
+
+/* ---------- Below 860 px: the stage's sheet, and room at the foot of the pages ---------- */
+
+/** app.css's rules about the tips (`[data-tips]`), as a page's stylesheet: jsdom applies them to getComputedStyle. */
+function tipsRules(): HTMLStyleElement {
+  const rules = appCss.match(/^[^{}\n]*\[data-tips\][^{}]*\{[^}]*\}/gm) ?? [];
+  expect(rules).toHaveLength(1);
+  const style = document.createElement('style');
+  style.textContent = rules.join('\n');
+  document.head.append(style);
+  return style;
+}
+const go = (hash: string) => act(() => { location.hash = hash; });
+
+test('below 860 px, while the stage on screen holds a sheet, the card is out of the way and out of the accessibility tree; it comes back in Write', async () => {
+  const win = resizableWindow(390), style = tipsRules();
+  try {
+    await openFirst('Essay');
+    expect(await tips()).toBeVisible();
+    const id = location.hash.split('/')[2];
+    go(`#/d/${id}/style`);
+    await waitFor(() => expect(document.querySelector('[data-stage="style"]:not([hidden]) [data-vaul-drawer]')).not.toBeNull());
+    const card = document.querySelector('aside[data-tips]');
+    expect(card).not.toBeNull(); // still open: it is the sheet that puts it away
+    expect(card).not.toBeVisible();
+    noTips();
+    go(`#/d/${id}/write`);
+    expect(await tips()).toBeVisible();
+    go(`#/d/${id}/export`);
+    await waitFor(() => expect(document.querySelector('[data-stage="export"]:not([hidden]) [data-vaul-drawer]')).not.toBeNull());
+    noTips();
+  } finally { style.remove(); win.restore(); }
+});
+
+test('while the card shows, the pages get room below for it (--tips-room, the card’s height and its gap), and lose it when it goes', async () => {
+  const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!;
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get(this: HTMLElement) { return this.matches('aside[data-tips]') ? 180 : 0; } });
+  const room = () => document.documentElement.style.getPropertyValue('--tips-room');
+  try {
+    const user = userEvent.setup();
+    await openFirst('Essay');
+    const aside = await tips();
+    expect(room()).toBe('calc(180px + 0.75rem + env(safe-area-inset-bottom))');
+    await user.click(within(aside).getByRole('button', { name: 'Got it' }));
+    noTips();
+    expect(room()).toBe('');
+  } finally { Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height); }
+  // The phone pages' scroll area uses it, below 860 px only.
+  expect(appCss).toMatch(/@media \(width < 53\.75rem\) \{\s*\[data-stage='write'\] main\[data-pages\] \{\s*padding-bottom: var\(--tips-room, 0px\);\s*\}\s*\}/);
+});
+
+test('leaving the document takes the room away with the card', async () => {
+  const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!;
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get(this: HTMLElement) { return this.matches('aside[data-tips]') ? 180 : 0; } });
+  try {
+    await openFirst('Essay');
+    await tips();
+    expect(document.documentElement.style.getPropertyValue('--tips-room')).not.toBe('');
+    await goHome();
+    expect(document.documentElement.style.getPropertyValue('--tips-room')).toBe('');
+  } finally { Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height); }
 });
