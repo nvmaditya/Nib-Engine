@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { SAMPLE_BODY } from '@/engine/config.js';
 import { srcOffset } from '@/engine/core.js';
 import { flushSave, openDocument, placeCaret, undo, update } from '@/store/editor';
-import { get, rec } from '@/test/docs';
+import { box, docOf, get, rec } from '@/test/docs';
 import { setActiveEditor } from './active';
 import { BlockEditor, type BlockEditorProps } from './BlockEditor';
 import { FormatToolbar } from './FormatToolbar';
@@ -74,6 +74,37 @@ test('Ctrl+Z in the editor undoes through the app history and puts the caret at 
   fireEvent.keyDown(ed.view.dom, { key: 'z', ctrlKey: true });
   fireEvent.keyDown(ed.view.dom, { key: 'y', ctrlKey: true });
   expect(text()).toMatch(/^# The Water Cycle!/);
+});
+
+test('a paste and each formatting change are undo steps of their own, between bursts of typing', async () => {
+  setup('');
+  type('one');
+  act(() => { ed.view.pasteText(' two'); });
+  type(' three');
+  select(0, 3);
+  await userEvent.click(screen.getByRole('button', { name: 'Bold' }));
+  fireEvent.keyDown(ed.view.dom, { key: 'u', ctrlKey: true });
+  await userEvent.click(screen.getByRole('button', { name: 'Numbered list' }));
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Text style' }), 'Heading');
+  const steps = [text()];
+  while (get().canUndo) { act(() => undo()); steps.push(text()); }
+  expect(steps).toEqual(['## **_one_** two three', '1. **_one_** two three', '**_one_** two three', '**one** two three', 'one two three', 'one two', 'one', '']);
+});
+
+test('Ctrl+Z puts the caret where the change it undoes was, in whichever block that is', () => {
+  openDocument(rec('A', docOf(box({ id: 'b1', text: 'one' }), box({ id: 'b2', text: 'two' }))));
+  let other!: Editor;
+  render(<><BlockEditor boxId="b1" range={null} label="First" acceptCaret onReady={e => (ed = e)} />
+    <BlockEditor boxId="b2" range={null} label="Second" acceptCaret onReady={e => (other = e)} /></>);
+  act(() => { other.commands.insertContentAt(3, '!'); });
+  expect(get().doc.boxes[1].text).toBe('tw!o');
+  act(() => { ed.view.focus(); });
+  fireEvent.keyDown(ed.view.dom, { key: 'z', ctrlKey: true });
+  expect(get().doc.boxes.map(b => b.text)).toEqual(['one', 'two']);
+  expect(other.isFocused).toBe(true);
+  expect(offsetAt(other.state.doc, 'two', other.state.selection.from)).toBe(2);
+  fireEvent.keyDown(other.view.dom, { key: 'y', ctrlKey: true });
+  expect([get().doc.boxes[1].text, offsetAt(other.state.doc, 'tw!o', other.state.selection.from)]).toEqual(['tw!o', 2]);
 });
 
 test('undo from the browser menu goes through the app history too', () => {
@@ -202,6 +233,20 @@ test('pasted text lands as the converter writes it, so positions stay exact', ()
   expect(offsetAt(ed.state.doc, text(), ed.state.selection.head)).toBe(3); // between x and a
 });
 
+test('spaces typed at the start of a heading or list item go, as markup has none there', () => {
+  setup('# Title\n- item');
+  select(2);
+  type(' ');
+  expect([text(), ed.state.doc.firstChild!.textContent]).toEqual(['# Title\n- item', 'Title']);
+  select(text().indexOf('item'));
+  type('  x');
+  expect([text(), ed.state.doc.lastChild!.textContent]).toEqual(['# Title\n- xitem', 'xitem']);
+  expect(offsetAt(ed.state.doc, text(), ed.state.selection.head)).toBe(text().indexOf('item'));
+  select(4);
+  type(' ');
+  expect(text()).toBe('# Ti tle\n- xitem'); // anywhere else a space stays
+});
+
 test('page-break lines outlive a pasted change', () => {
   setup('- item\nnext', { breaks: [{ offset: 7, page: 2, idx: 1, actions: false }] });
   select(6);
@@ -296,4 +341,38 @@ test('a deleted block is never written back', () => {
   act(() => update(s => { s.doc.boxes = []; }));
   act(() => { ed.commands.insertContentAt(1, 'x'); });
   expect(get().doc.boxes).toHaveLength(0);
+});
+
+/* ---------- Numbered lists that run on past a part ---------- */
+
+const numbered = (items: string[], indent: number[] = []) => items.map((t, i) => '  '.repeat(indent[i] ?? 0) + t).join('\n');
+const count = (names: string[], from = 1) => names.map((t, i) => `${from + i}. ${t}`);
+const item = (n: number) => 'item' + n;
+const upTo = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+test('a numbered list that runs on past the part keeps counting when an item is deleted or added', () => {
+  setup(count(upTo(1, 40).map(item)).join('\n'), { range: { first: 0, end: 26 } });
+  const end = (li: number) => text().split('\n').slice(0, li + 1).join('\n').length;
+  act(() => { ed.commands.deleteRange({ from: posAt(ed.state.doc, text(), end(0)), to: posAt(ed.state.doc, text(), end(1)) }); }); // item2 goes
+  expect(text()).toBe(count([1, ...upTo(3, 40)].map(item)).join('\n'));
+  select(end(0));
+  fireEvent.keyDown(ed.view.dom, { key: 'Enter' });
+  act(() => { ed.commands.insertContent('new'); });
+  expect(text()).toBe(count([item(1), 'new', ...upTo(3, 40).map(item)]).join('\n'));
+});
+
+test('a list that runs on keeps counting at each indent', () => {
+  setup(numbered(['1. a', '2. b', '1. x', '2. y', '3. c', '4. d'], [0, 0, 1, 1, 0, 0]), { range: { first: 0, end: 2 } });
+  act(() => { ed.commands.deleteRange({ from: posAt(ed.state.doc, text(), 3), to: posAt(ed.state.doc, text(), 8) }); }); // a goes
+  expect(text()).toBe(numbered(['1. b', '1. x', '2. y', '2. c', '3. d'], [0, 1, 1, 0, 0]));
+});
+
+test('a list after the part that starts its own count keeps it', () => {
+  setup('1. a\n2. b\n1. c\n2. d', { range: { first: 0, end: 2 } });
+  select(text().indexOf('\n1. c'));
+  act(() => { ed.commands.insertContent('x'); });
+  expect(text()).toBe('1. a\n2. bx\n1. c\n2. d');
+  select(text().indexOf('a') + 1);
+  fireEvent.keyDown(ed.view.dom, { key: 'Enter' });
+  expect(text()).toBe('1. a\n2. \n3. bx\n1. c\n2. d');
 });

@@ -2,7 +2,9 @@
 // "Lossless": canonical markup (everything toMarkup writes) round-trips byte for byte, any markup
 // round-trips to markup that lays out the same, and any editor content round-trips with every
 // non-space character keeping its marks. The one exception: an underline that starts or ends inside
-// a word, on a line that also has bold, widens to the whole word.
+// a word, on a line that also has bold, widens to the whole word. Code spans and links (hand-typed
+// Milestone 1 markup only; the editor makes neither) read as their plain words and are written back
+// that way, so one glued to its neighbours becomes one piece with them (`see[t](u)s` → `seets`).
 import type { JSONContent } from '@tiptap/core';
 import { parseInline, parseLine, type InlinePiece } from '@/engine/core.js';
 
@@ -156,6 +158,39 @@ export function listMarkers(list: ListAttrs, indents: number[]): string[] {
 }
 
 const markerNumber = (marker: string) => (/^\d/.test(marker) ? parseInt(marker, 10) : marker.charCodeAt(0) - 96);
+
+// The numbered list that line li belongs to, as fromMarkup groups the lines up to `end`: its lines and numbering.
+function listAt(ls: string[], li: number, end = ls.length): { first: number; end: number; attrs: ListAttrs; indents: number[] } | null {
+  const isNumber = (i: number) => parseLine(ls[i]).kind === 'number';
+  if (li < 0 || li >= end || !isNumber(li)) return null;
+  let s = li, e = li + 1;
+  while (s > 0 && isNumber(s - 1)) s--;
+  while (e < end && isNumber(e)) e++;
+  let at = s;
+  for (const list of fromMarkup(ls.slice(s, e).join('\n')).content ?? []) {
+    const items = list.content ?? [];
+    if (li < at + items.length) return { first: at, end: at + items.length, attrs: list.attrs as ListAttrs, indents: items.map(it => it.attrs!.indent as number) };
+    at += items.length;
+  }
+  return null;
+}
+
+/**
+ * `next` is `old` with some lines rewritten, `old`'s lines from `oldAt` on being `next`'s from `at` on. Items
+ * there that went on with the numbered list of line `oldAt − 1` go on with the list line `at − 1` is in now
+ * (an editor showing only some of a block's lines numbers its own items alone).
+ */
+export function keepCounting(old: string, oldAt: number, next: string, at: number): string {
+  const ol = old.split('\n'), nl = next.split('\n');
+  if (oldAt <= 0 || at <= 0 || oldAt >= ol.length || at >= nl.length) return next;
+  if (parseLine(ol[oldAt]).kind !== 'number' || parseLine(nl[at - 1]).kind !== 'number') return next;
+  const was = listAt(ol, oldAt - 1), now = listAt(nl, at - 1, at);
+  if (!was || was.end <= oldAt || !now || now.attrs.kind !== was.attrs.kind || now.attrs.delim !== was.attrs.delim) return next;
+  const run = was.end - oldAt, depths = nl.slice(at, at + run).map(l => parseLine(l).depth);
+  const markers = listMarkers(now.attrs, [...now.indents, ...depths]).slice(now.indents.length);
+  markers.forEach((mk, k) => { nl[at + k] = nl[at + k].replace(/^(\s*)(\d{1,3}[.)]|[a-z]\))/, (_, ws: string) => ws + mk); });
+  return nl.join('\n');
+}
 
 /* ---------- Markup → editor ---------- */
 

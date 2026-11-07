@@ -1,8 +1,10 @@
 // Which markup lines each part of a block edits. A part edits the lines that start in it, so a paragraph
 // that runs over a page break is edited where it starts and no line is cut.
+import type { JSONContent } from '@tiptap/core';
 import { srcOffset } from '@/engine/core.js';
 import type { Box, Seg } from '@/engine/types';
-import { lineOf } from './positions';
+import { fromMarkup, keepCounting, toMarkup } from './markup';
+import { lineOf, lineStart, textToRawCol } from './positions';
 
 /** Markup lines `first` to `end` (exclusive). */
 export interface LineRange { first: number; end: number }
@@ -45,6 +47,39 @@ export function replaceLines(text: string, r: LineRange, markup: string): string
   const ls = text.split('\n');
   ls.splice(r.first, Math.max(0, r.end - r.first), ...markup.split('\n'));
   return ls.join('\n');
+}
+
+// A markup line's one leaf block, as fromMarkup makes it (inside its list item or note).
+function leafOf(line: string): { doc: JSONContent; leaf: JSONContent; text: boolean } {
+  const doc = fromMarkup(line);
+  let leaf = doc.content![0];
+  while (leaf.type !== 'paragraph' && leaf.type !== 'heading' && leaf.content?.length) leaf = leaf.content[0];
+  return { doc, leaf, text: leaf.type === 'paragraph' || leaf.type === 'heading' };
+}
+// How many characters a leaf shows, as toMarkup writes them (a tab is four spaces).
+const shownLength = (leaf: JSONContent) => (leaf.content ?? []).reduce((n, c) => n + (c.text ?? '').replace(/\t/g, '    ').length, 0);
+
+/**
+ * The text with lines li and li + 1 made one, as Backspace at the start of the second joins them: the first
+ * keeps its kind (heading, list item, note) and takes the words of the second; an empty first line gives way
+ * to the second; a page break or rule on either side goes. A numbered list after them keeps counting.
+ * `offset` is where the two meet. Null when there is no line li + 1.
+ */
+export function joinLines(text: string, li: number): { text: string; offset: number } | null {
+  const ls = text.split('\n');
+  if (li < 0 || li + 1 >= ls.length) return null;
+  const a = leafOf(ls[li]), b = leafOf(ls[li + 1]);
+  let line: string, col: number;
+  if (!a.text || (b.text && !shownLength(a.leaf))) [line, col] = [ls[li + 1], 0];
+  else if (!b.text) [line, col] = [ls[li], ls[li].length];
+  else {
+    const n = shownLength(a.leaf);
+    a.leaf.content = [...(a.leaf.content ?? []), ...(b.leaf.content ?? [])];
+    line = toMarkup(a.doc);
+    col = textToRawCol(line, n);
+  }
+  const joined = [...ls.slice(0, li), line, ...ls.slice(li + 2)].join('\n');
+  return { text: keepCounting(text, li + 2, joined, li + 1), offset: lineStart(text, li) + col };
 }
 
 /** The first offset at which two texts differ (the shorter one's length when one starts the other). */

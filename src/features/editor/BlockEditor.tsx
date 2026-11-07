@@ -4,17 +4,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { EditorContent, Extension, useEditor as useTiptap, type Editor } from '@tiptap/react';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import { cn } from '@/lib/utils';
-import { consumeCaret, update, useEditor } from '@/store/editor';
+import { consumeCaret, placeCaret, update, useEditor } from '@/store/editor';
 import { activeEditor, setActiveEditor } from './active';
-import { editorExtensions, type SlashItem } from './extensions';
-import { fromMarkup, toMarkup } from './markup';
+import { editorExtensions, ownStep, type SlashItem } from './extensions';
+import { fromMarkup, keepCounting, toMarkup } from './markup';
 import { cleanPastedHTML } from './paste';
 import { lineOf, lineStart, offsetAt, posAt } from './positions';
-import { firstDiff, replaceLines, sliceLines, type LineRange } from './slices';
+import { firstDiff, joinLines, replaceLines, sliceLines, type LineRange } from './slices';
 import { SlashMenu } from './SlashMenu';
 import './editor.css';
 
@@ -37,10 +37,14 @@ export interface BlockEditorProps {
   acceptCaret?: boolean;
   onSplit?(idx: number): void;
   onRemovePart?(idx: number): void;
-  /** Focus came or went; `lines` is how many lines the editor holds. */
-  onFocusChange?(focused: boolean, lines: number): void;
+  /** Focus came or went; `lines` is how many lines the editor holds, `event` is the browser's focus or blur event. */
+  onFocusChange?(focused: boolean, lines: number, event?: FocusEvent): void;
   /** After each write: how many lines the editor holds now (its lines are `first` to `first + lines`). */
   onLineCount?(lines: number): void;
+  /**
+   * Its lines change in a way its own line count doesn't follow: it reloaded after an outside change (or its
+   * lines changed while it has focus), or it is about to join a line across its edge.
+   */
   onExternalChange?(): void;
   onReady?(e: Editor): void;
   className?: string;
@@ -115,6 +119,15 @@ function breakDecorations(doc: PMNode, sh: Shown, breaks: PageBreakMark[], props
   return DecorationSet.create(doc, decos);
 }
 
+/* ---------- Joining across a part's edges ---------- */
+
+// After the editor's own Backspace and Delete, which do nothing at the start or end of its lines.
+const partEdges = (join: (e: Editor, dir: -1 | 1) => boolean) => Extension.create({
+  name: 'nibPartEdges',
+  priority: 50,
+  addKeyboardShortcuts: () => ({ Backspace: ({ editor }) => join(editor, -1), Delete: ({ editor }) => join(editor, 1) }),
+});
+
 /* ---------- The editor ---------- */
 
 export function BlockEditor(props: BlockEditorProps): JSX.Element {
@@ -160,14 +173,17 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     e.view.dispatch(scroll ? tr.scrollIntoView() : tr);
   };
 
-  // Each change is written into the block's lines, if the block still exists.
-  const write = (e: Editor) => {
+  // Each change is written into the block's lines, if the block still exists. A numbered list that runs on
+  // past them keeps counting on from them. Typing is one undo step per burst; a paste or a formatting change
+  // is a step of its own.
+  const write = (e: Editor, tr: Transaction) => {
     const sh = shownIn(e), b = useEditor.getState().doc.boxes.find(x => x.id === boxId);
     if (!sh || !b) return;
     const md = toMarkup(e.getJSON()), n = lineCount(md);
-    const next = sh.whole ? md : replaceLines(b.text, { first: sh.first, end: sh.end }, md);
+    const next = sh.whole ? md : keepCounting(b.text, sh.end, replaceLines(b.text, { first: sh.first, end: sh.end }, md), sh.first + n);
     shown.current = { ...sh, text: next, end: sh.first + n, slice: md };
-    if (next !== b.text) update(s => { const x = s.doc.boxes.find(y => y.id === boxId); if (x) x.text = next; }, { layout: 'soon', history: 'type:' + boxId });
+    const history = ownStep(tr) ? undefined : 'type:' + boxId;
+    if (next !== b.text) update(s => { const x = s.doc.boxes.find(y => y.id === boxId); if (x) x.text = next; }, { layout: 'soon', history });
     live.current.onLineCount?.(n);
   };
 
@@ -185,13 +201,27 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     const abs = (p: number) => (sh ? lineStart(sh.text, sh.first) + offsetAt(e.state.doc, sh.slice, p) : 0);
     const anchor = abs(e.state.selection.anchor), head = abs(e.state.selection.head), focused = !!sh && e.isFocused;
     load(e, t, r);
-    if (focused) {
-      live.current.onExternalChange?.();
-      selectAt(e, sh.text !== t ? firstDiff(sh.text, t) : head);
-    } else if (sh) selectAt(e, anchor, head, false); // so the toolbar still formats the same words
+    if (focused || (sh && sh.text !== t)) live.current.onExternalChange?.();
+    if (focused) selectAt(e, sh.text !== t ? firstDiff(sh.text, t) : head);
+    else if (sh) selectAt(e, anchor, head, false); // so the toolbar still formats the same words
   };
 
-  const extensions = useMemo(() => [...editorExtensions({ boxId, slash: setSlash }), PageBreakLines], [boxId]);
+  // Backspace at the start of a later part's lines joins its first line to the line before, and Delete at the
+  // end of an earlier part's joins its last line to the next: one undo step, and the caret goes to the join,
+  // in whichever editor then shows that line.
+  const joinAcross = (e: Editor, dir: -1 | 1): boolean => {
+    const sh = shownIn(e), t = textOf(boxId), { selection: sel, doc } = e.state;
+    if (!sh || sh.whole || t === null || sh.text !== t || !sel.empty) return false;
+    const edge = dir < 0 ? sh.first > 0 && sel.from === Selection.atStart(doc).from : sh.end < lineCount(t) && sel.to === Selection.atEnd(doc).to;
+    const j = edge ? joinLines(t, dir < 0 ? sh.first - 1 : sh.end - 1) : null;
+    if (!j) return false;
+    live.current.onExternalChange?.();
+    update(s => { const x = s.doc.boxes.find(y => y.id === boxId); if (x) x.text = j.text; });
+    placeCaret(boxId, j.offset);
+    return true;
+  };
+
+  const extensions = useMemo(() => [...editorExtensions({ boxId, slash: setSlash }), PageBreakLines, partEdges(joinAcross)], [boxId]);
   const editorProps = useMemo(() => ({
     attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': label, class: 'nib-prose', spellcheck: 'true' },
     transformPastedHTML: cleanPastedHTML,
@@ -202,15 +232,15 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     editorProps,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
-    onUpdate: ({ editor: e }) => write(e),
+    onUpdate: ({ editor: e, transaction }) => write(e, transaction),
     onFocus: ({ editor: e }) => {
       setActiveEditor(e, boxId);
       const sh = shownIn(e);
       live.current.onFocusChange?.(true, sh ? sh.end - sh.first : 0);
     },
-    onBlur: ({ editor: e }) => {
+    onBlur: ({ editor: e, event }) => {
       const sh = shownIn(e);
-      live.current.onFocusChange?.(false, sh ? sh.end - sh.first : 0);
+      live.current.onFocusChange?.(false, sh ? sh.end - sh.first : 0, event);
     },
   }, [boxId]);
 

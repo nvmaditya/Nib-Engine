@@ -4,7 +4,7 @@
 import { Extension, markInputRule, type AnyExtension, type Editor, type Range } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey, Selection, type Transaction } from '@tiptap/pm/state';
-import { canSplit } from '@tiptap/pm/transform';
+import { AddMarkStep, canSplit, RemoveMarkStep } from '@tiptap/pm/transform';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Placeholder } from '@tiptap/extensions';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
@@ -13,15 +13,29 @@ import { fromMarkup, listMarkers, toMarkup } from './markup';
 import { BLOCK_EXTENSIONS } from './schema';
 import { firstDiff } from './slices';
 
-const textOf = (boxId: string) => useEditor.getState().doc.boxes.find(b => b.id === boxId)?.text ?? null;
-
-/** Undo or redo in the app's one history, then ask for the caret where the block's text changed. */
+/**
+ * Undo or redo in the app's one history, then ask for the caret where the text changed: in this editor's
+ * block, else in the first other block whose text changed (a header's fields take no caret).
+ */
 function historyStep(boxId: string, again: boolean): boolean {
-  const before = textOf(boxId);
+  const before = new Map(useEditor.getState().doc.boxes.map(b => [b.id, b.text]));
   (again ? redo : undo)();
-  const after = textOf(boxId);
-  if (before !== null && after !== null && before !== after) placeCaret(boxId, firstDiff(before, after));
+  const changed = useEditor.getState().doc.boxes.filter(b => b.kind !== 'header' && before.has(b.id) && before.get(b.id) !== b.text);
+  const b = changed.find(x => x.id === boxId) ?? changed[0];
+  if (b) placeCaret(b.id, firstDiff(before.get(b.id)!, b.text));
   return true; // never the browser's own undo
+}
+
+/** Meta for a change made by a formatting command (a tool, a text style, a list, a page break, an indent). */
+export const FORMAT_STEP = 'nibFormatStep';
+
+/**
+ * Whether a change is an undo step of its own rather than part of a burst of typing: a paste, drop or cut,
+ * a formatting command, or a change of marks alone (Ctrl+B on a selection).
+ */
+export function ownStep(tr: Transaction): boolean {
+  if (tr.getMeta('paste') || ['paste', 'drop', 'cut'].includes(tr.getMeta('uiEvent')) || tr.getMeta(FORMAT_STEP)) return true;
+  return tr.steps.length > 0 && tr.steps.every(st => st instanceof AddMarkStep || st instanceof RemoveMarkStep);
 }
 
 /* ---------- Page breaks ---------- */
@@ -76,7 +90,7 @@ export function pageBreakInto(tr: Transaction): boolean {
     at = $from.pos + $from.depth;
   } else at = $from.after(1);
   continueNumbering(tr, at);
-  tr.insert(at, type.create());
+  tr.insert(at, type.create()).setMeta(FORMAT_STEP, true);
   if (sel instanceof NodeSelection || !$from.parent.isTextblock) tr.setSelection(Selection.near(tr.doc.resolve(at + 1)));
   tr.scrollIntoView();
   return true;
@@ -96,7 +110,7 @@ export function textStyleOf(e: Editor): TextStyle {
 
 /** Make the selected lines Normal, Title, Heading or Note (replacing `range` first, for the / menu). */
 export function setTextStyle(e: Editor, style: TextStyle, range?: Range): boolean {
-  let c = e.chain().focus();
+  let c = e.chain().focus().setMeta(FORMAT_STEP, true);
   if (range) c = c.deleteRange(range);
   if (style === 'paragraph') c = c.clearNodes();
   else if (style === 'blockquote') c = e.isActive('blockquote') ? c : c.clearNodes().setBlockquote();
@@ -109,7 +123,7 @@ export function setTextStyle(e: Editor, style: TextStyle, range?: Range): boolea
 export interface SlashItem { label: string; run(e: Editor, range: Range): void }
 
 const list = (name: 'bulletList' | 'orderedList') => (e: Editor, r: Range) => {
-  const c = e.chain().focus().deleteRange(r);
+  const c = e.chain().focus().setMeta(FORMAT_STEP, true).deleteRange(r);
   if (e.isActive(name)) c.run();
   else (name === 'bulletList' ? c.toggleBulletList() : c.toggleOrderedList()).run();
 };
@@ -169,7 +183,7 @@ function indentBy(e: Editor, d: number): boolean {
     const n = Math.max(0, Math.min(3, (node.attrs.indent ?? 0) + d));
     if (n !== node.attrs.indent) tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: n });
   }
-  if (tr.docChanged) e.view.dispatch(tr);
+  if (tr.docChanged) e.view.dispatch(tr.setMeta(FORMAT_STEP, true));
   return true;
 }
 
@@ -250,15 +264,29 @@ const ListMarkers = Extension.create({
   },
 });
 
+// Whether a heading or list item starts with whitespace, which its markup line can't hold (after the marker
+// the engine skips it all).
+function leadingSpace(doc: PMNode): boolean {
+  let found = false;
+  doc.descendants((node, _pos, parent) => {
+    if (found || !node.isTextblock) return !found;
+    const first = node.firstChild;
+    found = (node.type.name === 'heading' || parent?.type.name === 'listItem') && !!first?.isText && /^\s/.test(first.text!);
+    return false;
+  });
+  return found;
+}
+
 // Pasted or dropped content is rewritten as the converter reads its own markup back (tabs as spaces, no
-// space after a list marker, no whitespace-only lines), so every leaf matches its markup line exactly and
-// markup offsets map to positions without drift.
+// space after a list marker, no whitespace-only lines), and so is a space typed at the start of a heading or
+// list item: every leaf matches its markup line exactly and markup offsets map to positions without drift.
 const ConverterSync = Extension.create({
   name: 'nibConverterSync',
   addProseMirrorPlugins() {
     return [new Plugin({
       appendTransaction: (trs, _old, state) => {
-        if (!trs.some(tr => tr.docChanged && (tr.getMeta('paste') || ['paste', 'drop'].includes(tr.getMeta('uiEvent'))))) return null;
+        const pasted = trs.some(tr => tr.docChanged && (tr.getMeta('paste') || ['paste', 'drop'].includes(tr.getMeta('uiEvent'))));
+        if (!pasted && !(trs.some(tr => tr.docChanged) && leadingSpace(state.doc))) return null;
         const md = toMarkup(state.doc.toJSON()), doc = state.schema.nodeFromJSON(fromMarkup(md));
         const start = state.doc.content.findDiffStart(doc.content);
         if (start == null) return null;
