@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { flushSave, openDocument, update } from '@/store/editor';
 import { get, rec } from '@/test/docs';
+import { Overlays } from './Overlays';
+import { useOverlays } from './overlays';
 import { useUndoShortcuts } from './useUndoShortcuts';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
@@ -17,7 +19,8 @@ beforeEach(async () => {
   await flushSave();
   openDocument(rec('A', 'x'));
   update(s => { s.doc.boxes[0].text = 'xy'; }, { history: 'test' });
-  render(<Page />);
+  useOverlays.setState({ open: null });
+  render(<><Overlays /><Page /></>);
 });
 
 test('Ctrl+Z and Ctrl+Y on the page undo and redo the document', () => {
@@ -36,4 +39,15 @@ test('in a field or an editor they are its own', () => {
 test('on a control in an editor’s widget (a page break’s line) they are the document’s, as on the page', () => {
   screen.getByRole('button', { name: 'In a widget' }).focus();
   expect(press('z', { ctrlKey: true })).toBe(false); expect(text()).toBe('x');
+});
+
+test('with the shortcut sheet open, they leave the document behind it alone', () => {
+  screen.getByRole('button', { name: 'Plain' }).focus();
+  press('/', { ctrlKey: true });
+  const sheet = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  expect(within(sheet).getByRole('button', { name: 'Close' })).toBe(document.activeElement);
+  press('z', { ctrlKey: true }); expect(text()).toBe('xy');
+  press('Escape'); press('z', { ctrlKey: true }); expect(text()).toBe('x');
+  press('/', { ctrlKey: true });
+  press('Z', { ctrlKey: true, shiftKey: true }); press('y', { ctrlKey: true }); expect(text()).toBe('x');
 });
