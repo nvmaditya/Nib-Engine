@@ -14,6 +14,33 @@ test('a sample is as tall as asked and as wide as its words', () => {
   expect(Math.abs(drawSample(c, S, 'The water cycle is', 120)! - 2 * w)).toBeLessThanOrEqual(2);
   expect(drawSample(c, S, 'The water cycle is the continuous', 60)).toBeGreaterThan(w);
 });
+// The canvas stub draws nothing, so give the first canvas drawn on an ink box at known place: alpha 255 in columns 20–119, rows 10–49 of the 225 × 101 scratch canvas.
+function withInk(box: { x0: number; x1: number; y0: number; y1: number }) {
+  const draws: number[][] = [];
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) {
+    const ctx = { measureText: (t: string) => ({ width: String(t).length * 8 }), createPattern: () => ({}), getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+      getImageData: (_x: number, _y: number, w: number, h: number) => {
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let y = box.y0; y <= box.y1; y++) for (let x = box.x0; x <= box.x1; x++) data[(y * w + x) * 4 + 3] = 255;
+        return { width: w, height: h, data };
+      },
+      drawImage: (...a: number[]) => { draws.push(a.slice(1)); } };
+    return new Proxy(ctx, { get: (t, k) => (k in t ? (t as never)[k] : () => {}), set: () => true }) as unknown as CanvasRenderingContext2D;
+  } as never);
+  return draws;
+}
+test('the written ink fills the height asked: cropped to its own box and scaled to 85% of it', () => {
+  const draws = withInk({ x0: 20, x1: 119, y0: 10, y1: 49 });
+  const c = canvas(), w = drawSample(c, S, 'Homework', 40)!;
+  vi.restoreAllMocks();
+  const [sx, sy, sw, sh, dx, dy, dw, dh] = draws[draws.length - 1];
+  expect([sx, sy, sw, sh]).toEqual([20, 10, 100, 40]);
+  expect(c.height).toBe(40);
+  expect(dh).toBeCloseTo(34, 5); // 85% of 40
+  expect(dy).toBeCloseTo(3, 5); // centred
+  expect(dw / dh).toBeCloseTo(100 / 40, 5); // same shape
+  expect(dx).toBeGreaterThan(0); expect(w).toBe(c.width); expect(c.width).toBeGreaterThanOrEqual(Math.round(dw + 2 * dx));
+});
 test('drawing a sample leaves the document as the engine had it', () => {
   const doc = docOf(box({ id: 'm', text: lines(40) })); use(S, doc); const before = computeLayout().segs.map(segSig);
   drawSample(canvas(), { ...S, font: 'caveat', mess: 100, size: 40, gap: 48 }, 'Homework', 40);
