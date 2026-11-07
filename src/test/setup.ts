@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
+import { encodeCanvas } from './images';
 
 // jsdom has no canvas. The engine creates a canvas at import time, so give it a 2D context
 // whose methods do nothing and whose text measuring is a fixed 8px per character.
@@ -21,6 +22,12 @@ function makeContext() {
   });
 }
 HTMLCanvasElement.prototype.getContext = function () { return makeContext(); } as unknown as HTMLCanvasElement['getContext'];
+
+// jsdom can't encode a canvas (its toBlob answers null). Answer with a clean PNG or JPEG of the canvas's size,
+// through queueMicrotask, which fake timers don't hold up. Tests of the metadata scrubbers stub their own with metadata.
+HTMLCanvasElement.prototype.toBlob = function (this: HTMLCanvasElement, cb: BlobCallback, type?: string) {
+  queueMicrotask(() => cb(encodeCanvas(this, type)));
+};
 
 // jsdom has no Path2D. The glyph engine builds each letter's outline as one, so a real hand's
 // letters can be drawn (onto the stub, which draws nothing) when a test loads its font file.
