@@ -102,6 +102,7 @@ export const COPIED = 'Copied your text.';
 export const COPY_FAILED = 'Nib couldn’t copy your text.';
 let saveSeq = 0;
 let failing: string | null = null; // the document whose saves are failing; one message per streak
+let failingNewer = false; // the last of those failures was a newer Nib's refusal
 
 // What storage holds of the open document. A save is written only if storage hasn't moved on since: its revision
 // is still `base` (the one this tab read), or the last write was this session's own (putDoc).
@@ -166,7 +167,8 @@ async function saveNow(): Promise<void> {
     if (e instanceof MissingDocumentError) { leaveDeleted(); return; } // never written back
     if (e instanceof StaleDocumentError) { void follow(id, true); return; } // the other tab's version wins
     useEditor.setState({ saving: 'unsaved' });
-    if (failing !== id) { failing = id; if (e instanceof NewerDocumentError) toast(SAVE_NEWER, reloadAction()); else toast(SAVE_FAILED); }
+    failingNewer = e instanceof NewerDocumentError;
+    if (failing !== id) { failing = id; if (failingNewer) toast(SAVE_NEWER, reloadAction()); else toast(SAVE_FAILED); }
   }
 }
 
@@ -292,6 +294,19 @@ export function installFlushOnHide(): () => void {
 /** Write any change still waiting for the debounce (leaving the document, closing the tab). */
 export function flushSave(): Promise<void> {
   return savePending ? saveNow() : Promise.resolve();
+}
+
+/**
+ * Before the page reloads onto a new version: write the change waiting for a pause in typing, or try again a change
+ * an earlier save couldn't write. Says what became of the open document's last change: `written` (or nothing to
+ * write), `newer` (a newer Nib wrote the document, so only the new version can), or `failed` (it isn't written).
+ */
+export async function writeBeforeReload(): Promise<'written' | 'newer' | 'failed'> {
+  const id = get().docId;
+  if (savePending || (stored(id) && failing === id)) await saveNow();
+  const now = get().docId;
+  if (!stored(now) || failing !== now) return 'written';
+  return failingNewer ? 'newer' : 'failed';
 }
 
 export function openDocument(rec: DocRecord): void {
@@ -462,9 +477,10 @@ const takeDownUndoMessages = (): void => { for (const id of undoMessages) takeDo
  * A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. A `keep` message
  * (a new version is ready) stays up when a document opens or closes. Its text names it (see `idOf`), so saying the
  * same thing again replaces the message showing instead of stacking a copy. Pressing the action gives the focus back
- * to what had it before the message's button took it.
+ * to what had it before the message's button took it. `onDismiss` hears it taken down or swiped away (not gone by
+ * itself, nor its action pressed).
  */
-export function toast(msg: string, action?: ToastAction, o: { duration?: number; keep?: boolean } = {}): void {
+export function toast(msg: string, action?: ToastAction, o: { duration?: number; keep?: boolean; onDismiss?: () => void } = {}): void {
   const id = idOf(msg);
   const held = takingDown.get(id);
   if (held !== undefined) { cancelAnimationFrame(held); takingDown.delete(id); } // sonner cancels its dismissal too
@@ -483,10 +499,13 @@ export function toast(msg: string, action?: ToastAction, o: { duration?: number;
       },
     },
     duration: o.duration,
-    onDismiss: gone,
+    onDismiss: () => { gone(); o.onDismiss?.(); },
     onAutoClose: gone,
   });
 }
+
+/** Take a message down by its text: one said with `keep`, which opening or closing a document leaves up. */
+export function takeDownMessage(msg: string): void { takeDown(idOf(msg)); }
 
 let reloader: () => void = () => location.reload();
 /** What a message's Reload does. src/app/updates.ts puts its own in place (a waiting new version first), so the store never imports it. */

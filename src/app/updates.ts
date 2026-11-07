@@ -3,7 +3,8 @@
 // (onNeedReload), which happens in every open tab as soon as any one of them presses Reload. Only the tab whose Reload
 // was pressed reloads, after writing its last change; every other tab keeps its text and caret and says so.
 import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
-import { flushSave, reloadAction, setReloader, toast } from '@/store/editor';
+import { SAVE_FAILED, reloadAction, setReloader, takeDownMessage, toast, useEditor, writeBeforeReload } from '@/store/editor';
+import { MEMORY_ID } from './route';
 
 export const NEW_VERSION = 'A new version is ready.';
 export const OFFLINE_READY = 'Nib works offline now.';
@@ -24,11 +25,44 @@ let asked = false; // this tab pressed Reload while a new version was waiting
 let reloaded = false;
 let fallback: ReturnType<typeof setTimeout> | undefined;
 let stopChecks = (): void => {};
+let putAway = false; // the Import dialog put the message away (as it does every message, for its footer on phones)
+let unfollow = (): void => {};
 
 export const updateState = (): UpdateState => state;
 
-/** Say a new version is ready, with Reload. It stays up until pressed or swiped away, whatever document opens or closes. */
-const offer = (): void => toast(NEW_VERSION, reloadAction(), { keep: true, duration: Infinity });
+/**
+ * Nothing is kept on this device (storage is blocked: the document lives only in this tab). A reload would lose the
+ * whole document, so no new version is offered; it takes over on the next visit, as the service worker does anyway.
+ */
+const inMemory = (): boolean => useEditor.getState().docId === MEMORY_ID;
+
+/**
+ * Say a new version is ready, with Reload. It stays up until pressed or swiped away, whatever document opens or
+ * closes; put away by the Import dialog, it comes back when the dialog closes.
+ */
+function offer(): void {
+  putAway = false;
+  if (inMemory()) return;
+  toast(NEW_VERSION, reloadAction(), {
+    keep: true, duration: Infinity,
+    onDismiss: () => { if (useEditor.getState().importOpen) putAway = true; }, // (not swiped away by the person)
+  });
+}
+
+/**
+ * Follow the store: the Import dialog closing after it put the message away, and a document with nowhere to be kept.
+ * (What was seen last is kept here: `update` changes the state in place, so the previous state can't tell.)
+ */
+function followEditor(): () => void {
+  let { docId, importOpen } = useEditor.getState();
+  return useEditor.subscribe(s => {
+    const closed = importOpen && !s.importOpen, memory = s.docId === MEMORY_ID && docId !== MEMORY_ID;
+    docId = s.docId; importOpen = s.importOpen;
+    if (state === 'current') return;
+    if (memory) { putAway = false; takeDownMessage(NEW_VERSION); }
+    else if (closed && putAway) offer();
+  });
+}
 
 function reloadOnce(): void {
   clearTimeout(fallback);
@@ -44,6 +78,7 @@ function reloadOnce(): void {
 export function startUpdates(register: Register, hooks: { reload(): void } = { reload: () => location.reload() }): void {
   reload = () => hooks.reload();
   setReloader(() => { void reloadToNewVersion(); });
+  unfollow(); unfollow = followEditor();
   applyUpdate = register({
     onNeedRefresh() { state = 'waiting'; offer(); },
     onNeedReload() {
@@ -57,12 +92,18 @@ export function startUpdates(register: Register, hooks: { reload(): void } = { r
 }
 
 /**
- * Reload onto the new version: write the change waiting to be saved, then, if a new version is waiting, ask it to
+ * Reload onto the new version: write the open document's last change, then, if a new version is waiting, ask it to
  * take over and reload when it has (or after `RELOAD_FALLBACK` if it never does). A plain reload while it waits would
- * load the old version again, from its cache.
+ * load the old version again, from its cache. A change that can't be written keeps the page: Nib says so, and the
+ * new version stays offered, to try again. (A change only a newer Nib can write goes on: the reload is the fix.)
  */
 export async function reloadToNewVersion(): Promise<void> {
-  await flushSave();
+  if (inMemory()) return; // (never offered there: nothing would be kept)
+  if (await writeBeforeReload() === 'failed') {
+    toast(SAVE_FAILED);
+    if (state !== 'current') offer();
+    return;
+  }
   if (state !== 'waiting' || !applyUpdate) { reloadOnce(); return; }
   asked = true;
   clearTimeout(fallback);
@@ -84,6 +125,7 @@ function checkHourly(registration: ServiceWorkerRegistration): void {
 
 export function resetUpdatesForTests(): void {
   stopChecks(); stopChecks = () => {};
+  unfollow(); unfollow = () => {}; putAway = false;
   clearTimeout(fallback); fallback = undefined;
   state = 'current'; applyUpdate = null; asked = false; reloaded = false;
   reload = () => location.reload();
