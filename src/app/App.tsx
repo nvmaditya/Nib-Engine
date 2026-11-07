@@ -7,6 +7,7 @@ import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
 import { NOT_ON_DEVICE, closeDocument, installDocFollow, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
+import { Overlays } from '@/shell/Overlays';
 import { HomePage } from '@/features/home/HomePage';
 import { DocumentView } from '@/features/doc/DocumentView';
 import { MEMORY_ID, navigate, useRoute } from './route';
@@ -58,6 +59,7 @@ export function App() {
 
   return (
     <>
+      <Overlays />
       {boot === 'memory' && (
         <div role="status" className="flex-none bg-primary-soft px-4 py-2 text-center text-sm">
           Nib can't save on this device right now. Your work stays until you close this tab.
