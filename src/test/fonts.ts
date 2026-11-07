@@ -1,6 +1,5 @@
-/// <reference types="node" />
 // The hands' real font files, for tests that need the engine's own outlines and advances.
-// (Tests run in Node, so the files are read from disk; the app's tsconfig has no Node types of its own.)
+// Tests run in Node, so the files are read from disk (tsconfig.test.json gives tests Node's types).
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
