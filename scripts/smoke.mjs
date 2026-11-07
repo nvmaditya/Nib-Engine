@@ -118,7 +118,7 @@ async function main() {
     await waitForServer(BASE);
     const { chromium } = require('playwright');
     browser = await chromium.launch();
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true });
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true, serviceWorkers: 'block' });
     const page = await ctx.newPage();
     const errors = [];
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -557,7 +557,7 @@ async function main() {
     });
 
     await step('Phone: Home and Import at 390 px, and Longhand work brought over on a first visit', async () => {
-      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, acceptDownloads: true });
+      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, acceptDownloads: true, serviceWorkers: 'block' });
       try {
         await phone.addInitScript(() => {
           localStorage['longhand.v2'] = JSON.stringify({ s: {}, doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b1', page: 0, x: 112, y: 110, w: 630, text: '# My Longhand notes\nhello', style: {}, shuffle: 0, frames: {} }] } });
