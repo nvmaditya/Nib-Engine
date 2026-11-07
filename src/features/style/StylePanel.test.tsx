@@ -8,9 +8,10 @@ import { App } from '@/app/App';
 import { FONTS, LIMITS } from '@/engine/config.js';
 import { loadFont } from '@/engine/core.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
+import type { EngineDoc } from '@/engine/types';
 import { select, setV } from '@/features/doc/actions';
 import { createDoc } from '@/store/documents';
-import { flushSave, undo, update } from '@/store/editor';
+import { closeDocument, flushSave, openDocument, undo, update } from '@/store/editor';
 import { box, docOf, get, lastToast, open } from '@/test/docs';
 import { paragraphs, realFonts } from '@/test/fonts';
 import { SETTING_CONTROLS } from './controls';
@@ -44,6 +45,15 @@ const stageButton = (name: string) =>
   within(screen.getByRole('navigation', { name: 'Stages' })).getByRole('button', { name: new RegExp(`${name}$`) });
 /** The page count notice saying `text`. (Not by its role alone: each slider's value and the top bar's Saved line are statuses too.) */
 const notice = async (text: string) => (await screen.findByText(text)).closest('[role="status"]');
+/**
+ * `doc` open as a document in storage, as the app opens one, so a change's save goes through. (`open` uses an id
+ * that isn't in storage: a save there finds it gone and closes it, as deleted in another tab.)
+ */
+async function openStored(doc: EngineDoc): Promise<void> {
+  const rec = await createDoc({ title: 'A', settings: cleanSettings(null, false), doc });
+  await closeDocument();
+  openDocument(rec);
+}
 async function openApp(stage: string): Promise<void> {
   const S = cleanSettings(null, false);
   const rec = await createDoc({ title: 'Seeded', settings: S, doc: sampleDoc(S) });
@@ -60,7 +70,7 @@ test('the panel, top to bottom', () => {
 });
 
 test('every setting the engine reads can be reached from Style, or is set in Export', async () => {
-  open(docOf(box({ name: 'Main text' })));
+  await openStored(docOf(box({ name: 'Main text' })));
   update(s => { s.S.crease = true; }, { history: false });
   render(<StylePanel pages={1} />);
   for (const t of FOLDS) await userEvent.click(screen.getByRole('button', { name: t }));
@@ -77,7 +87,7 @@ test('every setting the engine reads can be reached from Style, or is set in Exp
 });
 
 test('in Only a block, every handwriting slider changes only that block', async () => {
-  open(docOf(box({ name: 'Main text' })));
+  await openStored(docOf(box({ name: 'Main text' })));
   styleBox('b1');
   render(<StylePanel pages={1} />);
   for (const t of FOLDS) await userEvent.click(screen.getByRole('button', { name: t }));
@@ -86,6 +96,8 @@ test('in Only a block, every handwriting slider changes only that block', async 
     const s = screen.getByRole('slider', { name: c.label });
     s.focus();
     await userEvent.keyboard(+s.getAttribute('aria-valuenow')! >= LIMITS[key as keyof typeof LIMITS][1] ? '{ArrowLeft}' : '{ArrowRight}');
+    // The save waits for a pause (400 ms), which a slow machine can leave between two presses: it changes nothing here.
+    if (key === 'flow') await act(() => flushSave());
   }
   expect(Object.keys(get().doc.boxes[0].style).sort()).toEqual(['flow', 'mess', 'mistakes', 'size', 'track', 'variety', 'weight', 'wobble', 'words']);
   expect(get().S).toMatchObject({ size: 30, mess: 45, weight: 100 });
