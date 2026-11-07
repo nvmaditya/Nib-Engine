@@ -1,0 +1,10 @@
+// The app's own overlays and the keys that open them, mounted once outside the stages.
+import { closeOverlay, openOverlay, useOverlays } from './overlays';
+import { ShortcutSheet } from './ShortcutSheet';
+import { useAppShortcuts } from './useAppShortcuts';
+
+export function Overlays() {
+  useAppShortcuts();
+  const open = useOverlays(s => s.open);
+  return <ShortcutSheet open={open === 'shortcuts'} onOpenChange={o => (o ? openOverlay('shortcuts') : closeOverlay())} />;
+}
