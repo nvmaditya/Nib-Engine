@@ -5,7 +5,7 @@ import { cleanSettings } from '@/engine/doc.js';
 import { resetBoxStyle } from '@/features/doc/actions';
 import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { box, docOf, rec as mkRec, open } from '@/test/docs';
-import { SAVE_FAILED, closeDocument, flushLayout, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, undo, undoTo, update, useEditor } from './editor';
+import { SAVE_FAILED, closeDocument, flushLayout, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, toast, undo, undoTo, update, useEditor } from './editor';
 
 const get = useEditor.getState;
 
@@ -284,4 +284,15 @@ test('a save refused because a newer Nib wrote the document says so', async () =
   expect(sonner).toHaveBeenCalledTimes(1);
   expect(sonner).toHaveBeenCalledWith('This document was saved by a newer version of Nib. Reload the page to keep editing.', undefined);
   expect(putDoc).toHaveBeenCalledTimes(2); // no retry for a newer-version refusal
+});
+
+test('a message can stay up longer than the default, with or without an action', () => {
+  const fn = vi.fn();
+  toast('Plain'); toast('With Undo', { label: 'Undo', fn }); toast('Longer', undefined, { duration: 15_000 }); toast('Both', { label: 'Share', fn }, { duration: 15_000 });
+  expect(vi.mocked(sonner).mock.calls).toEqual([
+    ['Plain', undefined],
+    ['With Undo', { action: { label: 'Undo', onClick: fn } }],
+    ['Longer', { duration: 15_000 }],
+    ['Both', { action: { label: 'Share', onClick: fn }, duration: 15_000 }],
+  ]);
 });

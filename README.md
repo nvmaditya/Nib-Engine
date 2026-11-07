@@ -1,12 +1,12 @@
 # Nib
 
-Turn typed text into realistic handwritten pages, then download them as a PDF or images.
+Turn typed text into realistic handwritten pages, then download them as a PDF or images, with no metadata in the files.
 
 Nib was previously called Longhand.
 
 Live site: https://nvmaditya.github.io/nib-engine/
 
-Until the repository is renamed to `nib-engine`, the site is at https://nvmaditya.github.io/longhand/.
+The repository was renamed from `longhand` to `nib-engine`, so the old address (https://nvmaditya.github.io/longhand/) no longer works. Work saved there is still in the browser: it belongs to `nvmaditya.github.io`, and opens at the new address.
 
 ## What it does today
 
@@ -17,7 +17,7 @@ Until the repository is renamed to `nib-engine`, the site is at https://nvmadity
 - **Realism**: each letter bends a little differently, lines climb and sag, the pen presses harder on downstrokes, and the ink runs darker and lighter. Optional mistakes are crossed out and written again.
 - **Paper**: ruled, spiral, yellow pad, grid, plain, or a photographed sheet, with room lighting, show-through and punch holes.
 - **Blocks** (Text, Header and Margin note) can be placed anywhere. A long block flows onto the next pages, and each page's part can be moved, resized, edited, deleted or split off. Any block can have its own style. See Write, below.
-- **Downloads** are PDF or PNG, as written, scanned, scanned in greyscale, or black and white, with an optional slight camera tilt.
+- **Downloads** are a PDF, PNGs or JPGs (in one ZIP if you like), of every page or only the ones you choose, at Standard or Print quality, as written, scanned, scanned in greyscale, or black and white, with an optional slight camera tilt. Share… sends them on where the browser can. The files carry no metadata.
 - **Simple markup** in the editor: `# Title`, `## Heading`, `**bold**`, `*underline*`, `==highlight==`, `~~cross out~~`, `- lists`, `> notes`, `\newpage`.
 
 Everything happens in the browser. Nothing is uploaded.
@@ -68,6 +68,23 @@ Style changes how the writing looks. The panel has Looks, Handwriting, Pen, Ink,
 - **Page count notice.** When a change makes the document take more or fewer pages, the header says `Now 4 pages (was 3)`. When it grew, **Fit back to 3 pages** lowers the letter size (the block's, in Only scope) as far as needed, then the line spacing if that is not enough, never below the sliders' limits, as one undo step with an Undo on its message. If it can't fit even then, it says so and changes nothing. It waits until the hands' files have loaded, so the pages it promises are the ones you get.
 - **On phones** the panel is a sheet over the pages that rests at three heights (the header only, about half, and nearly full). The pages above it stay live.
 
+## Export
+
+Export shows the pages exactly as they will download, camera tilt and scan look included, and turns them into files on the device.
+
+- **Format.** PDF, PNG or JPG. With PNG or JPG and more than one page, **Put the images in one ZIP** is on by default; turn it off to get the images one by one.
+- **Pages.** **All pages**, or **Choose pages**: click a page to leave it out, click it again to put it back. A left-out page is marked `left out`, and the others keep their own tilt and scan, so they come out the same as they would have.
+- **How it looks.** As written, Scanned, Greyscale scan or Black and white, and **Slight camera tilt**. Tilt is off for new documents. Both are kept by the document, so Ctrl+Z undoes them, and Style shows them too.
+- **Quality.** **Standard** is 1747 × 2471 pixels a page, for screens and uploads. **Print quality** is 2480 × 3508 pixels (A4 at 300 dpi). The pages are drawn at that size by the same engine, never scaled up afterwards.
+- **File name.** Starts from the document's title, with the ending beside it (`.pdf`, `.zip`, or `-page-1.png` for separate images). Edit it and the change is one undo step.
+- **Download** says what it will make and about how big it is, such as `Download ZIP · 3 PNGs ~2.7 MB` (the size is an estimate from the first chosen page). While the files are made it counts the pages, and it waits if a hand's font file is still arriving.
+- **Share…** appears where the browser can share files, and sends the same files.
+- **No metadata.** A PDF has no Info dictionary and no XMP stream: no producer, author, title or dates, just the pages, each one a JPEG, and a random file ID. A PNG keeps only its picture chunks (header, palette, transparency, sRGB, pixels, end). A JPG keeps its picture and one bare JFIF header, with no Exif, no thumbnail, no ICC profile, no XMP and no comments. A ZIP stores its files plainly, with a fixed date of 1980-01-01 and no comments. Nib writes the PDF and ZIP itself and cleans the PNG and JPEG bytes itself, so no library adds a stamp of its own. The smoke test downloads a PDF and a ZIP and checks their bytes, and PDF.js reads the PDF too.
+- **On phones** the panel is a bottom sheet over the pages, like Style's, so Download shows even at its lowest height.
+- **Remembered on the device:** the format, the ZIP switch and the quality. Which pages are chosen is not saved.
+
+Everything is made on the device. Nothing is uploaded.
+
 ## Run it locally
 
 ```bash
@@ -107,8 +124,15 @@ The workflow in `.github/workflows/deploy.yml` installs, runs the tests, builds 
 - `src/main.tsx` starts the app: it applies the saved theme, adds a `@font-face` for each hand (the browser downloads a file only when something on screen uses it) and renders `App`.
 - `src/shell/` holds the top bar, the stage navigation and the undo shortcuts.
 - `src/features/` holds one folder per part of the app: `home`, `import`, `write`, `style`, `export`, `doc`, `editor` (the rich-text block editor and its toolbar) and `pages` (the handwritten page views, block frames and dragging). `write` holds the Pages and Outline views, menus and page dragging, and `doc` holds the actions that change blocks and pages.
-  - `style` holds the Style panel: `StylePanel.tsx` with its sections (`ScopeBar`, `LooksSection`, `HandSection` and `HandPicker`, `PenInkSection`, `PaperSection`, `NaturalSection`, `SizeSection`), `StyleSheet.tsx` (the phone sheet), `looks.ts`, `hands.ts` (the picker's search and filters), `fonts.ts` (uploaded fonts: reading, registering and storing them), `prefs.ts` (saved looks, favourites and preview text, kept on the device), and `fit.ts` (the page count and Fit back, which tries sizes on copies laid out by the engine). `HandSample.tsx` draws a sample of any hand, look or paper through the engine's `drawSample`.
-- `src/components/ui/` holds the shared interface components (Radix primitives styled in the shadcn way). `drawer.tsx` is the bottom sheet (vaul) that Style uses on phones.
+  - `style` holds the Style panel: `StylePanel.tsx` with its sections (`ScopeBar`, `LooksSection`, `HandSection` and `HandPicker`, `PenInkSection`, `PaperSection`, `NaturalSection`, `SizeSection`), `looks.ts`, `hands.ts` (the picker's search and filters), `fonts.ts` (uploaded fonts: reading, registering and storing them), `prefs.ts` (saved looks, favourites and preview text, kept on the device), and `fit.ts` (the page count and Fit back, which tries sizes on copies laid out by the engine). `HandSample.tsx` draws a sample of any hand, look or paper through the engine's `drawSample`.
+  - `doc/StageSheet.tsx` is the phone sheet that Style and Export share: it rests at three heights and keeps the pages above it live.
+  - `export` holds the Export panel (`ExportPanel.tsx`, `ExportStage.tsx`) and the pipeline behind it:
+    - `plan.ts`: what a download is (format, ZIP, quality, chosen pages), its file names, button label and size text.
+    - `state.ts`: the device preferences and the page choice.
+    - `render.ts`: draws one page with the engine's `composePage`, `frameShot` and `applyLook`, and encodes it.
+    - `png.ts` and `jpeg.ts`: the scrubbers that keep only the picture; `pdf.ts`, `zip.ts` and `crc32.ts`: the writers.
+    - `build.ts`: renders the pages and wraps them into the file. `run.ts`: Download and Share. `estimate.ts`: the size estimate.
+- `src/components/ui/` holds the shared interface components (Radix primitives styled in the shadcn way). `drawer.tsx` is the bottom sheet (vaul) that Style and Export use on phones.
 - `src/brand/` holds the Nib logo; `src/lib/` holds small helpers such as the theme and `media.ts` (the 860 px `wide:` breakpoint as a `useWide()` hook, which switches Write between its wide and phone layouts); `src/styles/app.css` holds the Tailwind setup and design tokens.
 - `scripts/smoke.mjs` is the browser smoke test.
 - `public/fonts/` holds the handwriting fonts, which load only when used. Their licences are in `public/fonts/licenses/`, and [FONTS.md](FONTS.md) lists them all.
@@ -116,6 +140,6 @@ The workflow in `.github/workflows/deploy.yml` installs, runs the tests, builds 
 
 ## Credits
 
-The handwriting fonts are open-licensed fonts from Google Fonts, via Fontsource; see [FONTS.md](FONTS.md). Nib also uses [opentype.js](https://github.com/opentypejs/opentype.js), [jsPDF](https://github.com/parallax/jsPDF), [PDF.js](https://github.com/mozilla/pdf.js) and [mammoth](https://github.com/mwilliamson/mammoth.js).
+The handwriting fonts are open-licensed fonts from Google Fonts, via Fontsource; see [FONTS.md](FONTS.md). Nib also uses [opentype.js](https://github.com/opentypejs/opentype.js), [PDF.js](https://github.com/mozilla/pdf.js) and [mammoth](https://github.com/mwilliamson/mammoth.js). Nib writes its own PDF and ZIP files.
 
 The interface is built with [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com), [Radix](https://www.radix-ui.com) components in the style of [shadcn/ui](https://ui.shadcn.com), [Zustand](https://github.com/pmndrs/zustand) and [idb](https://github.com/jakearchibald/idb).

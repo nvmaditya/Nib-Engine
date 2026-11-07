@@ -10,3 +10,4 @@ test('engine modules load in tests and clean a document', () => {
 test('settings fall back to defaults', () => {
   expect(cleanSettings({ font: 'nope' }, false).font).toBe(DEFAULTS.font);
 });
+test('a new document is As written, without camera tilt; a stored one keeps its tilt', () => { expect(cleanSettings(null, false)).toMatchObject({ look: 'none', tilt: false }); expect(cleanSettings({ tilt: true }, false).tilt).toBe(true); });
