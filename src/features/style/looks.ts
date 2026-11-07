@@ -26,10 +26,15 @@ export function lookPatch(look: SavedLook, blockScope: boolean): Partial<Setting
   return v;
 }
 
-/** The first Look all of whose values are what the panel shows (paper against the document's, unless it is for one block). */
+/**
+ * The Look all of whose values are what the panel shows (paper against the document's, unless it is
+ * for one block). Saved looks are checked first: one holds every handwriting key, so when it matches
+ * it is the one the person chose, even where a built-in one (which holds fewer) matches too.
+ */
 export function matchLook(V: Settings, S: Settings, looks: SavedLook[], blockScope: boolean): SavedLook | null {
   const cur = V as unknown as Record<string, unknown>;
-  return looks.find(l => Object.entries(l.v).every(([k, val]) => {
+  const builtIn = (l: SavedLook) => STYLE_LOOKS.includes(l);
+  return [...looks.filter(l => !builtIn(l)), ...looks.filter(builtIn)].find(l => Object.entries(l.v).every(([k, val]) => {
     if (k === 'paper') return blockScope || S.paper === val;
     return cur[k] === val;
   })) ?? null;

@@ -101,6 +101,12 @@ test('a look saved from a document drawn As drawn doesn’t carry that pen to ot
   expect(useStylePrefs.getState().looks[0].v).toMatchObject({ ink: 'red' });
   expect(useStylePrefs.getState().looks[0].v).not.toHaveProperty('tip');
 });
+test('a saved look shows pressed even when a built-in one matches too', async () => {
+  open(docOf(box())); render(<Live />); // a new document is an Exam answer
+  await save('Mine');
+  expect(screen.getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Exam answer' })).toHaveAttribute('aria-pressed', 'false');
+});
 test('a look that can’t be saved says so', async () => {
   open(docOf(box())); render(<Live />);
   vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
