@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Editor } from '@tiptap/core';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -67,6 +70,12 @@ test('the two columns share the rows: a row never splits, and a group’s title 
   for (const note of ['Tab to a block, or click it.', 'At the start of a line, then a space; marks around words.']) expect(within(d).getByText(note)).toHaveClass('break-after-avoid');
   for (const dt of within(d).getAllByRole('term')) expect(dt.parentElement).toHaveClass('break-inside-avoid');
   for (const el of within(d).getAllByText('In Write')) expect(el).toHaveClass('whitespace-nowrap'); // ` In Write` is never split over two lines
+});
+
+test('the keys are in Figtree, as all of Nib’s words are: a <kbd> doesn’t take Tailwind’s monospace (here, in the menu, the palette and the tips)', () => {
+  const appCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../styles/app.css'), 'utf8');
+  const base = appCss.match(/@layer base \{([\s\S]*?)\n\}/)![1]; // (after Tailwind's own base, which sets kbd in monospace)
+  expect(base).toMatch(/\n  kbd \{\s*font-family: inherit;\s*\}/);
 });
 
 test('Ctrl+Y is listed only off Apple', () => {
@@ -260,6 +269,24 @@ test('and so does a closing that finds what had the focus gone', async () => {
   fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
   await later();
   expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Home' }));
+});
+
+test('with nothing to give back (the focus on the page itself as it opened, as after opening a document from Home), the first control of the stage on screen has it', async () => {
+  render(<><Overlays /><header><a href="#/">Home</a></header><div data-stage="write"><p>Write</p><button>In Write</button></div></>);
+  expect(document.activeElement).toBe(document.body);
+  fireEvent.keyDown(document.body, { key: '?', shiftKey: true });
+  expect(sheet()).toContainElement(document.activeElement as HTMLElement);
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(button('In Write'));
+});
+
+test('…and on Home, which has no stage, the top bar’s first control', async () => {
+  render(<><Overlays /><header><a href="#/">nib</a><button>New document</button></header><main><p>Recent</p></main></>);
+  fireEvent.keyDown(document.body, { key: '/', ctrlKey: true });
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(screen.getByRole('link', { name: 'nib' }));
 });
 
 test('or in a part made inert, though still shown', async () => {

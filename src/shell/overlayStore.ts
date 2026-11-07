@@ -45,11 +45,12 @@ const focusFirstIn = (root: Element | null): boolean => !!root && [...root.query
 /**
  * An overlay's `onCloseAutoFocus`. A modal Radix dialog gives the focus to its trigger when it closes, and the
  * overlays have none, so the focus would be left on the page itself. Instead it goes back to what had it before
- * the first overlay opened, or stays in the overlay that took this one's place. When that can't take it any more
- * (gone, or in a stage no longer shown), it goes to `instead` if that takes it, else the first control in the
- * stage on screen, else the top bar's. It is given back only if it was lost (on the page itself): when the
- * overlay closed into another dialog (the palette's Import, which gives it back itself, to `focusBeforeOverlay()`),
- * or something took it meanwhile (New document's caret), it stays there, and nothing is kept for later.
+ * the first overlay opened, or stays in the overlay that took this one's place. When nothing had it (the page
+ * itself had it: a document opened from Home, whose card is gone) or that can't take it any more (gone, or in a
+ * stage no longer shown), it goes to `instead` if that takes it, else the first control in the stage on screen,
+ * else the top bar's. It is given back only if it was lost (on the page itself): when the overlay closed into
+ * another dialog (the palette's Import, which gives it back itself, to `focusBeforeOverlay()`), or something took
+ * it meanwhile (New document's caret), it stays there, and nothing is kept for later.
  */
 export function focusBack(e: Event, instead?: () => boolean): void {
   e.preventDefault();
@@ -57,7 +58,7 @@ export function focusBack(e: Event, instead?: () => boolean): void {
   const el = before;
   before = null;
   const taken = document.activeElement !== null && document.activeElement !== document.body && !document.activeElement.closest('[data-overlay]');
-  if (taken || otherModalOpen() || !el || focusOn(el) || instead?.()) return;
+  if (taken || otherModalOpen() || (el && focusOn(el)) || instead?.()) return;
   if (!focusFirstIn(document.querySelector('[data-stage]:not([hidden])'))) focusFirstIn(document.querySelector('header'));
 }
 

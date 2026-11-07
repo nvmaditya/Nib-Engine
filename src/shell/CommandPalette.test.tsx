@@ -228,6 +228,29 @@ test('Escape closes it and gives the focus back, and so does Ctrl+K again', asyn
   expect(palette()).not.toBeInTheDocument();
 });
 
+test('with nothing to give back (the focus on the page itself, as after opening a document from Home), Escape gives it to the stage on screen', async () => {
+  const u = user();
+  await openApp();
+  expect(document.activeElement).toBe(document.body);
+  await openPalette(u);
+  await u.keyboard('{Escape}');
+  expect(palette()).not.toBeInTheDocument();
+  await waitFor(() => expect(within(stages()).getByRole('button', { name: '1 Write' })).toHaveFocus());
+});
+
+test('…and so does closing the Import it opened, whose opener (the palette’s field) is gone by then', async () => {
+  const u = user();
+  await openApp();
+  expect(document.activeElement).toBe(document.body);
+  await openPalette(u);
+  await choose(u, 'Import');
+  await screen.findByRole('dialog', { name: 'Import a document' });
+  await act(async () => { await new Promise(r => setTimeout(r, 50)); }); // the palette's closing focus has had its frame
+  await u.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  await waitFor(() => expect(within(stages()).getByRole('button', { name: '1 Write' })).toHaveFocus());
+});
+
 test('in a document, Import a file… opens Import, which keeps the focus', async () => {
   const u = user();
   await openApp();
@@ -313,13 +336,15 @@ test('once Import has taken over from the palette, what had the focus before is 
   expect(focusBeforeOverlay()).toBeNull();
   await u.keyboard('{Escape}');
   await waitFor(() => expect(name).toHaveFocus()); // (Import's own)
-  // The focus on the page itself, then the shortcut sheet opened and closed: there was nothing to give back.
+  // The focus on the page itself, then the shortcut sheet opened and closed: there was nothing to give back, so
+  // the stage on screen has it, not the name kept from before.
   act(() => { name.blur(); });
   await u.keyboard('{Control>}/{/Control}');
   await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
   await u.keyboard('{Escape}');
   await act(async () => { await new Promise(r => setTimeout(r, 50)); });
-  expect(document.activeElement).toBe(document.body);
+  expect(name).not.toHaveFocus();
+  expect(document.querySelector('[data-stage]:not([hidden])')).toContainElement(document.activeElement as HTMLElement);
 });
 
 test('the field names the chosen option for screen readers: on opening, as you type, and when the documents arrive', async () => {

@@ -109,6 +109,11 @@
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* Keys (the shortcut sheet, the palette, the menu, the tips) are in Figtree like every other word, not in the
+     monospace Tailwind's base gives <kbd>. */
+  kbd {
+    font-family: inherit;
+  }
   /* React mounts inside #root, which takes the place of <body> in the page layout. */
   #root {
     flex: 1;
@@ -407,10 +412,11 @@
 
 /* While the first-visit tips show, messages rise above the card, so they never cover its Got it: along the bottom
    below 860 px, and in the bottom left corner up to 1028 px, where a centred message still reaches it. Tips.tsx sets
-   --tips-room, the card's height and the gap below it. (Under a stage's sheet the card is put away, and the
-   sheets' rule below places the messages.) */
+   --tips-room, the card's height and the gap below it. While a dialog covers the card (the palette, the shortcut
+   sheet, Import) they stay along the bottom, not mid-way down the dialog; :where() keeps that out of the rule's
+   weight. (Under a stage's sheet the card is put away, and the sheets' rule below places the messages.) */
 @media (width < 64.25rem) {
-  body:has([data-tips]) [data-sonner-toaster][data-y-position='bottom'] {
+  body:has([data-tips]):where(:not(:has([data-slot='dialog-overlay'], [data-slot='alert-dialog-overlay']))) [data-sonner-toaster][data-y-position='bottom'] {
     bottom: calc(var(--tips-room, 0px) + 0.75rem);
   }
 }
