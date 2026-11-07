@@ -9,13 +9,14 @@ import { SETTING_CONTROLS } from '@/features/style/controls';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
 import { box, docOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
 import { ExportPanel, chooseLook, chooseTilt } from './ExportPanel';
+import { useSizeEstimate } from './estimate';
 import { canShareFiles, download, share } from './run';
 import { DEFAULT_PREFS, IDLE_RUN, setChoose, togglePage, useExportPick, useExportPrefs, useExportRun } from './state';
 
-const SAMPLE = { png: 900_000, jpg: 300_000, jpgPrint: 420_000 };
+const SAMPLE = { png: 900_000, jpg: 300_000, jpgPrint: 420_000, at: 'standard' as const };
 const prefs = vi.hoisted(() => new Map<string, unknown>());
 
-vi.mock('./estimate', () => ({ useSizeEstimate: () => SAMPLE }));
+vi.mock('./estimate', () => ({ useSizeEstimate: vi.fn(() => SAMPLE) }));
 vi.mock('./run', () => ({ download: vi.fn(async () => {}), share: vi.fn(async () => {}), canShareFiles: vi.fn(() => false) }));
 vi.mock('@/store/documents', async orig => ({
   ...await orig<typeof import('@/store/documents')>(),
@@ -95,6 +96,11 @@ test('Print quality', async () => {
   expect(dl()).toHaveAccessibleName('Download PDF · 3 pages ~2.5 MB');
 });
 
+test('the size estimate is asked for at the quality chosen', async () => {
+  three(); render(<Live />); expect(useSizeEstimate).toHaveBeenLastCalledWith([0, 1, 2], 'standard');
+  await userEvent.click(screen.getByRole('button', { name: 'Print quality' })); expect(useSizeEstimate).toHaveBeenLastCalledWith([0, 1, 2], 'print');
+});
+
 test('How it looks is the document’s: one undo step each, and choosing it again records nothing', async () => {
   three(); render(<Live />); await userEvent.click(screen.getByRole('radio', { name: 'As written' })); expect(get().canUndo).toBe(false);
   await userEvent.click(screen.getByRole('radio', { name: 'Black and white' })); expect(get().S.look).toBe('bw');
@@ -126,6 +132,12 @@ test('the file name shows its ending, starts as the title, and one edit is one u
   await userEvent.click(f); await userEvent.tab(); expect(get().canUndo).toBe(false); // looked at, not changed
   await userEvent.type(f, 'Week 1/notes.pdf'); await userEvent.tab(); expect(get().doc.fileName).toBe('Week 1 notes');
   act(() => undo()); expect(get().doc.fileName).toBe(''); expect(get().canUndo).toBe(false);
+});
+
+test('typing in the file name and deleting it again records nothing', async () => {
+  three(); render(<Live />); const f = screen.getByRole('textbox', { name: 'File name' });
+  await userEvent.type(f, 'x'); await userEvent.type(f, '{Backspace}'); await userEvent.tab();
+  expect(get().doc.fileName).toBe(''); expect(get().canUndo).toBe(false);
 });
 
 test('Enter leaves the file name field, cleaned', async () => {

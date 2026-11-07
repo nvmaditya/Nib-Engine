@@ -73,7 +73,7 @@ use(init.S, init.doc);
 const get = useEditor.getState;
 const history = new History<string>(100);
 let createdAt = 0;
-/** Counts every change to the undo history (a step recorded, undone, redone or cleared), so a gesture can tell something else happened mid-drag. */
+/** Counts every change to the undo history (a step recorded, taken back, undone, redone or cleared). */
 let historyTick = 0;
 let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 const cancelLayout = () => { clearTimeout(layoutTimer); layoutTimer = undefined; };
@@ -338,19 +338,43 @@ export function closeDocument(): Promise<void> {
 
 let edits = 0, gestures = 0;
 
+/** A drag, a slider's move or a field's edit, as changes that make one undo step; `end()` closes the step. */
+export interface Gesture {
+  (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>): void;
+  /** The step is over: if it ended where it began, and is still the newest step in the history, it is taken back. */
+  end(): void;
+  /**
+   * Its step is open and still the newest in the history (nothing came after it, or what came was taken back),
+   * so its next change goes into that step.
+   */
+  isNewest(): boolean;
+}
+
 /**
  * One undo step for a whole drag or resize, however long it pauses: the first call records a step under
- * a key of its own, later calls record nothing.
+ * a key of its own, later calls record nothing. After `end()` the next change starts a new step.
  */
-export function gesture(kind: string): (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => void {
-  let key = '', seen = -1;
-  return (fn, opts) => {
-    // Another step (or an undo or redo) since our last change: carry on as a new step, so the drag isn't lost.
-    const first = seen !== historyTick;
-    if (first) key = kind + ':g' + ++gestures;
+export function gesture(kind: string): Gesture {
+  let key = '', start: string | null = null; // start: the state before this step's first change
+  const isNewest = () => start !== null && history.newest === key;
+  const g = (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => {
+    // Our step isn't the newest any more (another step came after it, or an undo or redo): carry on as a new step, so the drag isn't lost.
+    const first = !isNewest();
+    if (first) { key = kind + ':g' + ++gestures; start = stateSnapshot(); }
     update(fn, { ...opts, history: first ? key : false });
-    seen = historyTick;
+    if (first && history.newest !== key) start = null; // (a change that isn't saved records no step, so there is none to take back)
   };
+  return Object.assign(g, {
+    end() {
+      // A step that came to nothing (moved and moved back) leaves no step; Redo is as it was before it.
+      if (start !== null && history.newest === key && sameState(stateSnapshot(), start) && history.retract()) {
+        historyTick++;
+        useEditor.setState(historyFlags());
+      }
+      start = null;
+    },
+    isNewest,
+  });
 }
 
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.

@@ -289,6 +289,58 @@ test('a gesture is one undo step however long it pauses', () => {
   expect(get().canUndo).toBe(false);
 });
 
+test('a gesture that ends where it began leaves no step, and Redo stays', () => {
+  openDocument(rec('A', 'x')); update(s => { s.S.size = 30; }); undo(); // Redo is now available
+  const g = gesture('slider:size'); g(s => { s.S.size = 31; }); g(s => { s.S.size = 30; }); g.end();
+  expect(get()).toMatchObject({ canUndo: false, canRedo: true });
+});
+
+test('…but a gesture that changed something is one step', () => {
+  openDocument(rec('A', 'x'));
+  const g = gesture('slider:size'); g(s => { s.S.size = 31; }); g(s => { s.S.size = 32; }); g.end();
+  expect(get()).toMatchObject({ canUndo: true, canRedo: false });
+  undo(); expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false);
+});
+
+test('a gesture ended after another step leaves that step alone', () => {
+  openDocument(rec('A', 'x'));
+  const g = gesture('slider:size'); g(s => { s.S.size = 31; });
+  update(s => { s.S.size = 30; }); // another change, a step of its own, puts the size back
+  g.end();
+  expect(get().canUndo).toBe(true);
+  undo(); expect(get().S.size).toBe(31); undo(); expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false);
+});
+
+test('after end() the next change is a new step; a gesture that changed nothing ends quietly', () => {
+  openDocument(rec('A', 'x'));
+  const g = gesture('slider:size'); g.end(); expect(get().canUndo).toBe(false);
+  g(s => { s.S.size = 31; }); g.end(); g(s => { s.S.size = 32; }); g.end();
+  undo(); expect(get().S.size).toBe(31);
+  g(s => { s.S.size = 33; }); g(s => { s.S.size = 31; }); g.end(); g.end(); // back where it began, and ended twice
+  expect(get()).toMatchObject({ canUndo: true, canRedo: true });
+  undo(); expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false);
+});
+
+test('gestures that come back where they began are taken back newest first, each carrying on its own step', () => {
+  openDocument(rec('A', 'x'));
+  const a = gesture('slider:size'), b = gesture('slider:size');
+  a(s => { s.S.size = 31; }); b(s => { s.S.size = 32; });
+  expect([a.isNewest(), b.isNewest()]).toEqual([false, true]);
+  b(s => { s.S.size = 31; }); b.end();
+  expect([a.isNewest(), b.isNewest()]).toEqual([true, false]); expect(get().canUndo).toBe(true);
+  a(s => { s.S.size = 30; }); a.end(); // into a's own step again, which now ends where it began
+  expect(get()).toMatchObject({ canUndo: false, canRedo: false });
+  expect(a.isNewest()).toBe(false);
+});
+
+test('a gesture whose step another change came after is not the newest, and ends as a step', () => {
+  openDocument(rec('A', 'x'));
+  const a = gesture('slider:size'); a(s => { s.S.size = 31; });
+  update(s => { s.S.gap = 40; }); expect(a.isNewest()).toBe(false);
+  a(s => { s.S.size = 30; }); a.end(); // a new step of its own, and a real change
+  undo(); expect(get().S).toMatchObject({ size: 31, gap: 40 }); undo(); undo(); expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false);
+});
+
 test('updates without a key are separate steps', () => {
   open(docOf(box()));
   update(s => { s.doc.boxes[0].x = 1; });

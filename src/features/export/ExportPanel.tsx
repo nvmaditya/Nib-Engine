@@ -17,7 +17,7 @@ import { setS } from '@/features/doc/actions';
 import { useStageActive } from '@/features/doc/StageHost';
 import { Group, Hint } from '@/features/style/parts';
 import { Segmented, SegButton } from '@/features/write/WriteBar';
-import { gesture, useEditor } from '@/store/editor';
+import { gesture, useEditor, type Gesture } from '@/store/editor';
 import { useSizeEstimate } from './estimate';
 import { downloadLabel, estimateBytes, exportBase, formatSize, planOf, suffixShown, type Format, type Quality } from './plan';
 import { canShareFiles, download, share } from './run';
@@ -89,15 +89,16 @@ export function ExportPanel({ pages }: { pages: number | null }) {
   const known = pages !== null;
   const plan = planOf({ format, zip, quality }, { choose, out }, pages ?? 1, fileName, title);
   const n = plan.pages.length;
-  const sample = useSizeEstimate(plan.pages);
+  const sample = useSizeEstimate(plan.pages, quality);
   const progress = making(run);
   const size = known && !progress && n && sample ? formatSize(estimateBytes(plan, sample)) : null;
   const waiting = !fontsInUse().every(fontReady);
   const off = !known || !n || run.kind !== null || waiting;
   const why = waiting ? WAITING : undefined;
 
-  // One edit of the name, from its first keystroke to leaving the field, is one undo step.
-  const edit = useRef<ReturnType<typeof gesture> | null>(null);
+  // One edit of the name, from its first keystroke to leaving the field, is one undo step, and none if it
+  // ends as it began.
+  const edit = useRef<Gesture | null>(null);
   const setName = (v: string) => (edit.current ??= gesture('file-name'))(s => { s.doc.fileName = v; }, { layout: false });
 
   return (
@@ -154,6 +155,7 @@ export function ExportPanel({ pages }: { pages: number | null }) {
               onBlur={e => {
                 const c = cleanName(e.target.value);
                 if (c !== e.target.value) setName(c);
+                edit.current?.end();
                 edit.current = null;
               }}
               onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
