@@ -41,7 +41,7 @@ interface PwPage extends Pick<PwLocator, 'locator' | 'getByRole'> {
   evaluate<R>(fn: () => R | Promise<R>): Promise<R>;
   evaluate<R, A>(fn: (arg: A) => R | Promise<R>, arg: A): Promise<R>;
 }
-interface PwContext { route(url: string, fn: (r: PwRoute) => unknown): Promise<void>; newPage(): Promise<PwPage>; close(): Promise<void> }
+interface PwContext { route(url: string, fn: (r: PwRoute) => unknown): Promise<void>; addInitScript(fn: () => void): Promise<void>; newPage(): Promise<PwPage>; close(): Promise<void> }
 interface PwBrowser { newContext(o: { viewport: { width: number; height: number }; deviceScaleFactor: number; colorScheme: 'dark' | 'light' }): Promise<PwContext>; close(): Promise<void> }
 
 describe('Write in Chromium, laid out for real', () => {
@@ -66,6 +66,7 @@ describe('Write in Chromium, laid out for real', () => {
   async function openSample(width: number): Promise<PwPage> {
     const ctx = await browser!.newContext({ viewport: { width, height: width < 860 ? 844 : 860 }, deviceScaleFactor: 1, colorScheme: 'dark' });
     contexts.push(ctx);
+    await ctx.addInitScript(() => { try { localStorage.setItem('nib.tips', 'seen'); } catch { /* blocked */ } }); // the first-visit tips seen: only the pages
     await ctx.route('**/*', r => {
       const url = r.request().url();
       if (!url.startsWith(ORIGIN)) return r.abort(); // web fonts: the hands come from public/fonts

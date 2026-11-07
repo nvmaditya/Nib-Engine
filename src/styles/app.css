@@ -430,3 +430,16 @@ html [data-sonner-toaster][data-sonner-theme='dark'] {
   --normal-border-hover: var(--line-strong);
   --normal-text: var(--fg);
 }
+
+/* The first-visit tips (Tips.tsx). Below 860 px a stage's sheet (Style, Export, Outline) covers the card, so
+   while the stage on screen holds one the card is out of sight, out of the Tab order and out of the accessibility
+   tree; it comes back with a stage that has none. And while the card shows on a phone, Write's pages leave room
+   below for it (Tips.tsx sets --tips-room), so the foot of the last page can be scrolled clear of it. */
+body:has([data-stage]:not([hidden]) [data-vaul-drawer]) [data-tips] {
+  display: none;
+}
+@media (width < 53.75rem) {
+  [data-stage='write'] main[data-pages] {
+    padding-bottom: var(--tips-room, 0px);
+  }
+}
