@@ -14,7 +14,8 @@ import { SETTING_CONTROLS } from './controls';
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
 
 beforeEach(async () => { await flushSave(); localStorage.clear(); });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+const cleanups: (() => void)[] = [];
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); while (cleanups.length) cleanups.pop()!(); });
 
 function Live(p: { id: keyof typeof LIMITS; step?: number }) { useEditor(s => s.version); return <Range {...p} V={view() as Settings} />; }
 const styleBox = (id: string) => act(() => { select(id); update(s => { s.scope = 'box'; }, { save: false, layout: false }); });
@@ -53,11 +54,25 @@ test('a drag after a key press is a step of its own', async () => {
   thumb.focus();
   await userEvent.keyboard('{ArrowRight}');
   // jsdom has no pointer capture, which Radix asks for when a drag starts.
-  Object.assign(HTMLElement.prototype, { setPointerCapture: () => {}, releasePointerCapture: () => {}, hasPointerCapture: () => false });
+  const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
+  for (const m of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) { proto[m] = () => false; }
+  cleanups.push(() => { for (const m of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) delete proto[m]; });
   fireEvent.pointerDown(thumb.closest('[data-slot="slider"]')!); // jsdom has no layout, so this lands on the minimum
   expect(get().S.size).toBe(18);
   undo();
   expect(get().S.size).toBe(31);
+});
+
+test('a drag carries on as a step of its own after an undo in the middle of it', () => {
+  open(docOf(box()));
+  const r = rangeSteps('size');
+  r.change({ size: 31 }); r.change({ size: 32 });
+  undo();
+  expect(get().S.size).toBe(30);
+  r.change({ size: 35 }); r.change({ size: 36 });
+  expect(get().S.size).toBe(36);
+  undo();
+  expect(get().S.size).toBe(30);
 });
 
 test('each slider spans the engine’s whole range', () => {
