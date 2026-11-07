@@ -3,14 +3,14 @@
 // sheet covers (a spacer, not padding, so the top snap doesn't make the document scroll), so the last one can scroll clear of it.
 import { useRef, type CSSProperties } from 'react';
 import { PageView, type PageLayout } from '@/features/pages/PageView';
+import { StageSheet, useSheetSnaps } from '@/features/doc/StageSheet';
 import { useWide } from '@/lib/media';
 import { StylePanel } from './StylePanel';
-import { StyleSheet, useSheetSnaps } from './StyleSheet';
 
 export function StyleStage({ layout }: { layout: PageLayout | null }) {
   const wide = useWide();
   const stage = useRef<HTMLDivElement>(null);
-  const snaps = useSheetSnaps(stage, !wide);
+  const snaps = useSheetSnaps(stage, !wide, '148px');
   const panel = <StylePanel pages={layout?.pages ?? null} />;
   if (wide) {
     return (
@@ -23,7 +23,7 @@ export function StyleStage({ layout }: { layout: PageLayout | null }) {
   return (
     <div ref={stage} className="flex min-h-0 flex-1 flex-col" style={{ '--sheet-shown': snaps.shown } as CSSProperties}>
       <PageView layout={layout} mode="style" className="min-h-0 flex-1 overflow-y-auto after:block after:h-[calc(var(--sheet-shown)+12px)] after:content-['']" />
-      <StyleSheet snaps={snaps}>{panel}</StyleSheet>
+      <StageSheet title="Style" handleLabel="Drag to show more or less of Style" snaps={snaps}>{panel}</StageSheet>
     </div>
   );
 }
