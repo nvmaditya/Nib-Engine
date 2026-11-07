@@ -338,19 +338,37 @@ export function closeDocument(): Promise<void> {
 
 let edits = 0, gestures = 0;
 
+/** A drag, a slider's move or a field's edit, as changes that make one undo step; `end()` closes the step. */
+export interface Gesture {
+  (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>): void;
+  /** The step is over: if it ended where it began, with nothing else in the history since, it is taken back. */
+  end(): void;
+}
+
 /**
  * One undo step for a whole drag or resize, however long it pauses: the first call records a step under
- * a key of its own, later calls record nothing.
+ * a key of its own, later calls record nothing. After `end()` the next change starts a new step.
  */
-export function gesture(kind: string): (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => void {
-  let key = '', seen = -1;
-  return (fn, opts) => {
+export function gesture(kind: string): Gesture {
+  let key = '', seen = -1, start: string | null = null; // start: the state before this step's first change
+  const g = (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => {
     // Another step (or an undo or redo) since our last change: carry on as a new step, so the drag isn't lost.
-    const first = seen !== historyTick;
-    if (first) key = kind + ':g' + ++gestures;
+    const first = start === null || seen !== historyTick, t = historyTick;
+    if (first) { key = kind + ':g' + ++gestures; start = stateSnapshot(); }
     update(fn, { ...opts, history: first ? key : false });
+    if (historyTick === t && first) start = null; // (a change that isn't saved records no step, so there is none to take back)
     seen = historyTick;
   };
+  return Object.assign(g, {
+    end() {
+      // A step that came to nothing (moved and moved back) leaves no step; Redo is as it was before it.
+      if (start !== null && seen === historyTick && sameState(stateSnapshot(), start) && history.retract()) {
+        historyTick++;
+        useEditor.setState(historyFlags());
+      }
+      start = null;
+    },
+  });
 }
 
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.

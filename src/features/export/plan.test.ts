@@ -3,11 +3,11 @@ import { PAGE_H, PAGE_W } from '@/engine/config.js';
 import type { Row } from '@/engine/types';
 import {
   chosenPages, downloadLabel, downloadNames, estimateBytes, exportBase, failMessage, formatSize, fullestPage, PRINT_RATIO, QUALITY,
-  planOf, savedMessage, suffixShown, whatIsMade, zipNames, type ExportPlan, type Sample,
+  planOf, savedMessage, SCAN_LOOKS, suffixShown, whatIsMade, zipNames, type ExportPlan, type Sample,
 } from './plan';
 
 const P = (p: Partial<ExportPlan> = {}): ExportPlan => ({ format: 'pdf', quality: 'standard', zip: true, pages: [0, 1, 2], pageCount: 3, base: 'The Water Cycle', ...p });
-const S: Sample = { png: 900_000, jpg: 300_000, jpgPrint: 420_000 };
+const S: Sample = { png: 900_000, jpg: 300_000, jpgPrint: 420_000, at: 'standard' };
 test('the two qualities are the engine’s sizes', () => { for (const q of Object.values(QUALITY)) expect([q.w, q.h]).toEqual([Math.round(q.pxW), Math.round(q.pxW * PAGE_H / PAGE_W)]); expect([QUALITY.standard.w, QUALITY.print.w]).toEqual([1747, 2480]); });
 test('chosen pages', () => {
   expect(chosenPages(false, [1], 3)).toEqual([0, 1, 2]);
@@ -49,6 +49,13 @@ test('the size estimate', () => {
   expect(estimateBytes(P({ format: 'jpg', zip: false, quality: 'print', pages: [0, 1] }), S)).toBe(Math.round(2 * 420_000 * PRINT_RATIO));
   expect(estimateBytes(P({ format: 'png', quality: 'print', pages: [0] }), S)).toBe(Math.round(900_000 * PRINT_RATIO));
 });
+test('a sample measured at Print size isn’t scaled again', () => {
+  const atPrint: Sample = { ...S, at: 'print' };
+  expect(estimateBytes(P({ format: 'jpg', zip: false, quality: 'print', pages: [0, 1] }), atPrint)).toBe(2 * 420_000);
+  expect(estimateBytes(P({ format: 'png', quality: 'print', pages: [0] }), atPrint)).toBe(900_000);
+  expect(estimateBytes(P({ quality: 'print', pages: [0, 1] }), atPrint)).toBe(2 * 420_000 + 300 + 2 * 480);
+});
+test('the scan looks are the three a scanner gives', () => expect(SCAN_LOOKS).toEqual(['scan', 'gray', 'bw']));
 test('sizes read the way people say them', () => expect([2_700_406, 601_260, 1_692_875, 12_400_000, 999_499, 999_500, 9_949_999, 9_950_000, 1_500].map(formatSize))
   .toEqual(['~2.7 MB', '~601 KB', '~1.7 MB', '~12 MB', '~999 KB', '~1.0 MB', '~9.9 MB', '~10 MB', '~2 KB']));
 test('planOf gathers the choices', () => {

@@ -36,3 +36,30 @@ test('limit drops the oldest', () => {
   h.undo(3);
   expect(h.canUndo).toBe(false);
 });
+
+test('retract takes back the latest step and gives Redo back', () => {
+  const h = new History<string>(); h.record('a', 'k1', 0); h.record('b', 'k2', 5000); h.undo('c'); // redo holds 'c'
+  h.record('b', 'g1', 9000); expect(h.canRedo).toBe(false);
+  expect(h.retract()).toBe(true); expect(h.canRedo).toBe(true); expect(h.redo('b')).toBe('c');
+  expect(h.retract()).toBe(false); // the history moved since
+});
+
+test('retract takes back only the step record added last, and nothing after an undo, a redo or a clear', () => {
+  const h = new History<string>(); h.record('a', 'k1', 0); h.record('b', 'k2', 5000);
+  expect(h.retract()).toBe(true); expect(h.retract()).toBe(false); // 'a' was recorded before 'b'
+  expect(h.undo('b')).toBe('a'); expect(h.canUndo).toBe(false);
+  h.record('a', 'k3', 9000); h.undo('x'); expect(h.retract()).toBe(false);
+  h.redo('a'); expect(h.retract()).toBe(false);
+  h.record('x', 'k4', 12000); h.clear(); expect(h.retract()).toBe(false);
+  expect(new History<string>().retract()).toBe(false);
+});
+
+test('a step recorded after a retract is a step of its own, even under the same key', () => {
+  const h = new History<string>(); h.record('a', 'g1', 0); h.retract();
+  h.record('b', 'g1', 100); expect(h.canUndo).toBe(true); expect(h.undo('c')).toBe('b');
+});
+
+test('a burst under the latest step’s key is still that step: retract takes the whole burst back', () => {
+  const h = new History<string>(); h.record('a', 'k1', 0); h.record('b', 'g1', 5000); h.record('c', 'g1', 5500);
+  expect(h.retract()).toBe(true); expect(h.undo('z')).toBe('a'); expect(h.canUndo).toBe(false);
+});

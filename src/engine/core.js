@@ -1186,10 +1186,13 @@ function composePage(i, pxW) {
 /* ---------- Camera tilt for downloads ---------- */
 // No photo or scan of a page is perfectly square: turn it a fraction of a degree and crop the
 // edges a little unevenly. Each page gets its own random angle; Reshuffle picks new ones.
+const shotAngle = rnd => (0.3 + rnd() * 0.6) * (rnd() < 0.5 ? -1 : 1) * Math.PI / 180;
+// The angle (radians) frameShot turns page i by: 0 without camera tilt. The preview turns its stand-in by it.
+export const pageTilt = i => (S.tilt ? shotAngle(rng('tilt', S.seed, i)) : 0);
 function frameShot(src, i) {
   if (!S.tilt) return src;
   const W = src.width, H = src.height, rnd = rng('tilt', S.seed, i);
-  const a = (0.3 + rnd() * 0.6) * (rnd() < 0.5 ? -1 : 1) * Math.PI / 180;
+  const a = shotAngle(rnd);
   const c = Math.cos(a), sn = Math.sin(a), ac = Math.abs(sn);
   const cover = Math.max(c + (H / W) * ac, c + (W / H) * ac);   // just enough zoom that no corner shows empty
   const z = cover + 0.004 + rnd() * 0.01;                         // and a little more, so the edges are cut

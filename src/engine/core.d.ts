@@ -54,6 +54,8 @@ export function paintPaper(canvas: HTMLCanvasElement, i: number, pxW: number): v
 export function paperKey(i: number, pxW: number): string;
 export function composePage(i: number, pxW: number): HTMLCanvasElement;
 export function frameShot(src: HTMLCanvasElement, i: number): HTMLCanvasElement;
+/** The angle in radians `frameShot` turns page `i` by (±0.3–0.9°), or 0 without camera tilt. */
+export function pageTilt(i: number): number;
 export function applyLook(src: HTMLCanvasElement, i: number): HTMLCanvasElement;
 export function geom(): Geom;
 export function snapX(x: number, g: Geom, w: number): number;

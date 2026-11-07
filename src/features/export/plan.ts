@@ -1,6 +1,6 @@
 import { PAGE_H, PAGE_W } from '@/engine/config.js';
 import { cleanName } from '@/engine/core.js';
-import type { Seg } from '@/engine/types';
+import type { Look, Seg } from '@/engine/types';
 import { pagesWord } from '@/features/style/fit';
 
 export type Format = 'pdf' | 'png' | 'jpg';
@@ -19,8 +19,14 @@ export const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg
 export interface ExportPrefs { format: Format; zip: boolean; quality: Quality }
 export interface PagePick { choose: boolean; out: number[] }
 export interface ExportPlan { format: Format; quality: Quality; zip: boolean; pages: number[]; pageCount: number; base: string }
-/** Bytes of one page at Standard size: as PNG, as JPEG at Standard's quality, and as JPEG at Print's. */
-export interface Sample { png: number; jpg: number; jpgPrint: number }
+/** Bytes of one page drawn at the size `at`: as PNG, as JPEG at Standard's quality, and as JPEG at Print's. */
+export interface Sample { png: number; jpg: number; jpgPrint: number; at: Quality }
+
+/**
+ * The looks a scanner gives. Their softening is measured in pixels of the page drawn, so a Standard
+ * page scaled up says little about a Print one: a Print scan is measured at Print size.
+ */
+export const SCAN_LOOKS: readonly Look[] = ['scan', 'gray', 'bw'];
 
 /** Every page, or those not left out, ascending. Left-out pages past the end are forgotten. */
 export function chosenPages(choose: boolean, out: readonly number[], pageCount: number): number[] {
@@ -99,9 +105,10 @@ export const PDF_OVERHEAD = { base: 300, perPage: 480 };
 
 const utf8 = (s: string): number => new TextEncoder().encode(s).length;
 
+/** The download's size from one page's sample: a Standard sample stands for a Print page by its pixel count. */
 export function estimateBytes(plan: ExportPlan, s: Sample): number {
-  const print = plan.quality === 'print';
-  const one = plan.format === 'png' ? s.png * (print ? PRINT_RATIO : 1) : print ? s.jpgPrint * PRINT_RATIO : s.jpg;
+  const print = plan.quality === 'print', scale = print && s.at === 'standard' ? PRINT_RATIO : 1;
+  const one = (plan.format === 'png' ? s.png : print ? s.jpgPrint : s.jpg) * scale;
   const n = plan.pages.length;
   let total = one * n;
   if (plan.format === 'pdf') total += PDF_OVERHEAD.base + PDF_OVERHEAD.perPage * n;

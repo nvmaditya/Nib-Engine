@@ -197,14 +197,14 @@
   .paper.scanned .ink-layer {
     visibility: hidden;
   }
-  /* Camera tilt's stand-in until the exact tilted page is drawn: only the shot's slight zoom. Each page
-     turns its own way (±0.3–0.9°, either sign), so one fixed angle would turn half the pages the wrong
-     way first. Showing each page's own angle here needs the engine's angle as a value (Milestone 6). */
+  /* Camera tilt's stand-in until the exact tilted page is drawn: each page turned by its own angle
+     (--shot-turn, the engine's pageTilt: ±0.3–0.9°, either sign) and zoomed just enough that no corner
+     shows empty (--shot-zoom), as frameShot turns and zooms it. Only its uneven crop waits for the exact page. */
   [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art {
     overflow: hidden;
   }
   [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art > :is(.paper-bg, .ink-layer) {
-    transform: scale(1.02);
+    transform: rotate(var(--shot-turn, 0rad)) scale(var(--shot-zoom, 1.02));
   }
   [data-sheets][data-look='scan'] .paper:not(.scanned) {
     filter: brightness(1.08) contrast(1.12) saturate(0.85);

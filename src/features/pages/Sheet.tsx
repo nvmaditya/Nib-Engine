@@ -1,9 +1,9 @@
 // One sheet of paper: the paper canvas, a canvas per block part, the exact scan preview and the block
 // frames. It draws only while it is near the visible part of an active stage, and lets its canvases go
 // otherwise, so long documents and hidden stages cost no canvas memory.
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { PAGE_H, PAGE_W } from '@/engine/config.js';
-import { inkKey, paintPaper, paperKey, renderSegment, segBounds, segId } from '@/engine/core.js';
+import { inkKey, pageTilt, paintPaper, paperKey, renderSegment, segBounds, segId } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
 import { addTextBlockAt, select } from '@/features/doc/actions';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,18 @@ export const ScanContext = createContext<() => void>(() => {});
 /** Canvas pixels per CSS pixel for the pages (capped, so very dense screens don't cost too much memory). */
 export const dprNow = (): number => Math.min(window.devicePixelRatio || 1, 2.5);
 const release = (c: HTMLCanvasElement | null) => { if (c) { c.width = 0; c.height = 0; delete c.dataset.k; } };
+
+/** The zoom that leaves no empty corner on a page turned by `a` radians, and a little more: frameShot's own, without its random extra. */
+const cover = (a: number): number => {
+  const c = Math.cos(Math.abs(a)), sn = Math.sin(Math.abs(a));
+  return Math.max(c + (PAGE_H / PAGE_W) * sn, c + (PAGE_W / PAGE_H) * sn) + 0.004;
+};
+
+/** Camera tilt's stand-in until the exact tilted page is drawn: the page turned by its own angle, and zoomed to cover. */
+function shotStyle(i: number): CSSProperties {
+  const a = pageTilt(i);
+  return { '--shot-turn': `${a}rad`, '--shot-zoom': String(cover(a)) } as CSSProperties;
+}
 
 function PaperCanvas({ i, pages, pxW, near }: { i: number; pages: number; pxW: number; near: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -66,6 +78,7 @@ export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClic
   const near = useNearViewport(figRef) || (drag.active && !!figRef.current?.classList.contains('dragging'));
   const gap = useEditor(s => s.S.gap);
   const selectedId = useEditor(s => s.selectedId);
+  const tiltSeed = useEditor(s => (s.S.tilt ? s.S.seed : null)); // (so New variation turns the stand-in a new way)
   const rescan = useContext(ScanContext);
   const s = cssW / PAGE_W, dpr = dprNow();
 
@@ -84,7 +97,7 @@ export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClic
   return (
     <figure ref={figRef} className={cn('sheet', pick?.left && 'left-out')} data-i={i}>
       <div ref={paperRef} className="paper" data-paper={i} style={{ width: cssW, height: Math.round(cssW * PAGE_H / PAGE_W) }}>
-        <div className="paper-art">
+        <div className="paper-art" style={mode === 'export' && tiltSeed !== null ? shotStyle(i) : undefined}>
           <PaperCanvas i={i} pages={pages} pxW={cssW * dpr} near={near} />
           {/* The block frames lie between the paper and the ink: the ink is multiplied over their outlines, so an
               outline never hides a letter that reaches past its block's edge. The ink takes no pointer, so the
