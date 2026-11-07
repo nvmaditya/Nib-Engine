@@ -45,6 +45,8 @@ test('notes', () => {
   expect([find('labelle'), find('zeyada'), find('playwrite'), mine('up-a')].map(handNote)).toEqual(['joined-up', 'print, messy', 'joined-up, neat', 'your font']);
   expect(shapesNote(find('caveat'))).toBe('3 shapes per letter');
   expect(shapesNote(find('labelle'))).toBeNull();
+  expect(shapesNote(mine('up-a'))).toBe('1 shape per letter');
+  expect(shapesNote({ ...mine('up-a'), forms: 4 })).toBe('4 shapes per letter');
 });
 
 test('the start of the document', () => {
@@ -53,6 +55,11 @@ test('the start of the document', () => {
   expect(docStart(docOf(box({ text: '# Only a title' })))).toBe('Only a title');
   expect(docStart(docOf(box({ text: 'a'.repeat(60) })))).toBe('a'.repeat(40));
   expect(docStart(docOf(box({ id: 'late', page: 1, text: 'Later' }), box({ id: 'first', text: 'First words' })))).toBe('First words');
+});
+
+test('the start skips margin notes, even above the text', () => {
+  expect(docStart(docOf(box({ id: 'n', kind: 'note', y: 40, text: 'Check this!' }), box({ y: 300, text: 'The real start' })))).toBe('The real start');
+  expect(docStart(docOf(box({ kind: 'note', text: 'Only a note' })))).toBe(PANGRAM);
 });
 
 test('the start skips headers and lines with no words, and reads blocks top to bottom, then left to right', () => {

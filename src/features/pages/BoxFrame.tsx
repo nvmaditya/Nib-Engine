@@ -35,6 +35,15 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
   const label = partLabel(sg.idx, parts);
   const tilt = segTilt(sg);
   useLayoutEffect(() => { if (!drag.active && ref.current) ref.current.style.transform = ''; });
+  // The name tag hangs from the block's left edge; where that would put its right end past the page's
+  // (a margin note on a phone, with its Own style badge), it shifts left to end at the page's edge.
+  const tagRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const t = tagRef.current, paper = ref.current?.closest<HTMLElement>('[data-paper]');
+    if (!t || !paper) return;
+    const left = Math.min(-2, paper.clientWidth - sg.x * s - t.offsetWidth);
+    t.style.left = left < -2 && paper.clientWidth > 0 ? `${Math.max(left, -sg.x * s)}px` : '';
+  }, [sg.x, s, box.name, label, own]);
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -82,7 +91,7 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
       onFocus={() => { if (!selected) select(box.id); }}>
       <span className="ph">Empty block</span>
       {write && <span className="rz" title="Drag to change width" />}
-      <div className="tag">
+      <div ref={tagRef} className="tag">
         <button type="button" tabIndex={-1} className="grip focus-visible:ring-2 focus-visible:ring-ring/50" aria-label={`Move ${box.name}`} title="Drag to move">
           <GripVertical aria-hidden />
         </button>

@@ -27,9 +27,7 @@ function uploadMessage(r: AddFontResult): string {
   if (!r.ok) return REFUSED[r.reason];
   if (r.existed) return `“${r.name}” is already in Your fonts.`;
   if (!r.kept) return `Added “${r.name}” for now. Nib couldn’t keep it on this device, so it goes when you close this page.`;
-  return r.forms > 1
-    ? `Added “${r.name}” with ${r.forms} shapes per letter. It’s in Your fonts on this device.`
-    : `Added “${r.name}”. It’s in Your fonts on this device.`;
+  return `Added “${r.name}” with ${r.forms > 1 ? `${r.forms} shapes` : '1 shape'} per letter. It’s in Your fonts on this device.`;
 }
 
 const chip = 'h-7 rounded-full border border-line bg-surface px-3 text-[12.5px] font-medium transition-colors hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:border-fg aria-pressed:bg-fg aria-pressed:text-surface';

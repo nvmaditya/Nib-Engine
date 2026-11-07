@@ -136,8 +136,9 @@ export function fitBack(target: number): boolean {
     st.S.gap = docGap;
     clearMeasureCache();
   }, { history: step('fit-back-undo') }));
-  // In Only scope the panel's Letter size is the block's, so the whole document's is named as such.
-  const letters = size && `${size.of === 'document' && b ? 'The whole document’s letter size' : 'Letter size'} is now ${size.to}`;
+  // In Only scope the panel's Letter size is the block's, so the message names whose size changed.
+  const whose = size?.of === 'block' && b ? (b.name ? `“${b.name}” letter size` : 'This block’s letter size') : size?.of === 'document' && b ? 'The whole document’s letter size' : 'Letter size';
+  const letters = size && `${whose} is now ${size.to}`;
   const said = letters ? letters + (plan.gap !== docGap ? ` and line spacing ${plan.gap}.` : '.') : `Line spacing is now ${plan.gap}.`;
   toast(`Back to ${pagesWord(plan.pages)}. ${said}`, putBack);
   return true;

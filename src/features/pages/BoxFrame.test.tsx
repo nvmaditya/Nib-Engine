@@ -98,3 +98,28 @@ test('in Write, or without its own style, there is no badge', () => {
   frame('m', 0, 'style', 1);
   expect(screen.queryByText('Own style')).toBeNull();
 });
+
+const tagSizes = (paperWidth: number) => {
+  const a = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('tag') ? 140 : 0; });
+  const b = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) { return 'paper' in this.dataset ? paperWidth : 0; });
+  return () => { a.mockRestore(); b.mockRestore(); };
+};
+const tagOf = (name: string) => screen.getByRole('group', { name }).querySelector<HTMLElement>('.tag')!;
+
+test('the name tag shifts left to stay inside the page when it would run past the right edge', () => {
+  open(docOf(box({ id: 'n', kind: 'note', name: 'Margin note', x: 150, w: 40, text: 'x', style: { size: 40 } })));
+  const restore = tagSizes(200);
+  try {
+    render(<div data-paper=""><BoxFrame sg={part('n', 0)} s={1} gap={34} selected parts={1} mode="style" /></div>);
+    expect(tagOf('Margin note').style.left).toBe('-90px'); // 200 - 150 - 140: its right end is at the page's edge
+  } finally { restore(); }
+});
+
+test('the name tag stays where it is when it fits', () => {
+  open(docOf(box({ id: 'm', name: 'Main text', text: 'x' })));
+  const restore = tagSizes(794);
+  try {
+    render(<div data-paper=""><BoxFrame sg={part('m', 0)} s={1} gap={34} selected parts={1} mode="style" /></div>);
+    expect(tagOf('Main text').style.left).toBe('');
+  } finally { restore(); }
+});
