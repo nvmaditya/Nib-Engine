@@ -4,7 +4,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { PAGE_W } from '@/engine/config.js';
-import type { Box, Seg } from '@/engine/types';
+import type { Box, EngineDoc, Seg } from '@/engine/types';
 import { Button } from '@/components/ui/button';
 import { useStageActive } from '@/features/doc/StageHost';
 import { lineOf } from '@/features/editor/positions';
@@ -23,6 +23,12 @@ const FACE_KEY = 'nib.phoneFace';
 function readFace(): Face {
   try { return localStorage.getItem(FACE_KEY) === 'hand' ? 'hand' : 'typed'; } catch { return 'typed'; }
 }
+
+/**
+ * Whether nothing is written in the document yet (a new document): it opens with its typed page showing, where
+ * Add and typing start, whatever this device remembers for other documents (which stays as it is).
+ */
+export const nothingWritten = (doc: EngineDoc): boolean => doc.boxes.every(b => !b.text.trim());
 function keepFace(f: Face): void {
   try { localStorage.setItem(FACE_KEY, f); } catch { /* storage blocked: it lasts until the page is closed */ }
 }
@@ -49,7 +55,7 @@ export function PhonePages({ layout }: { layout: PageLayout | null }) {
   const active = useStageActive();
   const caret = useEditor(s => s.caret);
   const scrollToPage = useEditor(s => s.scrollToPage);
-  const [face, setFaceState] = useState<Face>(readFace);
+  const [face, setFaceState] = useState<Face>(() => (nothingWritten(useEditor.getState().doc) ? 'typed' : readFace()));
   const [want, setWant] = useState(0);
   const [width, setWidth] = useState(0);
   const mainRef = useRef<HTMLElement>(null);

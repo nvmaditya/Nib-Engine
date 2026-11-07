@@ -85,7 +85,7 @@ export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode, 
   const head = paperEl.querySelector<HTMLElement>(`.ink-layer canvas[data-id="${segId(sg)}"]`);
   const resize = gesture('resize');
   let target = { page: f0.page, x: f0.x, y: f0.y }, raf = 0, scrollRaf = 0;
-  const shift = (t: string) => { frame.style.transform = t; if (head) head.style.transform = t; };
+  const shift = (t: string) => { if (t) frame.style.setProperty('--shift', t); else frame.style.removeProperty('--shift'); if (head) head.style.transform = t; };
   try { frame.setPointerCapture(e.pointerId); } catch { /* the pointer may already be gone */ }
   drag.active = mode === 'move';
   fig.classList.add('dragging'); paperEl.classList.remove('scanned');

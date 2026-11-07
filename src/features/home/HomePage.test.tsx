@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Toaster, toast as sonner } from 'sonner';
-import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, putDoc } from '@/store/documents';
+import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, onDocsChanged, renameDoc } from '@/store/documents';
 import { cleanSettings } from '@/engine/doc.js';
 import { HomePage } from './HomePage';
 import { forgetThumb, thumbFor } from './thumbs';
@@ -22,6 +22,9 @@ vi.mock('@/store/documents', () => ({
   duplicateDoc: vi.fn(),
   deleteDoc: vi.fn(async (id: string) => { mem.docs = mem.docs.filter(d => d.id !== id); }),
   putDoc: vi.fn(async (r: any) => { mem.docs = mem.docs.map(d => (d.id === r.id ? r : d)); }),
+  renameDoc: vi.fn(async (id: string, title: string) => { mem.docs = mem.docs.map(d => (d.id === id ? { ...d, title } : d)); }),
+  onDocsChanged: vi.fn(() => () => {}),
+  MissingDocumentError: class MissingDocumentError extends Error {},
   getPref: vi.fn(async () => undefined),
   setPref: vi.fn(async () => {}),
 }));
@@ -94,7 +97,7 @@ test('when the documents can’t be read, Home says so instead of “No document
 test('a rename of a document a newer version of Nib saved says to reload', async () => {
   const user = userEvent.setup();
   render(<><HomePage /><Toaster /></>);
-  vi.mocked(putDoc).mockRejectedValueOnce(new NewerDocumentError());
+  vi.mocked(renameDoc).mockRejectedValueOnce(new NewerDocumentError());
   await user.click(await screen.findByRole('button', { name: 'More for A' }));
   await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
   const dlg = await screen.findByRole('dialog', { name: 'Rename document' });
@@ -111,7 +114,7 @@ test('a rename, duplicate or delete that fails says so and closes its dialog', a
     await user.click(await screen.findByRole('menuitem', { name: item }));
   };
 
-  vi.mocked(putDoc).mockRejectedValueOnce(new Error('no'));
+  vi.mocked(renameDoc).mockRejectedValueOnce(new Error('no'));
   await menu('Rename');
   const dlg = await screen.findByRole('dialog', { name: 'Rename document' });
   await user.clear(within(dlg).getByRole('textbox', { name: 'Document name' }));
@@ -136,4 +139,30 @@ test('a rename, duplicate or delete that fails says so and closes its dialog', a
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   expect(screen.getByText('A')).toBeInTheDocument();
   act(() => { sonner.dismiss(); });
+});
+
+const wait = (ms: number) => act(() => new Promise<void>(r => { setTimeout(r, ms); }));
+test('while someone types in another tab, Home reads the list again at most once a second, and not while it is hidden', async () => {
+  render(<HomePage />);
+  await screen.findByText('A');
+  const heard = vi.mocked(onDocsChanged).mock.calls.at(-1)![0];
+  await wait(50);
+  vi.mocked(listDocs).mockClear();
+
+  for (let rev = 2; rev < 12; rev++) act(() => heard({ type: 'saved', id: 'a1', rev })); // ten saves, close together
+  await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(1)); // the first at once
+  await wait(300);
+  expect(listDocs).toHaveBeenCalledTimes(1); // the rest wait for the second to be up
+  await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(2), { timeout: 2000 }); // then one read for all of them
+  await wait(1100);
+  expect(listDocs).toHaveBeenCalledTimes(2);
+
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  try {
+    act(() => heard({ type: 'added', id: 'c3' }));
+    await wait(1100);
+    expect(listDocs).toHaveBeenCalledTimes(2); // hidden: nothing is read
+  } finally { delete (document as { visibilityState?: string }).visibilityState; }
+  act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(3)); // shown again: what it missed, at once
 });

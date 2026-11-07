@@ -12,6 +12,7 @@ import { box, docOf, get, lastToast, lines, open } from '@/test/docs';
 import { BlockMenu } from './BlockMenu';
 import { HeaderFields } from './HeaderFields';
 import { PageMenu } from './PageMenu';
+import { PartMenu, TypedPage } from './TypedPage';
 import { WriteBar } from './WriteBar';
 
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
@@ -242,4 +243,18 @@ test('after Add, the focus stays with a new block’s editor, else it goes back 
   await userEvent.click(item('Text block'));
   await new Promise(r => setTimeout(r, 20));
   expect(screen.getByRole('textbox', { name: 'New block' })).toHaveFocus();
+});
+
+// A name tag's ⋯ sits at the block's left; a menu lined up with the button's right end would run off the
+// window's left edge (and be pushed flush against it) whenever the block is near the left of the window.
+test('a name tag’s ⋯ opens its menu from the button’s start, so it opens beside the block', async () => {
+  const segs = layoutFor(get().S, get().doc).segs;
+  const { unmount } = render(<TypedPage page={1} segs={segs} s={0.6} />);
+  await openMenu('Options for Main text');
+  expect(screen.getByRole('menu')).toHaveAttribute('data-align', 'start');
+  await userEvent.keyboard('{Escape}');
+  unmount();
+  render(<PartMenu sg={segs.find(sg => sg.box.id === 'm' && sg.idx === 1)!} />);
+  await openMenu('Options for Main text');
+  expect(screen.getByRole('menu')).toHaveAttribute('data-align', 'start');
 });

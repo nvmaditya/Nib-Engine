@@ -116,6 +116,27 @@ test('on a phone, Style still rests as low as 148 px', async () => {
   } finally { restore(); }
 });
 
+test('on a phone, Style rests where its header really ends', async () => {
+  phone();
+  const rect = HTMLElement.prototype.getBoundingClientRect;
+  let ends = 430; // the header's bottom edge; the sheet's top edge is at 200
+  const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if (this.parentElement?.dataset.stage === 'style') return new DOMRect(0, 89, 390, 679);
+    if (this.dataset.slot === 'drawer-content') return new DOMRect(0, 200, 390, 568);
+    if ('styleHead' in this.dataset) return new DOMRect(0, 215, 390, ends - 215);
+    return rect.call(this);
+  });
+  try {
+    await openApp('style');
+    await screen.findByRole('dialog', { name: 'Style' });
+    screen.getByRole('button', { name: 'Drag to show more or less of Style' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(room()).toBe('679px'));
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(room()).toBe('230px'));
+  } finally { spy.mockRestore(); }
+});
+
 test('on a phone, Style and Export each keep the height their sheet was left at', async () => {
   phone();
   const rect = HTMLElement.prototype.getBoundingClientRect;

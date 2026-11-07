@@ -8,8 +8,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { loadUploadedFonts } from '@/features/style/fonts';
 import { useStylePrefs } from '@/features/style/prefs';
-import { NewerDocumentError, deleteDoc, duplicateDoc, putDoc, type DocRecord } from '@/store/documents';
-import { SAVE_NEWER, toast } from '@/store/editor';
+import { MissingDocumentError, NewerDocumentError, deleteDoc, duplicateDoc, renameDoc, type DocRecord } from '@/store/documents';
+import { NOT_ON_DEVICE, SAVE_NEWER, toast } from '@/store/editor';
 import { PageThumb } from './PageThumb';
 import { lookNameOf, recentMeta } from './recent';
 import { RECENT_PX, forgetThumb } from './thumbs';
@@ -49,7 +49,7 @@ export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; re
   const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<DocRecord | null>(null);
   const change = useCallback(async (fn: () => Promise<unknown>) => {
-    try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : FAILED); }
+    try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : e instanceof MissingDocumentError ? NOT_ON_DEVICE : FAILED); }
     await onChange();
   }, [onChange]);
   const startRename = useCallback((d: DocRecord) => { setName(d.title); setRenaming(d); }, []);
@@ -57,7 +57,7 @@ export function RecentList({ docs, readOnly, onChange }: { docs: DocRecord[]; re
     if (!renaming) return;
     const d = renaming, title = name.trim() || 'Untitled';
     setRenaming(null);
-    await change(() => putDoc({ ...d, title, updatedAt: Date.now() }));
+    await change(() => renameDoc(d.id, title)); // only the name, on the stored copy as it is now
   };
   const doDuplicate = useCallback((d: DocRecord) => change(() => loadUploadedFonts().then(() => duplicateDoc(d.id))), [change]);
   const doDelete = async () => {

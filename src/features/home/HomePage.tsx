@@ -3,7 +3,7 @@ import { FileUp } from 'lucide-react';
 import { MEMORY_ID, navigate } from '@/app/route';
 import { Button } from '@/components/ui/button';
 import { loadUploadedFonts } from '@/features/style/fonts';
-import { listDocs, type DocRecord } from '@/store/documents';
+import { listDocs, onDocsChanged, type DocRecord } from '@/store/documents';
 import { closeDocument, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { createAndOpen, importIntoNewDoc, openImportPicker } from './actions';
@@ -16,16 +16,44 @@ export function HomePage() {
   const memTitle = useEditor(s => s.title);
   const memDoc = useEditor(s => s.doc);
   const memS = useEditor(s => s.S);
-  // Reading a document cleans it, which drops a hand this page doesn't know, and a rename or duplicate
-  // would write that loss. Another tab may have added one since this page started, so register it first.
+  // Reading a document cleans it, which drops a hand this page doesn't know, and a duplicate would write
+  // that loss. Another tab may have added one since this page started, so register it first.
+  const reads = useRef(0);
   const reload = useCallback(async () => {
+    const n = ++reads.current; // only the latest read is shown
     await loadUploadedFonts();
-    try { setDocs(await listDocs()); } catch { setDocs('unreadable'); }
+    let next: DocRecord[] | 'unreadable';
+    try { next = await listDocs(); } catch { next = 'unreadable'; }
+    if (n === reads.current) setDocs(next);
   }, []);
   useEffect(() => {
     if (memory) return;
     // Leave the document (its last edit is written first), so opening it again reads what Home changed.
     void closeDocument().then(reload);
+  }, [reload, memory]);
+  // Other tabs add, rename, duplicate, save and delete documents: the list follows them. A tab where someone is
+  // typing saves every few hundred ms, so it is read again at most once a second (the first change at once, the
+  // rest together a second later), and not while Home is hidden: shown again, it reads what it missed.
+  useEffect(() => {
+    if (memory) return;
+    let timer: ReturnType<typeof setTimeout> | undefined, again = false, missed = false;
+    const read = () => {
+      void reload();
+      timer = setTimeout(() => { timer = undefined; if (again) { again = false; read(); } }, 1000);
+    };
+    const heard = () => {
+      if (document.visibilityState === 'hidden') missed = true;
+      else if (timer !== undefined) again = true;
+      else read();
+    };
+    const shownAgain = () => {
+      if (document.visibilityState !== 'visible' || !missed) return;
+      missed = false;
+      heard();
+    };
+    const off = onDocsChanged(heard);
+    document.addEventListener('visibilitychange', shownAgain);
+    return () => { off(); clearTimeout(timer); document.removeEventListener('visibilitychange', shownAgain); };
   }, [reload, memory]);
   const shown = memory
     ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: memS, doc: memDoc }]

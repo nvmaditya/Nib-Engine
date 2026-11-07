@@ -85,7 +85,7 @@ test('in Only a block that has its own size, Undo puts that size back', () => {
   expect(get().doc.boxes[0].style).toEqual({ size: 36, ink: 'red' });
   expect(fitBack(2)).toBe(true);
   expect([get().doc.boxes[0].style, get().S.size]).toEqual([{ size: 34, ink: 'red' }, 30]);
-  expect(lastToast()).toBe('Back to 2 pages. Letter size is now 34.');
+  expect(lastToast()).toBe('Back to 2 pages. “Main text” letter size is now 34.');
   act(() => lastToastAction()!());
   expect(get().doc.boxes[0].style).toEqual({ size: 36, ink: 'red' });
 });

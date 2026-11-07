@@ -34,9 +34,14 @@ interface Props {
   idx: number;
   /** The button that opens it; by default ⋯ named `Options for {name}`. */
   trigger?: ReactElement;
+  /**
+   * Which end of the button the menu lines up with: `end` (the default) for a ⋯ at the right of a row, `start`
+   * for one on a name tag, which sits at the block's left, so the menu opens over the block, not off the window.
+   */
+  align?: 'start' | 'end';
 }
 
-export function BlockMenu({ boxId, idx, trigger }: Props) {
+export function BlockMenu({ boxId, idx, trigger, align = 'end' }: Props) {
   const name = useEditor(s => s.doc.boxes.find(b => b.id === boxId)?.name);
   const [renaming, setRenaming] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -45,7 +50,7 @@ export function BlockMenu({ boxId, idx, trigger }: Props) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild ref={triggerRef}>{trigger ?? <OptionsButton label={`Options for ${name}`} />}</DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuContent align={align} collisionPadding={8} className="w-64">
           <BlockMenuItems boxId={boxId} idx={idx} onRename={() => setRenaming(true)} />
         </DropdownMenuContent>
       </DropdownMenu>

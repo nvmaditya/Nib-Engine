@@ -9,7 +9,7 @@ import type { Route } from '@/app/route';
 import { addPageAt, deletePageAt } from '@/features/doc/actions';
 import { TopBar } from '@/shell/TopBar';
 import { createDoc } from '@/store/documents';
-import { flushSave, placeCaret } from '@/store/editor';
+import { flushSave, placeCaret, useEditor } from '@/store/editor';
 import { box, docOf, fontsLoad, lines } from '@/test/docs';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
@@ -180,6 +180,18 @@ test('a swipe that starts on the handwritten writing turns the page', async () =
   expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
 });
 
+test('a document with nothing written opens on its typed page, and the face kept for others stays', async () => {
+  cleanup();
+  localStorage.setItem('nib.phoneFace', 'hand');
+  const id = (await createDoc({ title: 'New', settings: cleanSettings(null, false), doc: docOf() })).id;
+  location.hash = `#/d/${id}/write`;
+  render(<App />);
+  await screen.findByText('Page 1 of 1');
+  expect(screen.getByRole('button', { name: 'Typed' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText('Empty page. Use + Add, or drag a block here in Outline.')).toBeInTheDocument();
+  expect(localStorage.getItem('nib.phoneFace')).toBe('hand');
+});
+
 test('a mouse drag does not turn the page', () => {
   const at = (x: number) => ({ pointerId: 3, pointerType: 'mouse', isPrimary: true, button: 0, clientX: x, clientY: 300 });
   fireEvent.pointerDown(pageArea(), at(250));
@@ -206,4 +218,20 @@ test('the top bar uses the 860 px breakpoint', () => {
   render(<TopBar route={docRoute} ready />);
   expect(screen.getByRole('button', { name: 'Export' }).className).toMatch(/wide:inline-flex/);
   expect(document.querySelector('header')!.outerHTML).not.toMatch(/\bmd:/);
+});
+
+// Export stays off the phone's top bar (the stage switcher under it has Export), but the save state stays.
+test('on a phone the top bar keeps the save state, as an icon that says it', () => {
+  cleanup();
+  render(<TopBar route={docRoute} ready />);
+  const status = screen.getByRole('status');
+  expect(status.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  expect(status).toHaveAttribute('title', 'Saved');
+  expect(status).toHaveTextContent('Saved'); // read out, though only the icon shows
+  expect(status.querySelector('svg')).toHaveClass('sm:hidden');
+  expect(screen.getByText('Saved')).toHaveClass('sr-only', 'sm:not-sr-only');
+  act(() => { useEditor.setState({ saving: 'unsaved' }); });
+  expect(status).toHaveAttribute('title', 'Not saved');
+  expect(screen.getByText('Not saved')).not.toHaveClass('sr-only'); // a problem shows in words too
+  act(() => { useEditor.setState({ saving: 'saved' }); });
 });

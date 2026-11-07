@@ -1,8 +1,8 @@
 // On phones the Style and Export panels are a sheet over the pages. It is drawn inside the stage (no
 // portal), so it is hidden with the stage, and it is open only while the stage is shown. It never closes
 // and doesn't trap anything: the pages above stay live. It rests at three heights: the peek (Style's
-// 148 px shows the panel's sticky header: title, New variation, the page count notice and scope;
-// Export's 168 px, plus a phone's home indicator, shows its title and its pinned footer), about half,
+// is measured from the panel's sticky header, 148 px until then: title, New variation, the page count
+// notice and scope, however tall they are now; Export's 168 px, plus a phone's home indicator, shows its title and its pinned footer), about half,
 // and up to just below the stage switcher, so the stages can still be reached.
 import { useLayoutEffect, useMemo, useState, type ReactNode, type RefObject } from 'react';
 import { Drawer, DrawerContent, DrawerHandle, DrawerTitle } from '@/components/ui/drawer';

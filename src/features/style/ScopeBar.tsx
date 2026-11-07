@@ -1,6 +1,6 @@
 // The Style panel's sticky header: its title, New variation, the page count notice, and which blocks
 // the panel changes. (The notice comes before the scope switch, so a phone's lowest sheet shows it.)
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
 import { hasOwnStyle } from '@/engine/core.js';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,26 @@ export function ownStyleLine(names: string[]): string {
 
 const seg = 'flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium text-muted transition-colors hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:bg-surface aria-pressed:text-fg aria-pressed:shadow-sm';
 
-export function ScopeBar({ notice }: { notice?: ReactNode }) {
+/**
+ * `onHead` hears how far down the sheet the header ends (the handle and the header, as drawn), for a
+ * phone's sheet to rest at; again whenever the header changes size (a notice comes or goes, the
+ * selection or the scope changes). Nothing is said outside a sheet, or where nothing can be measured.
+ */
+export function ScopeBar({ notice, onHead }: { notice?: ReactNode; onHead?: (px: number) => void }) {
+  const head = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = head.current, sheet = el?.closest('[data-slot="drawer-content"]');
+    if (!el || !sheet || !onHead) return;
+    const measure = () => {
+      const h = Math.ceil(el.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top);
+      if (h > 0) onHead(h);
+    };
+    measure();
+    if (typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHead]);
   const scopeState = useEditor(s => s.scope);
   const selectedId = useEditor(s => s.selectedId);
   // One string per change that matters here, so a text edit or a drag doesn't redraw the header.
@@ -35,7 +54,7 @@ export function ScopeBar({ notice }: { notice?: ReactNode }) {
   else line = ownStyleLine(owners) || 'Changes apply to the whole document.';
 
   return (
-    <div data-style-head="" className="sticky top-0 z-10 border-b border-line bg-surface px-5 pt-3 pb-3">
+    <div ref={head} data-style-head="" className="sticky top-0 z-10 border-b border-line bg-surface px-5 pt-3 pb-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 tabIndex={-1} className="text-base font-semibold outline-none">Style</h2>
         <Button variant="outline" size="sm" onClick={newVariation}
