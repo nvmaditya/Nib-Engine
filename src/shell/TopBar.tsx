@@ -4,6 +4,7 @@ import { Logo, Wordmark } from '@/brand/Logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { navigate, type Route } from '@/app/route';
+import { chordLabel } from '@/lib/keys';
 import { cn } from '@/lib/utils';
 import { useEditor, undo, redo, renameDocument } from '@/store/editor';
 import { AppMenu } from './AppMenu';
@@ -56,8 +57,8 @@ function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name
       {/* Narrow screens: the stages get a full-width row of their own under the name. */}
       <StageNav id={id} stage={stage} className="order-last w-full wide:order-none wide:w-auto" />
       <div className="flex items-center">
-        <Button variant="ghost" size="icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!ready || !canUndo} onClick={undo}><Undo2 /></Button>
-        <Button variant="ghost" size="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!ready || !canRedo} onClick={redo}><Redo2 /></Button>
+        <Button variant="ghost" size="icon" title={`Undo (${chordLabel(['Mod', 'Z'])})`} aria-label="Undo" disabled={!ready || !canUndo} onClick={undo}><Undo2 /></Button>
+        <Button variant="ghost" size="icon" title={`Redo (${chordLabel(['Mod', 'Shift', 'Z'])})`} aria-label="Redo" disabled={!ready || !canRedo} onClick={redo}><Redo2 /></Button>
       </div>
       <AppMenu />
       <Button className="hidden wide:inline-flex" onClick={() => navigate({ name: 'doc', id, stage: 'export' })}>Export</Button>

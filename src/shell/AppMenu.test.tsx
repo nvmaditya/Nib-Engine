@@ -98,3 +98,15 @@ test('the top bar has the menu on Home and in a document, and Home’s Import a 
   const names = within(document.querySelector('header')!).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent);
   expect(names.slice(names.indexOf('Undo'))).toEqual(['Undo', 'Redo', 'Menu', 'Export']);
 });
+
+test('Undo and Redo name their keys as the keyboard has them: Ctrl, or ⌘ on Apple', () => {
+  const titles = () => ['Undo', 'Redo'].map(name => screen.getByRole('button', { name }).getAttribute('title'));
+  const { unmount } = render(<TopBar route={{ name: 'doc', id: 'x', stage: 'write' }} ready={false} />);
+  expect(titles()).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)']);
+  unmount();
+  Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+  try {
+    render(<TopBar route={{ name: 'doc', id: 'x', stage: 'write' }} ready={false} />);
+    expect(titles()).toEqual(['Undo (⌘Z)', 'Redo (⇧⌘Z)']);
+  } finally { delete (navigator as unknown as Record<string, unknown>).platform; }
+});
