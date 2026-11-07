@@ -43,6 +43,16 @@ const WAITING = 'Waiting for the handwriting to load';
 const making = (run: ExportRun): string | null =>
   run.kind && run.done < run.total ? `Making page ${run.done + 1} of ${run.total}…` : null;
 
+/** How it looks, as the document's setting: one undo step, and nothing at all when it is already chosen. */
+export function chooseLook(v: Look): void {
+  if (v !== useEditor.getState().S.look) setS('look', v, { layout: false });
+}
+
+/** Slight camera tilt, the same way. */
+export function chooseTilt(v: boolean): void {
+  if (v !== useEditor.getState().S.tilt) setS('tilt', v, { layout: false });
+}
+
 /** A switch with its name beside it. */
 function Toggle({ name, checked, onChange }: { name: string; checked: boolean; onChange(v: boolean): void }) {
   return (
@@ -63,6 +73,17 @@ export function ExportPanel({ pages }: { pages: number }) {
   const run = useExportRun();
   const [canShare] = useState(canShareFiles);
   useEffect(() => { void loadExportPrefs(); }, []);
+
+  // Download and Share are disabled while the files are made, and the browser takes the focus off the one
+  // pressed. Once the run ends it gets the focus back, unless the focus has gone somewhere else meanwhile.
+  const pressed = useRef<HTMLButtonElement | null>(null);
+  const busy = run.kind !== null;
+  useEffect(() => {
+    const b = pressed.current, now = document.activeElement;
+    if (busy || !b) return;
+    pressed.current = null;
+    if (b.isConnected && (!now || now === document.body)) b.focus();
+  }, [busy]);
 
   const plan = planOf({ format, zip, quality }, { choose, out }, pages, fileName, title);
   const n = plan.pages.length;
@@ -107,12 +128,12 @@ export function ExportPanel({ pages }: { pages: number }) {
 
         <Group title="How it looks">
           <RadioGroup value={look} aria-label="How it looks" className="gap-2.5"
-            onValueChange={v => { if (v !== look) setS('look', v as Look, { layout: false }); }}>
+            onValueChange={v => chooseLook(v as Look)}>
             {LOOKS.map(([id, name]) => (
               <Label key={id} className="cursor-pointer font-normal"><RadioGroupItem value={id} />{name}</Label>
             ))}
           </RadioGroup>
-          <Toggle name="Slight camera tilt" checked={tilt} onChange={v => { if (v !== tilt) setS('tilt', v, { layout: false }); }} />
+          <Toggle name="Slight camera tilt" checked={tilt} onChange={chooseTilt} />
           <Hint>Turned a fraction of a degree and cropped a little unevenly, like a quick photo.</Hint>
         </Group>
 
@@ -143,7 +164,7 @@ export function ExportPanel({ pages }: { pages: number }) {
         <div className="flex gap-2">
           {/* (pointer events stay on while disabled, so the title shows on hover) */}
           <Button size="lg" className="min-w-0 flex-1 px-4 disabled:pointer-events-auto disabled:hover:bg-primary" disabled={off} title={why}
-            onClick={() => { void download(); }}>
+            onClick={e => { pressed.current = e.currentTarget; void download(); }}>
             {run.kind ? <Loader2 className="animate-spin" /> : <Download />}
             <span className="min-w-0 truncate">{progress ?? downloadLabel(plan)}</span>
             {size && <>{' '}<span className="flex-none font-normal opacity-80">{size}</span></>}
@@ -152,7 +173,7 @@ export function ExportPanel({ pages }: { pages: number }) {
               to say what it makes, in the 380 px column and on phones alike.) */}
           {canShare && (
             <Button size="icon" variant="outline" className="size-10 flex-none disabled:pointer-events-auto disabled:hover:bg-surface" disabled={off}
-              aria-label="Share…" title={why ?? 'Share…'} onClick={() => { void share(); }}>
+              aria-label="Share…" title={why ?? 'Share…'} onClick={e => { pressed.current = e.currentTarget; void share(); }}>
               <Share2 />
             </Button>
           )}

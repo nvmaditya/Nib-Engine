@@ -8,7 +8,7 @@ import { layoutFor } from '@/features/doc/model';
 import { SETTING_CONTROLS } from '@/features/style/controls';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
 import { box, docOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
-import { ExportPanel } from './ExportPanel';
+import { ExportPanel, chooseLook, chooseTilt } from './ExportPanel';
 import { canShareFiles, download, share } from './run';
 import { DEFAULT_PREFS, IDLE_RUN, setChoose, togglePage, useExportPick, useExportPrefs, useExportRun } from './state';
 
@@ -98,9 +98,17 @@ test('Print quality', async () => {
 test('How it looks is the document’s: one undo step each, and choosing it again records nothing', async () => {
   three(); render(<Live />); await userEvent.click(screen.getByRole('radio', { name: 'As written' })); expect(get().canUndo).toBe(false);
   await userEvent.click(screen.getByRole('radio', { name: 'Black and white' })); expect(get().S.look).toBe('bw');
-  await userEvent.click(screen.getByRole('radio', { name: 'Black and white' })); // chosen again
   await userEvent.click(screen.getByRole('switch', { name: 'Slight camera tilt' })); expect(get().S.tilt).toBe(true);
   undo(); expect(get().S.tilt).toBe(false); undo(); expect(get().S.look).toBe('none'); expect(get().canUndo).toBe(false);
+});
+
+test('the panel itself records nothing for the look or the tilt already chosen', () => {
+  // (The radio list and the switch only ever report a change, so this calls what they call directly.)
+  three();
+  chooseLook('none'); chooseTilt(false); expect(get().canUndo).toBe(false);
+  chooseLook('bw'); chooseLook('bw'); chooseTilt(true); chooseTilt(true);
+  undo(); expect(get().S).toMatchObject({ look: 'bw', tilt: false });
+  undo(); expect(get().S.look).toBe('none'); expect(get().canUndo).toBe(false);
 });
 
 test('the look and the tilt change no layout (the pages keep their count)', async () => {
@@ -193,6 +201,28 @@ test('Download makes the files; while they are made, the button says how far it 
   act(() => useExportRun.setState({ kind: 'download', done: 0, total: 3 })); expect(dl()).toHaveAccessibleName('Making page 1 of 3…'); expect(dl()).toBeDisabled();
   act(() => useExportRun.setState({ kind: 'download', done: 1, total: 3 })); expect(dl()).toHaveAccessibleName('Making page 2 of 3…'); expect(dl()).toBeDisabled();
   expect(dl()).not.toHaveAttribute('title');
+});
+
+test('the button pressed has the focus again once the files are made', async () => {
+  vi.mocked(canShareFiles).mockReturnValue(true);
+  three(); render(<Live />);
+  for (const b of [dl(), screen.getByRole('button', { name: 'Share…' })]) {
+    await userEvent.click(b); expect(b).toHaveFocus();
+    // While the run goes the button is disabled, and a browser takes the focus off it (jsdom doesn't).
+    act(() => useExportRun.setState({ kind: 'download', done: 0, total: 3 })); act(() => b.blur());
+    expect(document.body).toHaveFocus();
+    act(() => useExportRun.setState({ ...IDLE_RUN }));
+    expect(b).toHaveFocus();
+  }
+});
+
+test('focus that went somewhere else during the run stays there', async () => {
+  three(); render(<Live />);
+  await userEvent.click(dl());
+  act(() => useExportRun.setState({ kind: 'download', done: 0, total: 3 }));
+  const f = screen.getByRole('textbox', { name: 'File name' }); act(() => f.focus());
+  act(() => useExportRun.setState({ ...IDLE_RUN }));
+  expect(f).toHaveFocus();
 });
 
 test('once every page is made, the button says what it makes again while the files are saved', () => {
