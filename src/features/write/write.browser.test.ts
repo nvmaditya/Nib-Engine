@@ -26,6 +26,7 @@ interface PwLocator {
   boundingBox(): Promise<Box | null>;
   scrollIntoViewIfNeeded(): Promise<void>;
   getAttribute(name: string): Promise<string | null>;
+  focus(): Promise<void>;
 }
 interface PwRoute { request(): { url(): string }; fulfill(o: { status?: number; contentType?: string; body: string | Buffer }): Promise<void>; abort(): Promise<void> }
 interface PwPage extends Pick<PwLocator, 'locator' | 'getByRole'> {
@@ -33,6 +34,7 @@ interface PwPage extends Pick<PwLocator, 'locator' | 'getByRole'> {
   on(ev: 'pageerror', fn: (e: Error) => void): void;
   goto(url: string): Promise<unknown>;
   keyboard: { press(k: string): Promise<void>; type(t: string): Promise<void> };
+  mouse: { move(x: number, y: number, o?: { steps?: number }): Promise<void>; down(): Promise<void>; up(): Promise<void> };
   screenshot(o: { clip: Box }): Promise<Buffer>;
   addStyleTag(o: { content: string }): Promise<unknown>;
   waitForFunction<A>(fn: (arg: A) => unknown, arg: A, o?: { timeout?: number }): Promise<unknown>;
@@ -98,6 +100,49 @@ describe('Write in Chromium, laid out for real', () => {
     await page.addStyleTag({ content: '.ink-layer { visibility: hidden !important; }' });
     const without = await page.screenshot({ clip: strip });
     expect(withInk.equals(without), 'the outline hides the ink where letters cross the block’s left edge').toBe(false);
+    expect(errors).toEqual([]);
+  }, 120_000);
+
+  // A black ink canvas (multiplied, as the ink is) over the middle of the name tag: if the tag is above the ink, the
+  // pixel there is the same with the canvas as without it.
+  const tagOverInk = (page: PwPage) => async (): Promise<boolean> => {
+    const at = await page.evaluate(() => {
+      const t = document.querySelector('[role="group"][aria-label^="Margin note"] .tag')!;
+      const paper = t.closest('[data-paper]')!, layer = paper.querySelector('.ink-layer')!, lr = layer.getBoundingClientRect(), tr = t.getBoundingClientRect();
+      const cx = tr.left + tr.width / 2, cy = tr.top + tr.height / 2;
+      const c = document.createElement('canvas'); c.dataset.probe = '1';
+      c.style.cssText = `position:absolute;left:${cx - lr.left - 4}px;top:${cy - lr.top - 4}px;width:8px;height:8px;background:#000;mix-blend-mode:multiply;`;
+      layer.appendChild(c);
+      return { x: Math.round(cx), y: Math.round(cy) };
+    });
+    const clip = { x: at.x, y: at.y, width: 1, height: 1 };
+    const withInk = await page.screenshot({ clip });
+    await page.addStyleTag({ content: 'canvas[data-probe] { visibility: hidden !important; }' });
+    const without = await page.screenshot({ clip });
+    await page.evaluate(() => document.querySelectorAll('canvas[data-probe]').forEach(c => c.remove()));
+    return withInk.equals(without);
+  };
+
+  test.each([1280, 390])('at %i px, a margin note’s name tag is above the ink, selected and turned, and while it is dragged', async width => {
+    const page = await openSample(width);
+    await page.getByRole('button', { name: 'Add' }).first().click();
+    await page.getByRole('menuitem', { name: 'Margin note' }).click();
+    await page.keyboard.type('Check this!');
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    if (width < 600) { await page.getByRole('button', { name: 'Handwritten' }).click(); }
+    const note = page.locator('[role="group"][aria-label^="Margin note"]').first();
+    await note.waitFor();
+    await note.scrollIntoViewIfNeeded();
+    await note.focus();
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('[role="group"][aria-label^="Margin note"] .tag-wrap')!).rotate), 'the note is turned').not.toBe('none');
+    expect(await tagOverInk(page)(), 'at rest').toBe(true);
+    const g = (await note.locator('.grip').boundingBox())!;
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(g.x + g.width / 2 - 25, g.y + g.height / 2 + 20, { steps: 6 });
+    await page.waitForFunction(() => !!document.querySelector('.sheet.dragging'), null);
+    expect(await tagOverInk(page)(), 'while dragged').toBe(true);
+    await page.mouse.up();
     expect(errors).toEqual([]);
   }, 120_000);
 

@@ -216,40 +216,51 @@
     filter: grayscale(1) brightness(1.22) contrast(2.6);
   }
 
-  /* A block's part on a page: outline and name tag in the block's colour (--bc, set inline). A margin
-     note's frame turns with its writing through `rotate`; a drag moves it with `transform`. */
+  /* A block's part on a page: outline and name tag in the block's colour (--bc, set inline). The frame
+     itself only places the part (no transform, no rotation, so no stacking context of its own): its outline
+     (.fbox) lies between the paper and the ink, so an outline never covers a letter that reaches past its
+     block's edge, and its name tag (.tag-wrap) lies above the ink, in every state. A margin note's outline
+     and tag turn with its writing through `rotate` (--tilt); a drag moves them with `transform` (--shift). */
   .block-frame {
     position: absolute;
+    outline: none;
+    pointer-events: none;
+  }
+  .block-frame .fbox,
+  .block-frame .tag-wrap {
+    position: absolute;
+    inset: 0;
+    rotate: var(--tilt, none);
+    transform: var(--shift, none);
+  }
+  .block-frame .fbox {
     border: 1.5px dashed color-mix(in srgb, var(--bc) 36%, transparent);
     border-radius: 3px;
     cursor: grab;
     touch-action: pan-x pan-y;
-    outline: none;
+    pointer-events: auto;
   }
-  .block-frame:hover {
+  .block-frame:hover .fbox {
     border-style: solid;
     border-color: color-mix(in srgb, var(--bc) 70%, transparent);
   }
-  .block-frame.selected {
+  .block-frame.selected .fbox {
     border: 2px solid var(--bc);
     background: color-mix(in srgb, var(--bc) 5%, transparent);
   }
-  .block-frame.cont.selected {
+  .block-frame.cont.selected .fbox {
     border-style: dashed;
   }
-  .sheet.dragging .block-frame.selected {
+  .sheet.dragging .block-frame.selected .fbox {
     cursor: grabbing;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
   }
-  /* The frames lie under the ink, but a turned frame, or one being dragged, is a stacking context of its
-     own: its name tag (z-index 3) would then be ranked inside it, under the ink. While the tag shows,
-     such a frame is raised over the ink as a whole. */
-  .block-frame.tilted:is(:hover, :focus-within, .selected, .own),
-  .sheet.dragging .block-frame.selected {
-    z-index: 3;
-  }
-  .block-frame:focus-visible {
+  .block-frame:focus-visible .fbox {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--bc) 40%, transparent);
+  }
+  .block-frame .tag-wrap {
+    z-index: 3;
+    pointer-events: none;
   }
   .block-frame .ph {
     position: absolute;
@@ -291,9 +302,8 @@
   /* The name tag: grip, name, part and (in Write) the block's menu. Shown on hover, focus or selection. */
   .block-frame .tag {
     position: absolute;
-    left: -2px;
+    left: 0;
     bottom: 100%;
-    z-index: 3;
     display: flex;
     align-items: center;
     gap: 3px;
