@@ -56,7 +56,7 @@ export function ImportOptions({ target, value, onChange, fileParts, base }: {
               <span className="flex h-[38px] items-center overflow-hidden rounded-md px-2" style={{ background: paperTint(c.paper) }}>
                 <HandSample settings={c.settings} text="Homework" height={30} fit="width" />
               </span>
-              <span className="truncate px-0.5">{c.name}</span>
+              <span className="line-clamp-2 px-0.5">{c.name}</span>
             </RadioGroupPrimitive.Item>
           ))}
         </RadioGroupPrimitive.Root>

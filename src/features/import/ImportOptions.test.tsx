@@ -2,8 +2,9 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { drawSample } from '@/engine/core.js';
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
+import { FONTS } from '@/engine/config.js';
+import { drawSample, loadFont } from '@/engine/core.js';
 import { cleanSettings } from '@/engine/doc.js';
 import { paperTint } from '@/features/style/HandSample';
 import { useStylePrefs } from '@/features/style/prefs';
@@ -15,6 +16,8 @@ vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}), getPref: vi
 vi.mock('@/engine/core.js', async orig => ({ ...(await orig<typeof import('@/engine/core.js')>()), drawSample: vi.fn(() => 120) }));
 
 fontsLoad();
+// Every hand's file arrives first: a card whose hand arrived after its test ended would draw again outside act.
+beforeAll(async () => { await Promise.all(FONTS.map(f => loadFont(f.id))); });
 const NOW = new Date(2026, 10, 7);
 let value: ImportOptionsValue;
 function Harness({ target, parts = 1 }: { target: ImportTarget; parts?: number }) {
@@ -68,4 +71,9 @@ test('each card is drawn with its own look’s settings, and Keep with the docum
   open(docOf(box())); render(<Harness target="open" />);
   const fonts = vi.mocked(drawSample).mock.calls.map(c => c[1].font);
   expect(fonts).toEqual(['labelle', 'labelle', 'patrick', 'cedarville', 'reenie', 'caveat', 'playwrite']);
+});
+test('a look’s name may take a second line rather than be cut short, so Keep this document’s look reads in full', () => {
+  open(docOf(box())); render(<Harness target="open" />);
+  const name = screen.getByText('Keep this document’s look');
+  expect(name).toHaveClass('line-clamp-2'); expect(name).not.toHaveClass('truncate');
 });

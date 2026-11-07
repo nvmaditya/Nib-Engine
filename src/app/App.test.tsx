@@ -145,9 +145,12 @@ async function fontFromAnotherTab(hand: string): Promise<string> {
   return id;
 }
 
+/** Home's list of documents, once it has been read (the Recent heading shows before it). */
+const recentListed = async () => within(await screen.findByRole('region', { name: 'Recent' })).findByRole('list');
+
 test('a hand another tab added after this page started is kept when a document that uses it opens', async () => {
   location.hash = '#/'; render(<App />);
-  await screen.findByRole('heading', { name: 'Recent' });
+  await recentListed();
   const id = await fontFromAnotherTab('kalam');
   const rec = await createDoc({ title: 'Theirs', settings: { ...cleanSettings(null, false), font: id } });
   act(() => { location.hash = `#/d/${rec.id}/write`; });
@@ -157,7 +160,7 @@ test('a hand another tab added after this page started is kept when a document t
 
 test('coming back to the tab shows the looks another tab saved', async () => {
   location.hash = '#/'; render(<App />);
-  await screen.findByRole('heading', { name: 'Recent' });
+  await recentListed();
   await setPref('looks', [{ id: 'look-a', name: 'Theirs', v: { tip: 'gel' } }]);
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
   act(() => { document.dispatchEvent(new Event('visibilitychange')); });

@@ -1,6 +1,6 @@
 // The Import dialog: a file read and shown as it will come across, its options, and writing it out (into the
 // open document as one undo step, or from Home as a new document made only then). Full screen on phones.
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Editor } from '@tiptap/core';
 import { toast as sonner } from 'sonner';
@@ -13,7 +13,7 @@ import { today } from '@/features/doc/model';
 import { BlockEditor } from '@/features/editor/BlockEditor';
 import { offsetAt } from '@/features/editor/positions';
 import { useUndoShortcuts } from '@/shell/useUndoShortcuts';
-import { createDoc, listDocs } from '@/store/documents';
+import { createDoc, listDocs, type DocRecord } from '@/store/documents';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
 import { box, docOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
 import { newDocument } from '@/features/doc/build';
@@ -27,9 +27,11 @@ vi.mock('@/features/doc/build', async orig => {
   real.newDocument = actual.newDocument;
   return { ...actual, newDocument: vi.fn(actual.newDocument) };
 });
+// The open documents here (`open`, `rec`) are not in storage. A real save of one, 400 ms after an edit, finds it
+// missing and closes it as deleted in another tab, history and all, so the open document's saves write nothing.
 vi.mock('@/store/documents', async orig => {
   const actual = await orig<typeof import('@/store/documents')>();
-  return { ...actual, createDoc: vi.fn(actual.createDoc) };
+  return { ...actual, createDoc: vi.fn(actual.createDoc), putDoc: vi.fn(async (r: DocRecord) => (r.rev ?? 0) + 1) };
 });
 
 fontsLoad();
@@ -57,7 +59,8 @@ beforeEach(async () => {
   await flushSave(); vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear(); vi.mocked(sonner.getToasts).mockReset().mockReturnValue([]); vi.mocked(createDoc).mockClear();
   vi.mocked(readDocument).mockReset().mockResolvedValue(ESSAY);
 });
-afterEach(() => { window.matchMedia = wideMatchMedia; width(1200); closeImport(); });
+// (unmounted first: closing it under a mounted dialog would update the dialog after the test, outside act)
+afterEach(() => { cleanup(); window.matchMedia = wideMatchMedia; width(1200); closeImport(); });
 afterAll(async () => { await flushSave(); delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth; vi.unstubAllGlobals(); });
 
 test('a chosen file is read and shown as it will come across', async () => {

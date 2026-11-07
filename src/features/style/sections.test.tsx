@@ -50,7 +50,7 @@ test.each([
   if (inFold) await fold('Paper effects');
   await userEvent.click(screen.getByRole(role, { name }));
   expect(get().S[key]).toBe(value);
-  undo();
+  act(() => undo());
   expect(get().S[key]).toBe(DEFAULTS[key]);
   expect(get().canUndo).toBe(false);
 });
@@ -63,7 +63,7 @@ test('any ink colour: one session in the colour picker is one undo step', () => 
   fireEvent.blur(c);
   expect([get().S.ink, get().S.customInk]).toEqual(['custom', '#445566']);
   expect(screen.getByText('Your colour')).toBeInTheDocument();
-  undo();
+  act(() => undo());
   expect([get().S.ink, get().S.customInk]).toEqual(['blue', '#5a2d82']);
   expect(get().canUndo).toBe(false);
 });
@@ -73,7 +73,7 @@ test('a second session in the colour picker is a step of its own', () => {
   const c = screen.getByLabelText('Pick any ink colour');
   fireEvent.input(c, { target: { value: '#112233' } }); fireEvent.blur(c);
   fireEvent.input(c, { target: { value: '#445566' } }); fireEvent.blur(c);
-  undo();
+  act(() => undo());
   expect(get().S.customInk).toBe('#112233');
 });
 
@@ -209,7 +209,7 @@ test.each([
   open(docOf(box())); render(<Live />);
   // Something to undo, so there is a Redo to lose.
   await userEvent.click(screen.getByRole('button', { name: /^Gel pen/ }));
-  undo();
+  act(() => undo());
   expect(get().canRedo).toBe(true);
   const before = get().S[key];
   await userEvent.click(screen.getByRole(role, { name }));

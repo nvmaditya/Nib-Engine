@@ -1,9 +1,10 @@
 // Import from Home: a file dropped anywhere, or chosen with the hero, opens the Import dialog; the document is
-// made only on Write it out.
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+// made only on Write it out. Then Home around it: its layout, its headings, and the focus after Rename and Delete.
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { closeImport } from '@/features/doc/actions';
 import { createDoc } from '@/store/documents';
+import { useEditor } from '@/store/editor';
 import { fontsLoad } from '@/test/docs';
 import { HomePage } from './HomePage';
 
@@ -19,7 +20,9 @@ vi.mock('@/store/documents', () => ({
   listDocs: vi.fn(async () => [...mem.docs]),
   getDoc: vi.fn(async (id: string) => mem.docs.find(d => d.id === id)),
   createDoc: vi.fn(async (init: any = {}) => { const r = { id: 'new1', title: init.title ?? 'Untitled', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }; mem.docs.unshift(r); return r; }),
-  duplicateDoc: vi.fn(), deleteDoc: vi.fn(), putDoc: vi.fn(), renameDoc: vi.fn(),
+  duplicateDoc: vi.fn(), putDoc: vi.fn(),
+  deleteDoc: vi.fn(async (id: string) => { mem.docs = mem.docs.filter(d => d.id !== id); }),
+  renameDoc: vi.fn(async (id: string, title: string) => { mem.docs = mem.docs.map(d => (d.id === id ? { ...d, title } : d)); }),
   onDocsChanged: vi.fn(() => () => {}),
   MissingDocumentError: class MissingDocumentError extends Error {},
   getPref: vi.fn(async () => undefined), setPref: vi.fn(async () => {}),
@@ -30,7 +33,7 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn(), get
 fontsLoad();
 const files = (f: File) => ({ dataTransfer: { files: [f], types: ['Files'] } });
 beforeEach(() => { mem.docs = [{ id: 'a1', title: 'A', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }]; location.hash = '#/'; vi.mocked(createDoc).mockClear(); });
-afterEach(() => { closeImport(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); closeImport(); vi.restoreAllMocks(); }); // (unmounted first: closing Import under it is an update outside act)
 
 test('a file dropped anywhere on Home opens Import with it, and nothing is made until Write it out', async () => {
   render(<HomePage />); await screen.findByText('A'); act(() => { fireEvent.drop(window, files(new File(['x'], 'Essay.txt'))); });
@@ -69,4 +72,65 @@ test('a file dropped on the open dialog’s backdrop does not replace the file b
   ev.dataTransfer = { files: [new File(['y'], 'Other.txt')], types: ['Files'] };
   act(() => { window.dispatchEvent(ev); });
   expect(ev.defaultPrevented).toBe(true); expect(screen.getByText('Essay.txt: 2 words.')).toBeInTheDocument(); expect(screen.queryByText(/Other\.txt/)).toBeNull();
+});
+
+/** The `⋯` menu of the document titled `title`, then its item `item`. */
+async function menu(title: string, item: string): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: `More for ${title}` }));
+  await userEvent.click(await screen.findByRole('menuitem', { name: item }));
+}
+test.each([['Rename', 'dialog'], ['Delete', 'alertdialog']] as const)('a file dropped while %s is open is left alone: no Import on top of it', async (item, role) => {
+  render(<HomePage />); await screen.findByText('A'); await menu('A', item); await screen.findByRole(role);
+  fireEvent.dragEnter(window, { dataTransfer: { types: ['Files'] } }); expect(screen.queryByText('Drop to import this document')).toBeNull();
+  const ev = new Event('drop', { cancelable: true }) as Event & { dataTransfer?: unknown };
+  ev.dataTransfer = { files: [new File(['x'], 'Essay.txt')], types: ['Files'] };
+  act(() => { window.dispatchEvent(ev); });
+  expect(ev.defaultPrevented).toBe(true); // (and the browser doesn't open the file instead)
+  expect(useEditor.getState().importOpen).toBe(false); expect(screen.getAllByRole(role)).toHaveLength(1);
+});
+
+test('Home is laid out as the plan has it: up to 1080 px wide, a tall hero with a 32 px icon (Design decision 7)', async () => {
+  render(<HomePage />); await screen.findByText('A');
+  const hero = screen.getByRole('button', { name: /^Import a PDF/ });
+  expect(hero.parentElement).toHaveClass('mx-auto', 'max-w-[1080px]', 'flex-col', 'gap-8', 'px-4', 'py-6', 'wide:px-8', 'wide:py-10');
+  expect(hero).toHaveClass('rounded-2xl', 'border-2', 'border-dashed', 'border-line-strong', 'bg-surface', 'py-12', 'wide:py-16');
+  expect(hero.querySelector('svg')).toHaveClass('size-8', 'text-primary');
+});
+test('Home’s two headings look the same: the same size, weight and colour', async () => {
+  render(<HomePage />); await screen.findByText('A');
+  const look = (h: HTMLElement) => [...h.classList].filter(c => /^(text|font)-/.test(c)).sort();
+  const [tpl, recent] = screen.getAllByRole('heading', { level: 2 });
+  expect(look(recent)).toEqual(look(tpl)); expect(look(tpl)).toEqual(['font-semibold', 'text-base']);
+});
+
+// When Rename or Delete closes, the focus goes back to the list, never to the page itself.
+const doc = (id: string, title: string) => ({ id, title, createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } });
+const moreFor = (title: string) => screen.getByRole('button', { name: `More for ${title}` });
+test.each([
+  ['Enter, after a new name', async () => { const f = screen.getByRole('textbox', { name: 'Document name' }); await userEvent.clear(f); await userEvent.type(f, 'Essay{Enter}'); }, 'Essay'],
+  ['Escape', () => userEvent.keyboard('{Escape}'), 'A'],
+  ['Cancel', () => userEvent.click(screen.getByRole('button', { name: 'Cancel' })), 'A'],
+] as const)('closing Rename with %s gives the focus back to the row’s More button', async (_how, close, title) => {
+  render(<HomePage />); await screen.findByText('A'); await menu('A', 'Rename'); await screen.findByRole('dialog', { name: 'Rename document' });
+  await close();
+  await waitFor(() => expect(moreFor(title)).toHaveFocus());
+});
+test.each([
+  ['Cancel', 'B', 'B'],
+  ['Escape', 'B', 'B'],
+  ['Delete', 'B', 'C'], // the next row's
+  ['Delete', 'C', 'B'], // the last row: the one before's
+] as const)('closing Delete with %s on %s puts the focus on More for %s', async (how, title, target) => {
+  mem.docs = [doc('a', 'A'), doc('b', 'B'), doc('c', 'C')];
+  render(<HomePage />); await screen.findByText('C'); await menu(title, 'Delete'); const dlg = await screen.findByRole('alertdialog');
+  if (how === 'Escape') await userEvent.keyboard('{Escape}'); else await userEvent.click(within(dlg).getByRole('button', { name: how }));
+  await waitFor(() => expect(moreFor(target)).toHaveFocus());
+  if (how === 'Delete') await waitFor(() => expect(screen.queryByText(title)).toBeNull());
+  expect(moreFor(target)).toHaveFocus(); // (still, once the list is read again)
+});
+test('deleting the only document puts the focus on the Recent heading, just above New document', async () => {
+  render(<HomePage />); await screen.findByText('A'); await menu('A', 'Delete');
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+  await screen.findByText('No documents yet.');
+  expect(screen.getByRole('heading', { name: 'Recent' })).toHaveFocus();
 });

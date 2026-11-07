@@ -25,6 +25,7 @@ export function HomePage() {
   // Reading a document cleans it, which drops a hand this page doesn't know, and a duplicate would write
   // that loss. Another tab may have added one since this page started, so register it first.
   const reads = useRef(0);
+  const recentHeading = useRef<HTMLHeadingElement>(null);
   const reload = useCallback(async () => {
     const n = ++reads.current; // only the latest read is shown
     await loadUploadedFonts();
@@ -66,11 +67,12 @@ export function HomePage() {
     : docs;
 
   // A file dropped anywhere on Home opens Import with it (nothing is made until Write it out). While the dialog is
-  // open it has its own drop zone: entering and leaving do nothing then.
+  // open it has its own drop zone: entering and leaving do nothing then. Nor do they while Rename or Delete asks
+  // something, and a drop then is ignored rather than opening Import on top.
   const depth = useRef(0);
   useEffect(() => {
     const hasFile = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-    const dialogOpen = () => useEditor.getState().importOpen;
+    const dialogOpen = () => useEditor.getState().importOpen || !!document.querySelector('[role=dialog],[role=alertdialog]');
     const enter = (e: DragEvent) => { if (hasFile(e) && !dialogOpen()) { depth.current++; setOver(true); } };
     const leave = (e: DragEvent) => { if (hasFile(e) && !dialogOpen() && --depth.current <= 0) { depth.current = 0; setOver(false); } };
     const dover = (e: DragEvent) => { if (hasFile(e)) e.preventDefault(); };
@@ -89,14 +91,14 @@ export function HomePage() {
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-bg">
-      <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8">
+      <div className="mx-auto flex max-w-[1080px] flex-col gap-8 px-4 py-6 wide:px-8 wide:py-10">
         <button
           type="button"
           onClick={openImportPicker}
-          className={cn('flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors',
+          className={cn('flex flex-col items-center gap-1 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors wide:py-16',
             over ? 'border-primary bg-primary-soft' : 'border-line-strong bg-surface hover:bg-surface-2')}
         >
-          <FileUp className="mb-1 size-6 text-primary" aria-hidden />
+          <FileUp className="mb-1 size-8 text-primary" aria-hidden />
           <span className="text-lg font-semibold">Import a PDF, Word or text file</span>
           <span className="text-muted">or drop it anywhere</span>
           <span className="text-[13px] text-muted">Headings, lists, bold, underline and crossed-out words come across.</span>
@@ -105,7 +107,7 @@ export function HomePage() {
         <TemplateGrid />
 
         <section aria-labelledby="recent-h">
-          <h2 id="recent-h" className="mb-3 text-sm font-semibold text-muted">Recent</h2>
+          <h2 id="recent-h" ref={recentHeading} tabIndex={-1} className="mb-3 rounded-sm text-base font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/50">Recent</h2>
           {shown === null ? null : shown === 'unreadable' ? (
             <p className="rounded-xl border border-line bg-surface p-6 text-muted">Nib can’t read your documents on this device right now.</p>
           ) : shown.length === 0 ? (
@@ -114,7 +116,7 @@ export function HomePage() {
               <Button onClick={() => { void openTemplate('blank'); }}>New document</Button>
             </div>
           ) : (
-            <RecentList docs={shown} readOnly={memory} onChange={reload} />
+            <RecentList docs={shown} readOnly={memory} heading={recentHeading} onChange={reload} />
           )}
         </section>
 

@@ -20,7 +20,8 @@ afterEach(() => { act(() => { sonner.dismiss(); }); });
 /** Changes close together are listed together, a second after the first (HomePage). */
 const later = { timeout: 3000 };
 
-test('the list follows documents another tab adds, renames, duplicates, saves and deletes', async () => {
+// (Five changes, most a second after the last: over 4 s of the default 5.)
+test('the list follows documents another tab adds, renames, duplicates, saves and deletes', { timeout: 10000 }, async () => {
   const mine = await createDoc({ title: 'Mine' });
   render(<HomePage />);
   await screen.findByText('Mine');
