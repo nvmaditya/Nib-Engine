@@ -79,9 +79,16 @@ function followEditor(): () => void {
   });
 }
 
-/** The last change can't be written: keep the page, say so, and offer the new version again, to try again. */
-function keepPage(): void {
-  toast(SAVE_FAILED);
+type Written = Awaited<ReturnType<typeof writeBeforeReload>>;
+/** The last change isn't written: it can't be, or another tab saved the document first. The page stays. */
+const keeps = (w: Written): boolean => w === 'failed' || w === 'not-kept';
+
+/**
+ * Keep the page, and offer the new version again, to try again. A change that can't be written is said here; one
+ * another tab's save came before has been said already, with Copy for its words, which a reload would take away.
+ */
+function keepPage(w: Written): void {
+  if (w === 'failed') toast(SAVE_FAILED);
   if (state !== 'current') offer();
 }
 
@@ -90,15 +97,16 @@ function keepPage(): void {
  * the person may have typed while the new version took over. Someone still typing is let pause first. Then the page
  * lets go of the focus and takes no more (`inert`, which a message's action giving the focus back respects too): the
  * old page stays on screen while the new one loads, and anything typed into it then would be lost. If the change
- * can't be written, the page stays.
+ * isn't written (it can't be, or another tab's save came first), the page stays.
  */
 async function reloadOnce(): Promise<void> {
   stopWaiting();
   if (reloading) return;
   reloading = true;
-  if (await writeBeforeReload({ pause: true }) === 'failed') {
+  const written = await writeBeforeReload({ pause: true });
+  if (keeps(written)) {
     reloading = false; asked = false;
-    keepPage();
+    keepPage(written);
     return;
   }
   const back = rememberedFocus();
@@ -161,13 +169,16 @@ export function startUpdates(register: Register, hooks: { reload(): void } = { r
 
 /**
  * Reload onto the new version: write the open document's last change, then, if a new version is waiting, ask it to
- * take over and reload when it has (or after `RELOAD_FALLBACK` if it never does). A plain reload while it waits would
- * load the old version again, from its cache. A change that can't be written keeps the page: Nib says so, and the
- * new version stays offered, to try again. (A change only a newer Nib can write goes on: the reload is the fix.)
+ * take over and reload when it has. One that still waits is woken (`kick`): a plain reload while it waits would load
+ * the old version again, from its cache, or never load. With nothing waiting any more by `RELOAD_FALLBACK`, the page
+ * reloads anyway; one still waiting by `GIVE_BACK_AFTER` is offered again. A change that isn't written keeps the page:
+ * Nib says so (with Copy, when another tab's save came first), and the new version stays offered, to try again. (A
+ * change only a newer Nib can write goes on: the reload is the fix.)
  */
 export async function reloadToNewVersion(): Promise<void> {
   if (inMemory()) return; // (never offered there: nothing would be kept)
-  if (await writeBeforeReload() === 'failed') { keepPage(); return; }
+  const written = await writeBeforeReload();
+  if (keeps(written)) { keepPage(written); return; }
   if (state !== 'waiting' || !applyUpdate) { await reloadOnce(); return; }
   asked = true;
   stopWaiting();

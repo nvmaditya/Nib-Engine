@@ -136,7 +136,8 @@ function adopt(rec: DocRecord, doc: EngineDoc): void {
 /** Refusals a second try can't change. */
 const refused = (e: unknown) => e instanceof NewerDocumentError || e instanceof StaleDocumentError || e instanceof MissingDocumentError;
 
-let writing: Promise<void> | null = null; // the save being written now (its second try too)
+let writing: Promise<void> | null = null; // the save being written now (its second try too, and what a refusal shows)
+let notKeptCount = 0; // the open document's changes refused because another tab saved first, and not kept
 
 /** Write the open document now. While it is being written, `writing` holds it, so a reload can wait for it. */
 function saveNow(): Promise<void> {
@@ -176,7 +177,11 @@ async function writeNow(): Promise<void> {
     }
     if (seq !== saveSeq || opened !== at) return; // superseded, or the open copy isn't the one it was made from
     if (e instanceof MissingDocumentError) { leaveDeleted(); return; } // never written back
-    if (e instanceof StaleDocumentError) { void follow(id, true); return; } // the other tab's version wins
+    if (e instanceof StaleDocumentError) { // the other tab's version wins: it is shown in place, and Nib says so, with Copy
+      await follow(id, true); // (waited for, so a reload waiting for this save doesn't take that message away)
+      if (opened !== at || followLost) notKeptCount++; // (not if storage held this tab's copy after all: then it is written)
+      return;
+    }
     useEditor.setState({ saving: 'unsaved' });
     failingNewer = e instanceof NewerDocumentError;
     if (failing !== id) { failing = id; if (failingNewer) toast(SAVE_NEWER, reloadAction()); else toast(SAVE_FAILED); }
@@ -312,9 +317,11 @@ export function flushSave(): Promise<void> {
  * try once more a change an earlier save couldn't write. With `pause`, someone still typing is let finish: the change
  * is written at the pause, as it always is, and only then does this resolve. Says what became of the open document's
  * last change: `written` (or nothing to write), `newer` (a newer Nib wrote the document, so only the new version can),
- * or `failed` (it isn't written).
+ * `failed` (it isn't written), or `not-kept` (another tab saved the document first: its version is shown, and Nib
+ * says this change wasn't kept, with Copy, which a reload would take away).
  */
-export async function writeBeforeReload(o: { pause?: boolean } = {}): Promise<'written' | 'newer' | 'failed'> {
+export async function writeBeforeReload(o: { pause?: boolean } = {}): Promise<'written' | 'newer' | 'failed' | 'not-kept'> {
+  const notKeptBefore = notKeptCount;
   for (let tried = false; ;) {
     while (writing) await writing;
     if (o.pause && savePending) { await new Promise(r => setTimeout(r, 100)); continue; }
@@ -323,6 +330,7 @@ export async function writeBeforeReload(o: { pause?: boolean } = {}): Promise<'w
     tried = true;
     await saveNow();
   }
+  if (notKeptCount !== notKeptBefore) return 'not-kept';
   const now = get().docId;
   if (!stored(now) || failing !== now) return 'written';
   return failingNewer ? 'newer' : 'failed';

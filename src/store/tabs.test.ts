@@ -122,6 +122,32 @@ test('a change waiting in this tab when another tab saves first is not kept, and
   expect(messages(a)).toEqual([]); // A's version stands, and nothing B did reached it
 });
 
+test('a change refused on its way out (a reload) says it wasn’t kept, with Copy, before the reload can go on', async () => {
+  const a = await openTab(), b = await openTab(false); // B doesn't hear of A's save
+  const id = await seed(a);
+  await openIn(a, id); await openIn(b, id);
+  type(a, ' theirs');
+  await a.ed.flushSave();
+  type(b, ' mine'); // waiting for the pause in typing
+  expect(await b.ed.writeBeforeReload()).toBe('not-kept'); // so the page stays, and the words can be copied
+  expect(text(b)).toBe('The water cycle theirs');
+  expect(messages(b)).toEqual([NOT_KEPT]);
+  const opts = b.toast.mock.calls.at(-1)![1] as { action: { label: string } };
+  expect(opts.action.label).toBe('Copy your text');
+  expect(await b.ed.writeBeforeReload()).toBe('written'); // (nothing more to write: Reload again goes on)
+});
+
+test('a change refused, then found to be what storage holds after all, is written: the reload goes on', async () => {
+  const a = await openTab(), b = await openTab(false);
+  const id = await seed(a);
+  await openIn(a, id); await openIn(b, id);
+  vi.spyOn(b.docs, 'putDoc').mockRejectedValueOnce(new b.docs.StaleDocumentError()); // (a refusal storage then doesn't bear out)
+  type(b, ' mine');
+  expect(await b.ed.writeBeforeReload()).toBe('written');
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle mine');
+  expect(messages(b)).toEqual([]);
+});
+
 test('live follow: a tab with nothing waiting shows the other tab’s save in place, keeps its Write view and selection, and clears undo', async () => {
   const a = await openTab(), b = await openTab();
   const id = await seed(a);

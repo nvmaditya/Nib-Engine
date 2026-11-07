@@ -8,14 +8,17 @@ import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
 import { closeImport, openImport } from '@/features/doc/actions';
 import { ImportDialog } from '@/features/import/ImportDialog';
 import { installFocusMemory } from '@/lib/focus';
-import { NewerDocumentError, putDoc } from '@/store/documents';
-import { SAVE_FAILED, SAVE_NEWER, closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
+import { NewerDocumentError, StaleDocumentError, getDoc, putDoc } from '@/store/documents';
+import { COPY_LOST, NOT_KEPT, SAVE_FAILED, SAVE_NEWER, closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
 import { rec } from '@/test/docs';
 import { MEMORY_ID } from './route';
 import { KICK_PAGE } from './pwaManifest';
 import { CHECK_EVERY, GIVE_BACK_AFTER, KICK_AFTER, NEW_VERSION, OFFLINE_READY, RELOAD_FALLBACK, resetUpdatesForTests, startUpdates, updateState } from './updates';
 
-vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => 1) }));
+vi.mock('@/store/documents', async orig => {
+  const real = await orig<typeof import('@/store/documents')>();
+  return { ...real, putDoc: vi.fn(async () => 1), getDoc: vi.fn(real.getDoc) };
+});
 
 let opts: RegisterSWOptions, applyUpdate: Mock<(reloadPage?: boolean) => Promise<void>>, reload: Mock<() => void>;
 let shown: DocumentVisibilityState = 'visible';
@@ -402,6 +405,43 @@ test('a change that can’t be written when the new version takes over keeps the
   expect(vi.mocked(putDoc).mock.calls[0][0].doc.boxes[0].text).toBe('x and more');
   expect(reload).toHaveBeenCalledTimes(1);
   expect(applyUpdate).toHaveBeenCalledTimes(1); // (the new version is in charge already)
+});
+
+test('a change another tab’s save refused as the new version takes over keeps the page, with Copy, and Reload is offered again', async () => {
+  openDocument(rec('A', 'x'));
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(1);
+  update(s => { s.doc.boxes[0].text = 'x, mine'; }); // typed while it takes over
+  vi.mocked(putDoc).mockRejectedValue(new StaleDocumentError()); // another tab saved the document first
+  vi.mocked(getDoc).mockResolvedValueOnce({ ...rec('A', 'x, theirs'), rev: 4 });
+  act(() => opts.onNeedReload!()); await settle(1000); frames(500);
+  expect(reload).not.toHaveBeenCalled(); // which would take the message, and the words, away
+  expect(useEditor.getState().doc.boxes[0].text).toBe('x, theirs');
+  expect(within(message(NOT_KEPT)!).getByRole('button', { name: COPY_LOST })).toBeInTheDocument();
+  expect(message(SAVE_FAILED)).toBeNull(); // (it isn't a failure to save)
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument(); // to reload once the words are copied
+  expect(document.body).not.toHaveAttribute('inert');
+  await settle(GIVE_BACK_AFTER);
+  expect(reload).not.toHaveBeenCalled();
+
+  vi.mocked(putDoc).mockReset().mockResolvedValue(5);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1); // (the new version is in charge already)
+});
+
+test('…and so does one refused when Reload is pressed, before the new version is asked for', async () => {
+  openDocument(rec('A', 'x'));
+  update(s => { s.doc.boxes[0].text = 'x, mine'; }); // waiting for a pause in typing
+  vi.mocked(putDoc).mockRejectedValue(new StaleDocumentError());
+  vi.mocked(getDoc).mockResolvedValueOnce({ ...rec('A', 'x, theirs'), rev: 4 });
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(1000); frames(500);
+  expect(applyUpdate).not.toHaveBeenCalled();
+  expect(reload).not.toHaveBeenCalled();
+  expect(message(NOT_KEPT)).not.toBeNull();
+  expect(message(SAVE_FAILED)).toBeNull();
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
 });
 
 test('a tab that had no service worker when it opened reloads as soon as the new version takes over', async () => {
