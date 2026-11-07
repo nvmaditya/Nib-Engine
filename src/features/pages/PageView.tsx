@@ -39,8 +39,8 @@ function scanner() {
   const schedule = (sheetsEl: HTMLElement, pagesEl: HTMLElement, look: Look, tilt: boolean, dpr: number): void => {
     cancel(); const mine = seq;
     const keyOf = (p: HTMLElement) => look + '|' + tilt + '|' + screenKey(p);
-    for (const p of sheetsEl.querySelectorAll<HTMLElement>('.paper.scanned')) if (look === 'none' || p.dataset.scanKey !== keyOf(p)) p.classList.remove('scanned');
-    if (look === 'none') return;
+    for (const p of sheetsEl.querySelectorAll<HTMLElement>('.paper.scanned')) if ((look === 'none' && !tilt) || p.dataset.scanKey !== keyOf(p)) p.classList.remove('scanned');
+    if (look === 'none' && !tilt) return;
     timer = setTimeout(async () => {
       const box = pagesEl.getBoundingClientRect(), mid = (Math.max(box.top, 0) + Math.min(box.bottom, innerHeight)) / 2;
       const figs = [...sheetsEl.children].map(f => { const r = f.getBoundingClientRect(); return { f, d: Math.abs((r.top + r.bottom) / 2 - mid) }; }).sort((a, b) => a.d - b.d);
@@ -66,6 +66,9 @@ function scanner() {
   return { schedule, cancel };
 }
 
+/** Choose pages: which pages are left out of the download, and how to flip one. */
+export interface PagePickView { out: ReadonlySet<number>; toggle(i: number): void }
+
 export interface PageViewProps {
   layout: PageLayout | null;
   /** write: drag, resize, double-click for a new text block, click a word, name tags with `tagMenu`.
@@ -75,12 +78,14 @@ export interface PageViewProps {
   /** Called when a word is clicked, before the caret is asked for there. */
   onWordClick?: (sg: Seg) => void;
   className?: string;
+  /** export only: each page becomes a checkbox. */
+  pick?: PagePickView | null;
 }
 
-export const PageView = memo(function PageView({ layout, mode, tagMenu, onWordClick, className }: PageViewProps) {
+export const PageView = memo(function PageView({ layout, mode, tagMenu, onWordClick, className, pick }: PageViewProps) {
   const active = useStageActive();
   const look = useEditor(s => (mode === 'export' ? s.S.look : 'none'));
-  const tilt = useEditor(s => s.S.tilt);
+  const tilt = useEditor(s => (mode === 'export' ? s.S.tilt : false));
   const scrollToPage = useEditor(s => s.scrollToPage);
   useEditor(s => (active ? s.version : -1)); // the engine objects change in place; redraw on every change while shown
   const pagesRef = useRef<HTMLDivElement>(null), sheetsRef = useRef<HTMLDivElement>(null);
@@ -119,7 +124,8 @@ export const PageView = memo(function PageView({ layout, mode, tagMenu, onWordCl
         <div ref={sheetsRef} data-sheets data-look={look} className="flex flex-col items-center gap-8 px-4 pt-6">
           {layout && cssW > 0 && Array.from({ length: layout.pages }, (_, i) => (
             <Sheet key={i} i={i} pages={layout.pages} segs={layout.segs.filter(sg => sg.page === i)} allSegs={layout.segs}
-              cssW={cssW} mode={mode} tagMenu={tagMenu} onWordClick={onWordClick} />
+              cssW={cssW} mode={mode} tagMenu={tagMenu} onWordClick={onWordClick}
+              pick={pick ? { left: pick.out.has(i), toggle: () => pick.toggle(i) } : undefined} />
           ))}
         </div>
       </ScanContext.Provider>

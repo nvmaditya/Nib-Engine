@@ -6,6 +6,7 @@ import { PAGE_H, PAGE_W } from '@/engine/config.js';
 import { inkKey, paintPaper, paperKey, renderSegment, segBounds, segId } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
 import { addTextBlockAt, select } from '@/features/doc/actions';
+import { cn } from '@/lib/utils';
 import { useEditor } from '@/store/editor';
 import { BoxFrame } from './BoxFrame';
 import { drag } from './drag';
@@ -55,9 +56,11 @@ export interface SheetProps {
   onWordClick?: (sg: Seg) => void;
   /** Under the page; `Page {i} of {n}` when left out, nothing when null. */
   caption?: ReactNode | null;
+  /** Choose pages: the page is a checkbox; `left` when it is left out of the download. */
+  pick?: { left: boolean; toggle(): void };
 }
 
-export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClick, caption }: SheetProps) {
+export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClick, caption, pick }: SheetProps) {
   const figRef = useRef<HTMLElement>(null), paperRef = useRef<HTMLDivElement>(null);
   // The sheet a part is dragged from stays drawn, even if auto-scroll carries it far away: its ink follows the pointer.
   const near = useNearViewport(figRef) || (drag.active && !!figRef.current?.classList.contains('dragging'));
@@ -79,11 +82,15 @@ export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClic
   const parts = (sg: Seg) => allSegs.filter(o => o.box === sg.box).length;
   const shown = caption === undefined ? (pages > 1 ? `Page ${i + 1} of ${pages}` : 'Page 1') : caption;
   return (
-    <figure ref={figRef} className="sheet" data-i={i}>
+    <figure ref={figRef} className={cn('sheet', pick?.left && 'left-out')} data-i={i}>
       <div ref={paperRef} className="paper" data-paper={i} style={{ width: cssW, height: Math.round(cssW * PAGE_H / PAGE_W) }}>
         <PaperCanvas i={i} pages={pages} pxW={cssW * dpr} near={near} />
         <div className="ink-layer">{near && segs.map(sg => <InkCanvas key={segId(sg)} sg={sg} s={s} px={s * dpr} />)}</div>
         <canvas className="scan" aria-hidden="true" />
+        {pick && (
+          <button type="button" role="checkbox" aria-checked={!pick.left} aria-label={`Include page ${i + 1}`} onClick={pick.toggle}
+            className="pick absolute inset-0 cursor-pointer rounded-[1px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2" />
+        )}
         {mode !== 'export' && (
           <div className="ui"
             onPointerDown={e => { if (e.target === e.currentTarget) select(null); }}
@@ -99,7 +106,7 @@ export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClic
           </div>
         )}
       </div>
-      {shown !== null && <figcaption className="mt-2.5 flex min-h-8 items-center gap-2 text-[13px] text-muted">{shown}</figcaption>}
+      {shown !== null && <figcaption className="mt-2.5 flex min-h-8 items-center gap-2 text-[13px] text-muted">{shown}{pick?.left && ' · left out'}</figcaption>}
     </figure>
   );
 }
