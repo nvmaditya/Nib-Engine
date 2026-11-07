@@ -6,7 +6,7 @@ Nib was previously called Longhand.
 
 Live site: https://nvmaditya.github.io/nib-engine/
 
-Until the repository is renamed to `nib-engine`, the site is at https://nvmaditya.github.io/longhand/.
+The repository was renamed from `longhand` to `nib-engine`, so the old address (https://nvmaditya.github.io/longhand/) no longer works. Work saved there is still in the browser: it belongs to `nvmaditya.github.io`, and opens at the new address.
 
 ## What it does today
 
