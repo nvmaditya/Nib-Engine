@@ -350,3 +350,11 @@
     background: #c9c6cb center / cover no-repeat;
   }
 }
+
+/* While the handwriting picker is open on a wide screen (a 440 px panel, 16 px from the right), messages
+   are centred in the space beside it, so they don't cover its footer. */
+@media (width >= 53.75rem) {
+  body:has([data-hand-picker]) [data-sonner-toaster][data-x-position='center'] {
+    left: calc((100% - 456px) / 2);
+  }
+}

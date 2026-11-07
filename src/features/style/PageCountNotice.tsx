@@ -27,7 +27,7 @@ export function PageCountNotice({ pages }: { pages: number | null }) {
 
   const was = base, ready = fontsInUse().every(fontReady);
   return (
-    <div role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-primary-soft py-1.5 pr-1.5 pl-3 text-[13px]">
+    <div role="status" className="flex items-center gap-2 rounded-lg bg-primary-soft py-1.5 pr-1.5 pl-3 text-[13px]">
       <span className="min-w-0 flex-1">Now {pagesWord(pages)} (was {was})</span>
       {pages > was && (
         // (pointer events stay on while disabled, so its title shows on hover)

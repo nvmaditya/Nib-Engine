@@ -105,7 +105,7 @@ export function HandPicker({ open, onOpenChange, V, start, blockName, q, onQ, fi
 
   return (
     <Dialog open={open && active} onOpenChange={onOpenChange}>
-      <DialogContent ref={contentRef} aria-describedby={undefined}
+      <DialogContent ref={contentRef} aria-describedby={undefined} data-hand-picker=""
         // On phones the search box isn't focused at first, so the keyboard doesn't cover the list.
         onOpenAutoFocus={wide ? undefined : e => { e.preventDefault(); contentRef.current?.focus(); }}
         className={cn(

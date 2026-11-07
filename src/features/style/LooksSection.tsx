@@ -52,7 +52,7 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
               <button type="button" aria-pressed={on === look} onClick={() => pickLook(look)}
                 className="flex w-full flex-col items-stretch gap-1.5 rounded-lg border border-line bg-surface p-1.5 text-left text-[13px] font-medium transition-colors outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:ring-1 aria-pressed:ring-primary">
                 <span className="flex h-[38px] items-center overflow-hidden rounded-md px-2" style={{ background: paperTint(look.v.paper ?? S.paper) }}>
-                  <HandSample settings={{ ...V, ...lookPatch(look, false) }} text="Homework" height={30} />
+                  <HandSample settings={{ ...V, ...lookPatch(look, false) }} text="Homework" height={30} fit="width" />
                 </span>
                 <span className="truncate px-0.5">{look.name}</span>
               </button>

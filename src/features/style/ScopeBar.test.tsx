@@ -97,3 +97,13 @@ test('New variation for the whole document is one step; Undo restores the seed',
   act(() => undo());
   expect(get().S.seed).toBe(seed);
 });
+
+test('the page notice sits right under the title row, above the scope switch', () => {
+  open(docOf(box({ id: 'n', name: 'Main text' })));
+  act(() => select('n'));
+  render(<ScopeBar notice={<p>Now 3 pages (was 2)</p>} />);
+  const after = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const notice = screen.getByText('Now 3 pages (was 2)');
+  expect(after(screen.getByRole('button', { name: /New variation/ }), notice)).toBe(true);
+  expect(after(notice, screen.getByRole('group', { name: 'Apply changes to' }))).toBe(true);
+});
