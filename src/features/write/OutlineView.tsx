@@ -1,10 +1,15 @@
 // Write's Outline view: the page list, the handwritten pages and the selected block's editor side by
-// side. Below 860 px the list sits above the editor and the handwritten pages are left out (Outline's
-// bottom sheet for phones comes in Milestone 6).
-import { useEffect, useRef, type FocusEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+// side. Below 860 px the handwritten pages fill the stage under the Write bar, and the page list and the
+// editor are a sheet over them (the one Style and Export use). The list comes first, capped at 40dvh and
+// scrolling on its own, so a long text never pushes it out of reach. The sheet rests at its peek
+// (OUTLINE_PEEK), at about half, or just below the Write bar; the pages leave room after the last one for
+// as much as it covers. A word tapped on a page puts the caret in the sheet's editor.
+import { useEffect, useRef, type CSSProperties, type FocusEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { Seg } from '@/engine/types';
+import { StageSheet, useSheetSnaps } from '@/features/doc/StageSheet';
 import { useStageActive } from '@/features/doc/StageHost';
 import { PageView, type PageLayout } from '@/features/pages/PageView';
+import { useWide } from '@/lib/media';
 import { useEditor } from '@/store/editor';
 import { PartMenu } from './TypedPage';
 import { Inspector } from './Inspector';
@@ -12,6 +17,9 @@ import { OutlineList } from './OutlineList';
 import { WriteBar } from './WriteBar';
 
 const tagMenu = (sg: Seg) => <PartMenu sg={sg} />;
+
+/** The lowest the sheet rests on phones, in px: its handle, the list's title, and page 1's heading and first block. */
+export const OUTLINE_PEEK = 148;
 
 const itemsIn = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('[data-item]')];
 const itemOf = (root: HTMLElement, boxId: string | null) =>
@@ -66,22 +74,36 @@ function useFocusHandOff(root: RefObject<HTMLElement | null>, active: boolean) {
 
 export function OutlineView({ layout }: { layout: PageLayout | null }) {
   const active = useStageActive();
-  const root = useRef<HTMLDivElement>(null);
+  const wide = useWide();
+  const root = useRef<HTMLDivElement>(null), stage = useRef<HTMLDivElement>(null);
   const handOff = useFocusHandOff(root, active);
+  const snaps = useSheetSnaps(stage, !wide, `${OUTLINE_PEEK}px`);
   // The Add menu adds to the selected block's page, else to the last page.
   const addPage = useEditor(s => {
     if (!layout) return 0;
     const sg = layout.segs.find(x => x.box.id === s.selectedId);
     return sg ? sg.page : layout.pages - 1;
   });
+  // (The focus hand-off's root holds the sheet too: it is drawn in place, not in a portal.)
   return (
     <div ref={root} className="flex min-h-0 flex-1 flex-col" {...handOff}>
       <WriteBar view="outline" page={addPage} />
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto wide:grid wide:grid-cols-[260px_minmax(0,1fr)_minmax(320px,380px)] wide:grid-rows-[minmax(0,1fr)] wide:overflow-hidden">
-        <OutlineList layout={layout} className="max-h-[45dvh] flex-none overflow-y-auto border-b border-line wide:max-h-none wide:min-h-0 wide:border-r wide:border-b-0" />
-        <PageView layout={layout} mode="write" tagMenu={tagMenu} className="hidden wide:block wide:min-h-0 wide:overflow-y-auto" />
-        <Inspector layout={layout} className="min-h-[60dvh] flex-none wide:min-h-0 wide:border-l wide:border-line" />
-      </div>
+      {wide ? (
+        <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_minmax(320px,380px)] grid-rows-[minmax(0,1fr)] overflow-hidden">
+          <OutlineList layout={layout} className="min-h-0 overflow-y-auto border-r border-line" />
+          <PageView layout={layout} mode="write" tagMenu={tagMenu} className="min-h-0 overflow-y-auto" />
+          <Inspector layout={layout} className="min-h-0 border-l border-line" />
+        </div>
+      ) : (
+        <div ref={stage} className="flex min-h-0 flex-1 flex-col" style={{ '--sheet-shown': snaps.shown } as CSSProperties}>
+          <PageView layout={layout} mode="write" tagMenu={tagMenu}
+            className="min-h-0 flex-1 overflow-y-auto after:block after:h-[calc(var(--sheet-shown)+12px)] after:content-['']" />
+          <StageSheet title="Outline" handleLabel="Drag to show more or less of Outline" snaps={snaps}>
+            <OutlineList layout={layout} className="max-h-[40dvh] overflow-y-auto overscroll-contain border-b border-line" />
+            <Inspector layout={layout} className="flex-none" />
+          </StageSheet>
+        </div>
+      )}
     </div>
   );
 }

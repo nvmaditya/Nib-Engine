@@ -2,7 +2,8 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
-import { applyLook, frameShot } from '@/engine/core.js';
+import { PAGE_H, PAGE_W } from '@/engine/config.js';
+import { applyLook, frameShot, pageTilt } from '@/engine/core.js';
 import { layoutFor } from '@/features/doc/model';
 import { flushSave, update } from '@/store/editor';
 import { box, docOf, get, lines, open } from '@/test/docs';
@@ -42,6 +43,31 @@ test('while the exact tilted page is not ready, the pages carry a stand-in tilt'
   expect(container.querySelector('.paper > .paper-art > .ink-layer')).not.toBeNull();
   act(() => update(s => { s.S.tilt = false; }, { history: false })); rerender(<PageView layout={pageLayout()} mode="export" />);
   expect(sheets).toHaveAttribute('data-tilt', 'false');
+});
+test('with Slight camera tilt each page’s stand-in turns by its own angle', () => {
+  open(docOf(box({ text: lines(40) }))); update(s => { s.S.tilt = true; }, { history: false }); // seed 7: page 1 turns one way, page 2 the other
+  const { container, rerender } = render(<PageView layout={pageLayout()} mode="export" />);
+  const art = () => [...container.querySelectorAll<HTMLElement>('.paper-art')];
+  const turn = (el: HTMLElement) => el.style.getPropertyValue('--shot-turn');
+  expect(art()).toHaveLength(2);
+  art().forEach((el, i) => {
+    expect(turn(el)).toBe(`${pageTilt(i)}rad`);
+    const a = Math.abs(pageTilt(i)), c = Math.cos(a), sn = Math.sin(a);
+    expect(+el.style.getPropertyValue('--shot-zoom')).toBeCloseTo(Math.max(c + (PAGE_H / PAGE_W) * sn, c + (PAGE_W / PAGE_H) * sn) + 0.004, 12);
+  });
+  const [t0, t1] = art().map(el => parseFloat(turn(el)));
+  expect(t0).not.toBe(t1);
+  expect([Math.sign(t0), Math.sign(t1)]).toEqual([Math.sign(pageTilt(0)), Math.sign(pageTilt(1))]);
+  expect(Math.sign(t0)).toBe(-Math.sign(t1));
+  // New variation picks new angles, and the stand-ins follow.
+  act(() => update(s => { s.S.seed = 11; }, { history: false })); rerender(<PageView layout={pageLayout()} mode="export" />);
+  art().forEach((el, i) => expect(turn(el)).toBe(`${pageTilt(i)}rad`));
+  expect(parseFloat(turn(art()[0]))).not.toBe(t0);
+  // Without tilt, and outside Export, nothing turns.
+  act(() => update(s => { s.S.tilt = false; }, { history: false })); rerender(<PageView layout={pageLayout()} mode="export" />);
+  art().forEach(el => expect(turn(el)).toBe(''));
+  act(() => update(s => { s.S.tilt = true; }, { history: false })); rerender(<PageView layout={pageLayout()} mode="style" />);
+  art().forEach(el => expect(turn(el)).toBe(''));
 });
 test('Write and Style never carry the download’s tilt, even with it on', () => {
   open(docOf(box({ text: 'x' }))); update(s => { s.S.tilt = true; }, { history: false });

@@ -6,6 +6,7 @@ import { cleanDoc, cleanSettings, loadSaved } from '@/engine/doc.js';
 import { clearMeasureCache, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Settings } from '@/engine/types';
 import { MEMORY_ID, beforeRouteChange, navigate } from '@/app/route';
+import { giveFocusBack, rememberedFocus } from '@/lib/focus';
 import { loadUploadedFonts } from '@/features/style/fonts';
 import { MissingDocumentError, NewerDocumentError, StaleDocumentError, getDoc, onDocsChanged, putDoc, type DocRecord } from '@/store/documents';
 import { forgetDb } from './db';
@@ -73,8 +74,6 @@ use(init.S, init.doc);
 const get = useEditor.getState;
 const history = new History<string>(100);
 let createdAt = 0;
-/** Counts every change to the undo history (a step recorded, undone, redone or cleared), so a gesture can tell something else happened mid-drag. */
-let historyTick = 0;
 let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 const cancelLayout = () => { clearTimeout(layoutTimer); layoutTimer = undefined; };
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -101,6 +100,7 @@ export const COPIED = 'Copied your text.';
 export const COPY_FAILED = 'Nib couldn’t copy your text.';
 let saveSeq = 0;
 let failing: string | null = null; // the document whose saves are failing; one message per streak
+let failingNewer = false; // the last of those failures was a newer Nib's refusal
 
 // What storage holds of the open document. A save is written only if storage hasn't moved on since: its revision
 // is still `base` (the one this tab read), or the last write was this session's own (putDoc).
@@ -134,7 +134,18 @@ function adopt(rec: DocRecord, doc: EngineDoc): void {
 /** Refusals a second try can't change. */
 const refused = (e: unknown) => e instanceof NewerDocumentError || e instanceof StaleDocumentError || e instanceof MissingDocumentError;
 
-async function saveNow(): Promise<void> {
+let writing: Promise<void> | null = null; // the save being written now (its second try too)
+
+/** Write the open document now. While it is being written, `writing` holds it, so a reload can wait for it. */
+function saveNow(): Promise<void> {
+  const p = writeNow();
+  writing = p;
+  const done = () => { if (writing === p) writing = null; };
+  p.then(done, done);
+  return p;
+}
+
+async function writeNow(): Promise<void> {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   savePending = false;
@@ -165,7 +176,8 @@ async function saveNow(): Promise<void> {
     if (e instanceof MissingDocumentError) { leaveDeleted(); return; } // never written back
     if (e instanceof StaleDocumentError) { void follow(id, true); return; } // the other tab's version wins
     useEditor.setState({ saving: 'unsaved' });
-    if (failing !== id) { failing = id; toast(e instanceof NewerDocumentError ? SAVE_NEWER : SAVE_FAILED); }
+    failingNewer = e instanceof NewerDocumentError;
+    if (failing !== id) { failing = id; if (failingNewer) toast(SAVE_NEWER, reloadAction()); else toast(SAVE_FAILED); }
   }
 }
 
@@ -205,7 +217,7 @@ function readAgain(rec: DocRecord, lost: boolean): void {
   dismissMessages(); // a message's Undo was for the earlier copy
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
-  history.clear(); historyTick++;
+  history.clear();
   failing = null;
   adopt(rec, doc);
   clearMeasureCache();
@@ -293,13 +305,34 @@ export function flushSave(): Promise<void> {
   return savePending ? saveNow() : Promise.resolve();
 }
 
+/**
+ * Right before the page reloads: wait for a save being written, write the change waiting for a pause in typing, and
+ * try once more a change an earlier save couldn't write. With `pause`, someone still typing is let finish: the change
+ * is written at the pause, as it always is, and only then does this resolve. Says what became of the open document's
+ * last change: `written` (or nothing to write), `newer` (a newer Nib wrote the document, so only the new version can),
+ * or `failed` (it isn't written).
+ */
+export async function writeBeforeReload(o: { pause?: boolean } = {}): Promise<'written' | 'newer' | 'failed'> {
+  for (let tried = false; ;) {
+    while (writing) await writing;
+    if (o.pause && savePending) { await new Promise(r => setTimeout(r, 100)); continue; }
+    const id = get().docId, failed = stored(id) && failing === id;
+    if (failed ? tried : !savePending) break; // (typed while it was written: write that too)
+    tried = true;
+    await saveNow();
+  }
+  const now = get().docId;
+  if (!stored(now) || failing !== now) return 'written';
+  return failingNewer ? 'newer' : 'failed';
+}
+
 export function openDocument(rec: DocRecord): void {
   if (savePending) void saveNow(); // don't lose the last edits of the document being left
   cancelLayout();
   dismissMessages(); // a message's Undo belongs to the document it was shown in
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
-  history.clear(); historyTick++;
+  history.clear();
   failing = null;
   adopt(rec, doc);
   clearMeasureCache();
@@ -325,7 +358,7 @@ export function closeDocument(): Promise<void> {
   const saved = flushSave(); // takes what to write now, before the state below changes
   cancelLayout();
   dismissMessages();
-  history.clear(); historyTick++;
+  history.clear();
   failing = null;
   followSeq++; // a look at storage for it is dropped
   useEditor.setState({
@@ -338,25 +371,48 @@ export function closeDocument(): Promise<void> {
 
 let edits = 0, gestures = 0;
 
+/** A drag, a slider's move or a field's edit, as changes that make one undo step; `end()` closes the step. */
+export interface Gesture {
+  (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>): void;
+  /** The step is over: if it ended where it began, and is still the newest step in the history, it is taken back. */
+  end(): void;
+  /**
+   * Its step is open and still the newest in the history (nothing came after it, or what came was taken back),
+   * so its next change goes into that step.
+   */
+  isNewest(): boolean;
+}
+
 /**
  * One undo step for a whole drag or resize, however long it pauses: the first call records a step under
- * a key of its own, later calls record nothing.
+ * a key of its own, later calls record nothing. After `end()` the next change starts a new step.
  */
-export function gesture(kind: string): (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => void {
-  let key = '', seen = -1;
-  return (fn, opts) => {
-    // Another step (or an undo or redo) since our last change: carry on as a new step, so the drag isn't lost.
-    const first = seen !== historyTick;
-    if (first) key = kind + ':g' + ++gestures;
+export function gesture(kind: string): Gesture {
+  let key = '', start: string | null = null; // start: the state before this step's first change
+  const isNewest = () => start !== null && history.newest === key;
+  const g = (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => {
+    // Our step isn't the newest any more (another step came after it, or an undo or redo): carry on as a new step, so the drag isn't lost.
+    const first = !isNewest();
+    if (first) { key = kind + ':g' + ++gestures; start = stateSnapshot(); }
     update(fn, { ...opts, history: first ? key : false });
-    seen = historyTick;
+    if (first && history.newest !== key) start = null; // (a change that isn't saved records no step, so there is none to take back)
   };
+  return Object.assign(g, {
+    end() {
+      // A step that came to nothing (moved and moved back) leaves no step; Redo is as it was before it.
+      if (start !== null && history.newest === key && sameState(stateSnapshot(), start) && history.retract()) {
+        useEditor.setState(historyFlags());
+      }
+      start = null;
+    },
+    isNewest,
+  });
 }
 
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.
 export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOptions = {}): void {
   const { save = true, layout = 'now', history: hist } = opts;
-  if (save && hist !== false) { history.record(stateSnapshot(), hist ?? 'edit:' + ++edits); historyTick++; }
+  if (save && hist !== false) { history.record(stateSnapshot(), hist ?? 'edit:' + ++edits); }
   if (fn) fn(get());
   const s = get();
   use(s.S, s.doc);
@@ -406,11 +462,11 @@ function restore(snap: string, key: string | false): void {
 
 export function undo(): void {
   const snap = history.undo(stateSnapshot());
-  if (snap !== null) { historyTick++; restore(snap, false); takeDownUndoMessages(); }
+  if (snap !== null) { restore(snap, false); takeDownUndoMessages(); }
 }
 export function redo(): void {
   const snap = history.redo(stateSnapshot());
-  if (snap !== null) { historyTick++; restore(snap, false); takeDownUndoMessages(); }
+  if (snap !== null) { restore(snap, false); takeDownUndoMessages(); }
 }
 
 export function renameDocument(title: string): void {
@@ -418,34 +474,84 @@ export function renameDocument(title: string): void {
   update(s => { s.title = t; }, { history: 'rename', layout: false });
 }
 
-const messages = new Set<string>(); // the messages said since they were last taken down (some may have gone already)
-const undoMessages = new Set<string>(); // the messages showing an Undo, so undoing or redoing can take them down
+// A message's id is its text and a generation, `${msg}#${gen}`. Said again while it shows, it is the same message,
+// updated in place (its new action too) rather than a copy stacked under it. Once it is going (taken down, gone by
+// itself, swiped away, its action pressed), the generation moves on, so the same text said again is a new message:
+// sonner would merge it into the one on its way out (its exit takes 200 ms), and it would never show.
+const gens = new Map<string, number>();
+const idOf = (msg: string): string => `${msg}#${gens.get(msg) ?? 0}`;
+const textOf = (id: string): string => id.slice(0, id.lastIndexOf('#'));
+
+const messages = new Set<string>(); // the ids said since they were last taken down (some may have gone already), but no `keep` one
+const undoMessages = new Set<string>(); // the ids showing an Undo, so undoing or redoing can take them down
+const takingDown = new Map<string, number>(); // ids taken down whose dismissal sonner can still cancel (its frame)
+
+/** The message with this id is going: the next time its text is said, it shows again as a new message. */
+function going(id: string): void {
+  const msg = textOf(id);
+  if (idOf(msg) !== id) return; // (that generation is over already)
+  gens.set(msg, (gens.get(msg) ?? 0) + 1);
+  messages.delete(id); undoMessages.delete(id);
+}
 
 /**
- * Take down every message, one by one. Never with sonner's dismiss-all: a message said again right after that (its
- * id is its text) is merged into the one going away, and doesn't show. A dismissal by id is cancelled by saying the
- * same thing again, so that message stays up, with its new action.
+ * Take a message down. sonner holds a dismissal for a frame, and saying the same id in that frame cancels it, so the
+ * message stays up, with its new action. After that frame it is going. (This frame comes after sonner's.)
  */
+function takeDown(id: string): void {
+  sonnerToast.dismiss(id);
+  const held = takingDown.get(id);
+  if (held !== undefined) cancelAnimationFrame(held);
+  takingDown.set(id, requestAnimationFrame(() => { takingDown.delete(id); going(id); }));
+}
+
+/** Take down every message but the `keep` ones, one by one. Never with sonner's dismiss-all, which takes the `keep` ones too. */
 function dismissMessages(): void {
-  for (const id of messages) sonnerToast.dismiss(id);
+  for (const id of messages) takeDown(id);
   messages.clear(); undoMessages.clear();
 }
 
-const takeDownUndoMessages = (): void => { for (const id of undoMessages) sonnerToast.dismiss(id); undoMessages.clear(); };
+const takeDownUndoMessages = (): void => { for (const id of undoMessages) takeDown(id); undoMessages.clear(); };
 
 /**
- * A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. The text
- * is its id, so saying the same thing again replaces the message showing instead of stacking a copy.
+ * A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. A `keep` message
+ * (a new version is ready) stays up when a document opens or closes. Its text names it (see `idOf`), so saying the
+ * same thing again replaces the message showing instead of stacking a copy. Pressing the action gives the focus back
+ * to what had it before the message's button took it. `onDismiss` hears it taken down or swiped away (not gone by
+ * itself, nor its action pressed).
  */
-export function toast(msg: string, action?: ToastAction, o: { duration?: number } = {}): void {
-  messages.add(msg);
-  if (action?.label === 'Undo') undoMessages.add(msg); else undoMessages.delete(msg);
-  sonnerToast(msg, { // (both always given: said again while it shows, the message is updated in place)
-    id: msg,
-    action: action && { label: action.label, onClick: action.fn },
+export function toast(msg: string, action?: ToastAction, o: { duration?: number; keep?: boolean; onDismiss?: () => void } = {}): void {
+  const id = idOf(msg);
+  const held = takingDown.get(id);
+  if (held !== undefined) { cancelAnimationFrame(held); takingDown.delete(id); } // sonner cancels its dismissal too
+  if (o.keep) messages.delete(id); else messages.add(id);
+  if (action?.label === 'Undo') undoMessages.add(id); else undoMessages.delete(id);
+  const gone = () => going(id);
+  sonnerToast(msg, { // (all always given: said again while it shows, the message is updated in place)
+    id,
+    action: action && {
+      label: action.label,
+      onClick: () => {
+        gone(); // sonner takes it down after this, without onDismiss
+        const back = rememberedFocus();
+        action.fn();
+        setTimeout(() => giveFocusBack(back), 0);
+      },
+    },
     duration: o.duration,
+    onDismiss: () => { gone(); o.onDismiss?.(); },
+    onAutoClose: gone,
   });
 }
+
+/** Take a message down by its text: one said with `keep`, which opening or closing a document leaves up. */
+export function takeDownMessage(msg: string): void { takeDown(idOf(msg)); }
+
+let reloader: () => void = () => location.reload();
+/** What a message's Reload does. src/app/updates.ts puts its own in place (a waiting new version first), so the store never imports it. */
+export function setReloader(fn: () => void): void { reloader = fn; }
+/** Reload, for a message (a document a newer Nib saved, a new version ready). */
+export const reloadAction = (): ToastAction => ({ label: 'Reload', fn: () => reloader() });
 
 /** A message's action that only runs while the document it was made in is still open. */
 export function docAction(label: string, fn: () => void): ToastAction {

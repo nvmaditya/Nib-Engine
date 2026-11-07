@@ -1,7 +1,8 @@
 // Restructuring, on documents laid out by the engine (8 px per character; 28 lines fill page 1).
 import { expect, test } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
-import type { Box } from '@/engine/types';
+import { computeLayout, framesOf } from '@/engine/core.js';
+import type { Box, EngineDoc } from '@/engine/types';
 import { box, docOf, lines, words } from '@/test/docs';
 import {
   appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock, pageRefusal,
@@ -18,7 +19,7 @@ test('removing the page 2 part', () => { const d = docOf(m()); expect(removeBloc
 test('rule 3: moving a page takes its blocks, and the rest follows onto a new page', () => { const d = docOf(m()); expect(movePage(S, d, 0, 1)).toEqual({ ok: true, followed: { name: 'Main text', page: 3, added: true } }); const L = layoutFor(S, d); expect(L.pages).toBe(3); expect(L.segs.filter(s => s.page === 0)).toHaveLength(0); expect(d.boxes[0].page).toBe(1); });
 test('a page that only holds a continuation can’t move', () => { const d = docOf(m()), before = JSON.stringify(d); expect(movePage(S, d, 1, 0)).toEqual({ ok: false, part: 2, name: 'Main text' }); expect(JSON.stringify(d)).toBe(before); });
 test('rule 4: a continuation can’t move to another page; a start can', () => { const d = docOf(m(), box({ id: 'n', y: 600, text: 'n' })); expect(moveBlockToPage(S, d, 'm', 1, 0)).toEqual({ ok: false, part: 2, name: 'Main text' }); expect(moveBlockToPage(S, d, 'n', 0, 1)).toEqual({ ok: true }); expect([d.boxes[1].page, d.boxes[1].y]).toEqual([1, 600]); });
-test('merge into the previous page', () => { const d = { ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1, y: 400 })), pageCount: 2 }; expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false }); expect([d.boxes[1].page, d.pageCount]).toEqual([0, 1]); const e = docOf(m(), box({ id: 'c', page: 1, y: 600 })); expect(mergeIntoPrevious(S, e, 1)).toEqual({ ranOn: true }); expect([e.boxes[1].page, e.boxes[1].y]).toEqual([0, 600]); expect(layoutFor(S, e).pages).toBe(2); });
+test('merge into the previous page', () => { const d = { ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1, y: 400 })), pageCount: 2 }; expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false }); expect([d.boxes[1].page, d.pageCount]).toEqual([0, 1]); const e = docOf(box({ id: 'm', name: 'Main text', w: 300, text: lines(40) }), box({ id: 'c', page: 1, x: 450, y: 600, w: 290 })); /* c has room beside Main text */ expect(mergeIntoPrevious(S, e, 1)).toEqual({ ranOn: true }); expect([e.boxes[1].page, e.boxes[1].y]).toEqual([0, 600]); expect(layoutFor(S, e).pages).toBe(2); });
 test('delete a page and what is on it', () => { const d = docOf(m(), box({ id: 'c', page: 1, y: 600 })); deletePage(S, d, 1); expect(d.boxes.map(b => b.id)).toEqual(['m']); expect(d.boxes[0].text).toBe(lines(28)); expect(d.pageCount).toBe(1); expect(layoutFor(S, d).pages).toBe(1); });
 test('insert a page', () => { const d = { ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1 })), pageCount: 2 }; insertPage(S, d, 1); expect([d.boxes[1].page, d.pageCount]).toEqual([2, 3]); });
 test('new blocks', () => { const d = docOf(); const t = newBlock(S, d, 'text', 0) as Box; expect([t.name, t.x, t.y, t.w]).toEqual(['Main text', 112, 110, 420]); const n = newBlock(S, d, 'note', 0) as Box; expect([n.kind, n.name, n.x, n.w]).toEqual(['note', 'Margin note', 522, 220]); const h = newBlock(S, d, 'header', 0) as Box; expect([h.page, h.x, h.y, h.w, h.text]).toEqual([0, 446, 76, 320, 'Name:\nClass:\nDate: ' + today()]); expect(newBlock(S, d, 'header', 0)).toBe('header-exists'); expect((newBlock(S, d, 'text', 0) as Box).name).toBe('Text block'); });
@@ -229,15 +230,17 @@ const pushedN = () => docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y:
 test('a page that shows only a pushed block can be moved, and takes that block', () => {
   const d = pushedN();
   expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['n', 1]]);
-  expect(pageRefusal(layoutFor(S, d), d, 1)).toBeNull();
+  expect(pageRefusal(layoutFor(S, d), 1)).toBeNull();
   expect(movePage(S, d, 1, 0)).toEqual({ ok: true, followed: null });
   expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 1, 110], ['n', 0, 110]]);
   expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['n', 0]]);
 });
-test('merging a page that shows only a pushed block moves that block up', () => {
-  const d = pushedN();
+test('merging a page that shows only a pushed block moves that block up, where the page before has room', () => {
+  const d = docOf(box({ id: 'a', y: 700, text: lines(11) }), box({ id: 'n', y: 900, w: 300, text: 'n' })); // a fills page 1 from y 700, so n shows on page 2
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['n', 1]]);
   expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false });
-  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 0, 110]]);
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 700], ['n', 0, 110]]);
+  expect(layoutFor(S, d).pages).toBe(1);
 });
 
 // A block pushed down on its own page keeps its stored y through moves and merges.
@@ -263,3 +266,106 @@ test('moving the page before a pushed-only page swaps the two', () => {
   expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['n', 0]]);
   expect(layoutFor(S, d).pages).toBe(2);
 });
+
+// A page's own blocks are the parts it shows, and a pushed block stays where the person put it.
+const pushedOff = () => docOf(box({ id: 'a', name: 'Main text', text: lines(70) }), box({ id: 'n', page: 1, y: 900, w: 300, text: 'n' }));
+test('a page that shows only a later part can’t move, even when a block stored on it was pushed off', () => {
+  const d = pushedOff(), was = JSON.stringify(d); // page 2 shows only Main text part 2; n is stored there but shown on page 3
+  expect(movePage(S, d, 1, 0)).toEqual({ ok: false, part: 2, name: 'Main text' });
+  expect(JSON.stringify(d)).toBe(was);
+});
+test('a page is refused only when it shows something, and no block’s first part', () => {
+  const d = { ...pushedOff(), pageCount: 4 };
+  const L = layoutFor(S, d);
+  expect(L.segs.map(s => [s.box.id, s.idx, s.page])).toEqual([['a', 0, 0], ['a', 1, 1], ['a', 2, 2], ['n', 0, 2]]);
+  expect(pageRefusal(L, 0)).toBeNull(); // Main text starts there
+  expect(pageRefusal(L, 1)).toEqual({ ok: false, part: 2, name: 'Main text' });
+  expect(pageRefusal(L, 2)).toBeNull(); // n's first part shows there, beside Main text part 3
+  expect(pageRefusal(L, 3)).toBeNull(); // a blank page
+});
+const unrelated = () => ({ ...docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' }), box({ id: 'p', page: 2, text: 'p' }), box({ id: 'q', page: 3, text: 'q' })), pageCount: 4 });
+test('moving unrelated pages leaves a pushed block where the person put it', () => {
+  const d = unrelated();
+  movePage(S, d, 3, 2);
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 0, 900], ['p', 3, 110], ['q', 2, 110]]);
+});
+test('moving the page a pushed block shows on takes it along, pinned where it shows', () => {
+  const d = unrelated();
+  movePage(S, d, 1, 3);
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 3, 110], ['p', 1, 110], ['q', 2, 110]]);
+});
+test('when a pushed block’s stored and shown pages shift alike, it keeps its place and is pushed again', () => {
+  const d = unrelated();
+  movePage(S, d, 2, 0); // page 3 goes first: pages 1 and 2 (where n is stored and where it shows) both move down one
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 1, 110], ['n', 1, 900], ['p', 0, 110], ['q', 3, 110]]);
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['n', 2], ['p', 0], ['q', 3]]);
+});
+test('merging a page onto a full one changes nothing and says so', () => {
+  const d = { ...docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })), pageCount: 2 }, was = JSON.stringify(d);
+  expect(mergeIntoPrevious(S, d, 1)).toBe('full');
+  expect(JSON.stringify(d)).toBe(was);
+});
+test('a full page beside a part that runs on is still full', () => {
+  const d = docOf(box({ id: 'a', text: lines(30) }), box({ id: 'n', y: 900, w: 300, text: 'n' })); // page 2: a's last two lines, then n
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.idx, s.page])).toEqual([['a', 0, 0], ['a', 1, 1], ['n', 0, 1]]);
+  expect(mergeIntoPrevious(S, d, 1)).toBe('full');
+});
+test('a merge that can’t empty the page leaves the engine on the document, not on its trial copy', () => {
+  const d = { ...docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })), pageCount: 2 };
+  mergeIntoPrevious(S, d, 1);
+  // Without laying out again: what the engine last laid out (and draws pages and finds parts from) is the document.
+  expect([framesOf(d.boxes[0]).length, framesOf(d.boxes[1]).length]).toEqual([1, 1]);
+  expect(computeLayout().segs.every(s => d.boxes.includes(s.box))).toBe(true);
+});
+test('merging an empty last page still removes it', () => {
+  const d = { ...docOf(box({ id: 'a', text: 'a' })), pageCount: 2 };
+  expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false });
+  expect([d.pageCount, layoutFor(S, d).pages]).toEqual([1, 1]);
+});
+
+// Adding a page always gives a blank page: right after whatever runs on from the pages before it.
+/** What each page shows: its parts as block id + part index. */
+const pagesOf = (d: EngineDoc): string[][] => {
+  const L = layoutFor(S, d);
+  return Array.from({ length: L.pages }, (_, p) => L.segs.filter(s => s.page === p).map(s => s.box.id + s.idx));
+};
+const INSERTS: Record<string, () => EngineDoc> = {
+  'one block a page': () => ({ ...docOf(box({ id: 'a', text: 'a' }), box({ id: 'b', page: 1, text: 'b' }), box({ id: 'c', page: 2, text: 'c' })), pageCount: 3 }),
+  'Main text running onto page 2': () => docOf(m()),
+  'Main text running onto page 3': () => docOf(box({ id: 'm', name: 'Main text', text: lines(70) })),
+  'a block beside a continuation': () => docOf(box({ id: 'm', name: 'Main text', w: 300, text: lines(40) }), box({ id: 'c', page: 1, x: 450, y: 600, w: 290, text: 'c' })),
+  'a block pushed onto the next page': () => docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })),
+  'a header, a run-on and a later page': () => ({ ...docOf(hdr(0), m(), box({ id: 'z', page: 3, text: 'z' })), pageCount: 4 }),
+};
+test('a page added after a page whose text runs on goes after the run-on, and is blank', () => {
+  const d = docOf(m());
+  expect(insertPage(S, d, 1)).toBe(2);
+  expect(pagesOf(d)).toEqual([['m0'], ['m1'], []]);
+  const e = INSERTS['Main text running onto page 3']();
+  expect(insertPage(S, e, 1)).toBe(3);
+  expect(pagesOf(e)).toEqual([['m0'], ['m1'], ['m2'], []]);
+});
+test('a block beside a continuation stays beside it, and the added page is blank', () => {
+  const d = INSERTS['a block beside a continuation']();
+  expect(pagesOf(d)).toEqual([['m0'], ['m1', 'c0']]);
+  expect(insertPage(S, d, 1)).toBe(2);
+  expect(pagesOf(d)).toEqual([['m0'], ['m1', 'c0'], []]);
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['m', 0, 110], ['c', 1, 600]]);
+});
+test('a block pushed onto the page after goes along with that page, pinned where it shows', () => {
+  const d = INSERTS['a block pushed onto the next page']();
+  expect(insertPage(S, d, 1)).toBe(1);
+  expect(pagesOf(d)).toEqual([['a0'], [], ['n0']]);
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 2, 110]]);
+});
+for (const [name, mk] of Object.entries(INSERTS)) {
+  test(`adding a page anywhere gives a blank page, and leaves every other page as it was: ${name}`, () => {
+    const pages = pagesOf(mk()).length;
+    for (let at = 0; at <= pages; at++) {
+      const d = mk(), was = pagesOf(d);
+      const p = insertPage(S, d, at);
+      expect(p, `at ${at}`).toBeGreaterThanOrEqual(at);
+      expect(pagesOf(d), `at ${at}`).toEqual([...was.slice(0, p), [], ...was.slice(p)]);
+    }
+  });
+}

@@ -114,10 +114,12 @@ test.each([
   [() => deleteBlock('m'), 'Deleted “Main text”.'],
   [() => deletePageAt(1), 'Deleted page 2 and everything on it.'],
   [() => addPageAt(), 'Added a blank page.'],
-  [() => addBlock('note', 0), 'Added a margin note.'],
+  [() => addBlock('note', 0), 'Added a margin note. Page 1 has no free line, so it starts on page 2.'], // Main text fills page 1
 ])('message %#', (run, msg) => { open(docOf(m())); run(); expect(lastToast()).toBe(msg); });
 
 const withN = (from?: string) => (): EngineDoc => docOf(m(), box({ id: 'n', page: 1, y: 600, text: 'extra', from }));
+/** A narrower Main text runs onto page 2, and n sits beside it there, with room beside Main text on page 1. */
+const beside = (): EngineDoc => docOf(box({ id: 'm', name: 'Main text', w: 300, text: lines(40) }), box({ id: 'n', page: 1, x: 450, y: 600, w: 290, text: 'extra' }));
 const restructuring: [string, () => EngineDoc, () => void][] = [
   ['splitAt', long, () => splitAt('m', 1)],
   ['joinBackBlock', withN('m'), () => joinBackBlock('n')],
@@ -127,10 +129,12 @@ const restructuring: [string, () => EngineDoc, () => void][] = [
   ['deleteBlock', long, () => deleteBlock('m')],
   ['movePageTo', long, () => movePageTo(0, 1)],
   ['moveBlockTo', withN(), () => moveBlockTo('n', 0, 0)],
-  ['mergeIntoPreviousPage', withN(), () => mergeIntoPreviousPage(1)],
+  ['mergeIntoPreviousPage', beside, () => mergeIntoPreviousPage(1)],
   ['deletePageAt', withN(), () => deletePageAt(1)],
   ['addPageAt', long, () => addPageAt()],
   ['addPageAt(0)', long, () => addPageAt(0)],
+  ['addPageAt after a page whose text runs on', long, () => addPageAt(1)],
+  ['addPageAt beside a continuation', beside, () => addPageAt(1)],
   ['addBlock text', long, () => addBlock('text', 0)],
   ['addBlock note', long, () => addBlock('note', 1)],
   ['addBlock header', long, () => addBlock('header', 0)],
@@ -167,7 +171,7 @@ test('Join back and Add to the end of say what they did', () => {
 });
 
 test('merge mentions text that runs on', () => {
-  open(docOf(m(), box({ id: 'c', page: 1, y: 600 })));
+  open(beside());
   mergeIntoPreviousPage(1);
   expect(lastToast()).toBe('Merged page 2 into page 1. Text that runs on from it still continues on the next page.');
   open({ ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1, y: 400 })), pageCount: 2 });
@@ -258,11 +262,12 @@ test('moving the page before a pushed-only page says so rightly', () => {
   expect(lastToast()).toBe('Moved page 1 to position 2.');
   expect(layoutFor(get().S, get().doc).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['b', 0]]);
 });
-test('merging a page that shows only a pushed block moves that block up', () => {
-  open(pushedPage());
+test('merging a page that shows only a pushed block moves that block up, where the page before has room', () => {
+  open(docOf(box({ id: 'a', y: 700, text: lines(11) }), box({ id: 'b', y: 900, w: 300, text: 'b' }))); // b is pushed onto page 2
   mergeIntoPreviousPage(1);
   expect(lastToast()).toBe('Merged page 2 into page 1.');
-  expect(where()).toEqual([['a', 0, 110], ['b', 0, 110]]);
+  expect(where()).toEqual([['a', 0, 700], ['b', 0, 110]]);
+  expect(get().canUndo).toBe(true);
 });
 
 test('a page that only holds a continuation can’t be merged either', () => {
@@ -272,6 +277,83 @@ test('a page that only holds a continuation can’t be merged either', () => {
   expect(lastToast()).toBe('Part 2 of Main text always follows the part before it. Split it off first to move it on its own.');
   expect((vi.mocked(sonner).mock.calls.at(-1)![1] as { action?: unknown }).action).toBeUndefined();
   expect([json(), get().canUndo]).toEqual([before, false]);
+});
+
+// A page's own blocks are the parts it shows; a full page and a block that lands elsewhere say so.
+const R4_PART2 = 'Part 2 of Main text always follows the part before it. Split it off first to move it on its own.';
+const pushedOff = () => docOf(box({ id: 'a', name: 'Main text', text: lines(70) }), box({ id: 'n', page: 1, y: 900, w: 300, text: 'n' }));
+test('a page showing only a later part can’t be merged or moved, though a block stored on it was pushed off', () => {
+  open(pushedOff()); // page 2 shows only Main text part 2; n is stored there but shows on page 3
+  const before = json();
+  mergeIntoPreviousPage(1);
+  expect(lastToast()).toBe(R4_PART2);
+  movePageTo(1, 0);
+  expect(lastToast()).toBe(R4_PART2);
+  expect([json(), get().canUndo]).toEqual([before, false]);
+});
+test('merging into a full page records nothing and says the page is full', () => {
+  open({ ...docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })), pageCount: 2 });
+  const before = json();
+  mergeIntoPreviousPage(1);
+  expect(lastToast()).toBe('Page 1 is full, so nothing on page 2 fits on it.');
+  expect((vi.mocked(sonner).mock.calls.at(-1)![1] as { action?: unknown }).action).toBeUndefined();
+  expect([json(), get().canUndo]).toEqual([before, false]);
+});
+test('a margin note added to a full page says where it went', () => {
+  open(docOf(box({ id: 'a', text: lines(28) })));
+  addBlock('note', 0);
+  expect(lastToast()).toBe('Added a margin note. Page 1 has no free line, so it starts on page 2.');
+  addBlock('text', 0);
+  expect(lastToast()).toBe('Added a text block. Page 1 has no free line, so it starts on page 2.');
+  undo();
+  undo();
+  expect([get().doc.boxes.length, get().canUndo]).toEqual([1, false]);
+});
+test('a block added where there is a free line says only what it added', () => {
+  open(docOf(box({ id: 'a', text: lines(3) })));
+  addBlock('note', 0);
+  expect(lastToast()).toBe('Added a margin note.');
+  addBlock('text', 0);
+  expect(lastToast()).toBe('Added a text block.');
+  addBlock('header', 0);
+  expect(lastToast()).toBe('Added a header block.');
+});
+// Add a page after this one: the new page is always blank, after whatever this page's text runs on to.
+/** The parts each page shows, as block id + part index. */
+const shown = () => {
+  const L = layoutFor(get().S, get().doc);
+  return Array.from({ length: L.pages }, (_, p) => L.segs.filter(s => s.page === p).map(s => s.box.id + s.idx));
+};
+test('a page added after a page whose text runs on is blank, after the run-on, and says so', () => {
+  open(long());
+  expect(addPageAt(1)).toBe(2);
+  expect(lastToast()).toBe('Added a blank page.');
+  expect(shown()).toEqual([['m0'], ['m1'], []]);
+});
+test('a page added where a block sits beside a continuation is really blank; Undo and Redo are one step each', () => {
+  open(beside());
+  const before = json();
+  expect(addPageAt(1)).toBe(2);
+  expect(lastToast()).toBe('Added a blank page.');
+  expect(shown()).toEqual([['m0'], ['m1', 'n0'], []]);
+  const after = json();
+  undo();
+  expect([json(), get().canUndo]).toEqual([before, false]);
+  redo();
+  expect(json()).toBe(after);
+});
+test('Add page at the end, and a page before the first, are blank too', () => {
+  open(beside());
+  expect(addPageAt()).toBe(2);
+  expect(addPageAt(0)).toBe(0);
+  expect(shown()).toEqual([[], ['m0'], ['m1', 'n0'], []]);
+});
+
+test('a header added from a later page goes to the top of page 1, and says only that', () => {
+  open({ ...docOf(box({ id: 'a', text: lines(28) })), pageCount: 3 });
+  addBlock('header', 2); // Add → Header with page 3 on screen
+  expect(lastToast()).toBe('Added a header block.');
+  expect(get().doc.boxes[1].page).toBe(0);
 });
 
 test('Split from the rest on the first part splits where page 2 begins', () => {
