@@ -30,11 +30,9 @@ export interface EditorState {
   canRedo: boolean;
   importOpen: boolean;
   importFile: File | null;
-  focusEditor: number;
-  pendingSelect: [number, number] | null;
-  touchedId: string | null;
   scrollToPage: number | null;
   caret: CaretRequest | null;
+  writeView: 'write' | 'outline'; // the Write view shown last; the Write stage button goes back to it
 }
 
 export interface UpdateOptions {
@@ -65,11 +63,9 @@ export const useEditor = create<EditorState>(() => ({
   canRedo: false,
   importOpen: false,
   importFile: null,
-  focusEditor: 0,
-  pendingSelect: null,
-  touchedId: null,
   scrollToPage: null,
   caret: null,
+  writeView: 'write',
 }));
 use(init.S, init.doc);
 
@@ -155,7 +151,7 @@ export function openDocument(rec: DocRecord): void {
     docId: rec.id, title: rec.title, S, doc,
     version: s.version + 1, layoutTick: s.layoutTick + 1,
     selectedId: longestBox(doc)?.id ?? null, scope: 'all', saving: stored(rec.id) ? 'saved' : 'unsaved',
-    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null, caret: null,
+    importOpen: false, importFile: null, scrollToPage: null, caret: null, writeView: 'write',
     ...historyFlags(),
   });
 }
@@ -176,7 +172,7 @@ export function closeDocument(): Promise<void> {
   failing = null;
   useEditor.setState({
     docId: null, title: '', version: s.version + 1, selectedId: null, scope: 'all', saving: 'saved',
-    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null, caret: null,
+    importOpen: false, importFile: null, scrollToPage: null, caret: null,
     ...historyFlags(),
   });
   return saved;
@@ -266,6 +262,11 @@ export function placeCaret(boxId: string, offset: number): void {
 /** An editor has placed the caret for request n: clear it, unless a newer request has come since. */
 export function consumeCaret(n: number): void {
   if (get().caret?.n === n) useEditor.setState({ caret: null });
+}
+
+/** The Pages or Outline view is on screen (only the Stages nav reads this, so nothing else redraws). */
+export function setWriteView(v: 'write' | 'outline'): void {
+  if (get().writeView !== v) useEditor.setState({ writeView: v });
 }
 
 export const selectedBox = (): Box | null => {
