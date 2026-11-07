@@ -21,15 +21,22 @@ export function freeze(): Frozen {
  * Afterwards (even if drawing fails) the engine is back on the open document, laid out.
  */
 export function renderPage(f: Frozen, i: number, pxW: number): HTMLCanvasElement {
+  let a: HTMLCanvasElement | undefined, b: HTMLCanvasElement | undefined;
   try {
     use(f.S, f.doc);
     computeLayout();
-    const a = composePage(i, pxW), b = frameShot(a, i), c = applyLook(b, i);
+    a = composePage(i, pxW); b = frameShot(a, i);
+    const c = applyLook(b, i);
     // Let the in-between pages go now: at print size each holds about 35 MB, and phones have little
     // canvas memory. (A step without its effect hands back the canvas it was given, which is kept.)
     if (b !== a) a.width = a.height = 0;
     if (c !== b) b.width = b.height = 0;
     return c;
+  } catch (e) {
+    // A step that failed (out of canvas memory, most often) returned nothing, so every canvas made so
+    // far is an in-between one: let them go, or trying again has to find their memory as well.
+    for (const x of [a, b]) if (x) x.width = x.height = 0;
+    throw e;
   } finally {
     const s = useEditor.getState();
     use(s.S, s.doc);
