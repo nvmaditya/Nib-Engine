@@ -1,7 +1,7 @@
 // Thumbnails of page 1: the engine's own composePage, kept on the device in `prefs`, drawn one at a time.
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
-import { composePage, computeLayout, framesOf, settings } from '@/engine/core.js';
+import { composePage, computeLayout, framesOf, photoLoaded, settings } from '@/engine/core.js';
 import { getDb } from '@/store/db';
 import { closeDocument } from '@/store/editor';
 import { getPref, setPref } from '@/store/documents';
@@ -14,6 +14,7 @@ vi.mock('@/engine/core.js', async orig => {
     get settings() { return actual.settings; },
     composePage: vi.fn(actual.composePage),
     computeLayout: vi.fn(actual.computeLayout),
+    photoLoaded: vi.fn(async () => true),
   };
 });
 vi.mock('@/store/documents', async orig => {
@@ -22,7 +23,6 @@ vi.mock('@/store/documents', async orig => {
 });
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
 
-import * as engine from '@/engine/core.js';
 import { clearThumbMemory, dataUrl, drawThumb, forgetThumb, handsOf, peekThumb, thumbFor, thumbSig } from './thumbs';
 
 const actual = await vi.importActual<typeof import('@/engine/core.js')>('@/engine/core.js');
@@ -111,4 +111,20 @@ test('dataUrl encodes bytes of any length', () => {
   expect(dataUrl(new Uint8Array([104, 105]), 'text/plain')).toBe('data:text/plain;base64,aGk=');
   expect(atob(dataUrl(big, 'x/y').split(',')[1]).length).toBe(70000);
 });
-void engine;
+test('Photo paper waits for the engine’s own photo: with it not loaded there is no thumbnail and nothing is kept', async () => {
+  const P = { ...S, paper: 'photo' };
+  vi.mocked(photoLoaded).mockResolvedValueOnce(false);
+  expect(await thumbFor('doc:ph', P, two(), 156)).toBeNull(); expect(composePage).not.toHaveBeenCalled(); expect(await getPref('thumb:doc:ph')).toBeUndefined();
+  expect(await thumbFor('doc:ph', P, two(), 156)).not.toBeNull(); expect(photoLoaded).toHaveBeenCalledTimes(2); // tried again later
+});
+test('a hung fetch gives up after 10 s, and doesn’t hold up the next thumbnail', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+    const a = thumbFor('doc:hang', { ...S, font: 'patrick' }, two(), 156);
+    await vi.advanceTimersByTimeAsync(9000); expect(composePage).not.toHaveBeenCalled();
+    fontsLoad(); const b = thumbFor('doc:next', S, two(), 156);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await a).toBeNull(); expect(await b).not.toBeNull(); expect(composePage).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});

@@ -2,7 +2,7 @@
 // device in `prefs` under `thumb:<owner>`. It is drawn again only when what page 1 is drawn from changes.
 // Drawing is one at a time (phones limit total canvas memory), and the canvas is released at once.
 import { FONTS } from '@/engine/config.js';
-import { composePage, computeLayout, fontStr, loadFont, PHOTO_URL, use } from '@/engine/core.js';
+import { composePage, computeLayout, fontStr, loadFont, photoLoaded, use } from '@/engine/core.js';
 import type { EngineDoc, Settings } from '@/engine/types';
 import { encodeCanvas } from '@/features/export/render';
 import { getDb } from '@/store/db';
@@ -75,15 +75,23 @@ const isStored = (v: unknown): v is Stored => {
   return !!r && typeof r.sig === 'string' && typeof r.pages === 'number' && ArrayBuffer.isView(r.jpeg);
 };
 
-/** Waits for every hand (and the photographed paper). False when one can't be had. */
-async function ready(S: Settings, doc: EngineDoc): Promise<boolean> {
+const READY_MS = 10000;
+
+/** Waits for every hand and the engine's own photographed paper, for at most 10 s. False when one can't be had. */
+function ready(S: Settings, doc: EngineDoc): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<boolean>(r => { timer = setTimeout(() => r(false), READY_MS); });
+  return Promise.race([wait(S, doc), timeout]).finally(() => clearTimeout(timer));
+}
+
+async function wait(S: Settings, doc: EngineDoc): Promise<boolean> {
   try {
     for (const id of handsOf(S, doc)) {
       if (!(await loadFont(id))) return false;
       const cfg = FONTS.find(f => f.id === id)!;
       await document.fonts?.load(fontStr(cfg, 40));
     }
-    if (S.paper === 'photo') { const img = new Image(); img.src = PHOTO_URL; await img.decode(); }
+    if (S.paper === 'photo' && !(await photoLoaded())) return false;
     return true;
   } catch { return false; }
 }
