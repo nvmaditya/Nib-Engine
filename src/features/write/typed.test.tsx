@@ -169,3 +169,70 @@ test('deleting an item on page 1 renumbers the list where it goes on, on page 2'
   expect(markers('Main text, page 2').slice(0, 2)).toEqual(['29. item30', '30. item31']);
   expect(stored().at(-1)).toBe('39. item40');
 });
+
+/* ---------- Joining lines across a page boundary ---------- */
+
+// The text before the caret in its line, and the editor the focus is in.
+const caretIn = (e: Editor) => { const { $from } = e.state.selection; return [$from.parent.textContent.slice(0, $from.parentOffset), $from.parent.textContent]; };
+
+test('Backspace at the start of page 2’s part joins its first line to page 1’s last, as one undo step', async () => {
+  await openWrite(docOf(m(lines(30)))); // line29 and line30 on page 2
+  vi.useFakeTimers();
+  const p2 = editorFor('Main text, page 2');
+  act(() => { p2.view.focus(); p2.commands.setTextSelection(1); });
+  fireEvent.keyDown(p2.view.dom, { key: 'Backspace' });
+  await settle();
+  expect(stored()).toEqual([...lines(27).split('\n'), 'line28line29', 'line30']);
+  const p1 = editorFor('Main text, page 1');
+  expect(document.activeElement).toBe(textbox('Main text, page 1'));
+  expect(caretIn(p1)).toEqual(['line28', 'line28line29']);
+  expect(textOf('Main text, page 1').split('\n').at(-1)).toBe('line28line29');
+  act(() => undo());
+  await settle();
+  expect(stored()).toEqual(lines(30).split('\n'));
+});
+
+test('Delete at the end of page 1’s part joins page 2’s first line to it, as one undo step', async () => {
+  await openWrite(docOf(m(lines(30))));
+  vi.useFakeTimers();
+  const p1 = editorFor('Main text, page 1');
+  act(() => { p1.view.focus(); p1.commands.setTextSelection(p1.state.doc.content.size - 1); });
+  fireEvent.keyDown(p1.view.dom, { key: 'Delete' });
+  await settle();
+  expect(stored()).toEqual([...lines(27).split('\n'), 'line28line29', 'line30']);
+  expect(document.activeElement).toBe(textbox('Main text, page 1'));
+  expect(caretIn(p1)).toEqual(['line28', 'line28line29']);
+  expect(textOf('Main text, page 2')).toBe('line30');
+  act(() => { p1.commands.insertContent('!'); });
+  expect(stored()[27]).toBe('line28!line29');
+  act(() => undo());
+  act(() => undo());
+  await settle();
+  expect(stored()).toEqual(lines(30).split('\n'));
+});
+
+test('Backspace after a page break at the bottom of a full page takes the break out; the caret stays on page 2', async () => {
+  await openWrite(docOf(m([...lines(28).split('\n'), '\\newpage', 'after', 'more'].join('\n'))));
+  vi.useFakeTimers();
+  const p2 = editorFor('Main text, page 2');
+  expect(textOf('Main text, page 2')).toBe('after\nmore');
+  act(() => { p2.view.focus(); p2.commands.setTextSelection(1); });
+  fireEvent.keyDown(p2.view.dom, { key: 'Backspace' });
+  await settle();
+  expect(stored()).toEqual([...lines(28).split('\n'), 'after', 'more']);
+  expect(document.activeElement).toBe(textbox('Main text, page 2'));
+  expect(caretIn(editorFor('Main text, page 2'))).toEqual(['', 'after']);
+});
+
+test('Backspace and Delete inside a part, and at the block’s own start and end, are as before', async () => {
+  await openWrite(docOf(m(lines(30))));
+  vi.useFakeTimers();
+  const p1 = editorFor('Main text, page 1');
+  act(() => { p1.view.focus(); p1.commands.setTextSelection(1); });
+  fireEvent.keyDown(p1.view.dom, { key: 'Backspace' });
+  const p2 = editorFor('Main text, page 2');
+  act(() => { p2.view.focus(); p2.commands.setTextSelection(p2.state.doc.content.size - 1); });
+  fireEvent.keyDown(p2.view.dom, { key: 'Delete' });
+  await settle();
+  expect(stored()).toEqual(lines(30).split('\n'));
+});

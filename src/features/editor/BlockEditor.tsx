@@ -8,13 +8,13 @@ import { Plugin, PluginKey, Selection, TextSelection, type Transaction } from '@
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import { cn } from '@/lib/utils';
-import { consumeCaret, update, useEditor } from '@/store/editor';
+import { consumeCaret, placeCaret, update, useEditor } from '@/store/editor';
 import { activeEditor, setActiveEditor } from './active';
 import { editorExtensions, ownStep, type SlashItem } from './extensions';
 import { fromMarkup, keepCounting, toMarkup } from './markup';
 import { cleanPastedHTML } from './paste';
 import { lineOf, lineStart, offsetAt, posAt } from './positions';
-import { firstDiff, replaceLines, sliceLines, type LineRange } from './slices';
+import { firstDiff, joinLines, replaceLines, sliceLines, type LineRange } from './slices';
 import { SlashMenu } from './SlashMenu';
 import './editor.css';
 
@@ -41,7 +41,10 @@ export interface BlockEditorProps {
   onFocusChange?(focused: boolean, lines: number, event?: FocusEvent): void;
   /** After each write: how many lines the editor holds now (its lines are `first` to `first + lines`). */
   onLineCount?(lines: number): void;
-  /** The editor reloaded: the block changed from outside (not by its own writes), or its lines did while it has focus. */
+  /**
+   * Its lines change in a way its own line count doesn't follow: it reloaded after an outside change (or its
+   * lines changed while it has focus), or it is about to join a line across its edge.
+   */
   onExternalChange?(): void;
   onReady?(e: Editor): void;
   className?: string;
@@ -115,6 +118,15 @@ function breakDecorations(doc: PMNode, sh: Shown, breaks: PageBreakMark[], props
   }
   return DecorationSet.create(doc, decos);
 }
+
+/* ---------- Joining across a part's edges ---------- */
+
+// After the editor's own Backspace and Delete, which do nothing at the start or end of its lines.
+const partEdges = (join: (e: Editor, dir: -1 | 1) => boolean) => Extension.create({
+  name: 'nibPartEdges',
+  priority: 50,
+  addKeyboardShortcuts: () => ({ Backspace: ({ editor }) => join(editor, -1), Delete: ({ editor }) => join(editor, 1) }),
+});
 
 /* ---------- The editor ---------- */
 
@@ -194,7 +206,22 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     else if (sh) selectAt(e, anchor, head, false); // so the toolbar still formats the same words
   };
 
-  const extensions = useMemo(() => [...editorExtensions({ boxId, slash: setSlash }), PageBreakLines], [boxId]);
+  // Backspace at the start of a later part's lines joins its first line to the line before, and Delete at the
+  // end of an earlier part's joins its last line to the next: one undo step, and the caret goes to the join,
+  // in whichever editor then shows that line.
+  const joinAcross = (e: Editor, dir: -1 | 1): boolean => {
+    const sh = shownIn(e), t = textOf(boxId), { selection: sel, doc } = e.state;
+    if (!sh || sh.whole || t === null || sh.text !== t || !sel.empty) return false;
+    const edge = dir < 0 ? sh.first > 0 && sel.from === Selection.atStart(doc).from : sh.end < lineCount(t) && sel.to === Selection.atEnd(doc).to;
+    const j = edge ? joinLines(t, dir < 0 ? sh.first - 1 : sh.end - 1) : null;
+    if (!j) return false;
+    live.current.onExternalChange?.();
+    update(s => { const x = s.doc.boxes.find(y => y.id === boxId); if (x) x.text = j.text; });
+    placeCaret(boxId, j.offset);
+    return true;
+  };
+
+  const extensions = useMemo(() => [...editorExtensions({ boxId, slash: setSlash }), PageBreakLines, partEdges(joinAcross)], [boxId]);
   const editorProps = useMemo(() => ({
     attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': label, class: 'nib-prose', spellcheck: 'true' },
     transformPastedHTML: cleanPastedHTML,
