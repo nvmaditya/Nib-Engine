@@ -275,3 +275,22 @@ test('after a deploy, a tab of the earlier Nib saving a record it wrote (no revi
   expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, old tab and then');
   expect(messages(b)).toEqual([NOT_KEPT]);
 });
+
+test('closing a document with a change waiting, after another tab saved first, says the change wasn’t kept, with Copy', async () => {
+  const a = await openTab(), b = await openTab(false); // B doesn't hear of A's save before it closes
+  const id = await seed(a);
+  await openIn(a, id); await openIn(b, id);
+  type(a, ' theirs');
+  await a.ed.flushSave();
+  type(b, ' mine'); // waiting for the pause in typing
+  await b.ed.closeDocument(); // Home
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle theirs');
+  expect(messages(b)).toEqual([NOT_KEPT]);
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  const opts = b.toast.mock.calls.at(-1)![1] as { action: { label: string; onClick: () => void } };
+  expect(opts.action.label).toBe('Copy your text');
+  opts.action.onClick();
+  await vi.waitFor(() => expect(messages(b).at(-1)).toBe('Copied your text.'));
+  expect(writeText).toHaveBeenCalledWith('The water cycle mine');
+});

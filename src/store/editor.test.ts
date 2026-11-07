@@ -3,7 +3,7 @@ import { toast as sonner } from 'sonner';
 import { MEMORY_ID } from '@/app/route';
 import { cleanSettings } from '@/engine/doc.js';
 import { resetBoxStyle } from '@/features/doc/actions';
-import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
+import { MissingDocumentError, NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { box, docOf, rec as mkRec, open } from '@/test/docs';
 import { SAVE_FAILED, closeDocument, flushLayout, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, toast, undo, undoTo, update, useEditor } from './editor';
 
@@ -225,6 +225,22 @@ test('a failure that lands after its document was closed shows no message', asyn
   openDocument(mkRec('B', 'b'));
   a.reject(new Error('closed'));
   await f;
+  expect(sonner).not.toHaveBeenCalled();
+});
+
+test('a save refused after its document was opened again (same document, read again) leaves the open copy alone', async () => {
+  const a = hang();
+  vi.mocked(putDoc).mockImplementation(() => a.p);
+  location.hash = '#/d/dA/write';
+  openDocument(mkRec('A', 'a'));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  const f = flushSave();
+  openDocument(mkRec('A', 'a')); // left and opened again before the save's answer came
+  update(s => { s.selectedId = 'b1'; s.scope = 'box'; }, { save: false, layout: false });
+  a.reject(new MissingDocumentError()); // the answer for the earlier copy
+  await f;
+  expect([get().docId, get().selectedId, get().scope]).toEqual(['dA', 'b1', 'box']);
+  expect(location.hash).toBe('#/d/dA/write');
   expect(sonner).not.toHaveBeenCalled();
 });
 

@@ -112,6 +112,9 @@ let opened = 0;
 let followSeq = 0;
 let followLost = false; // a change of this tab's was refused, or dropped, since the open copy was read
 const textsOf = (doc: EngineDoc) => new Map(doc.boxes.map(b => [b.id, b.text]));
+/** The blocks' text that differs from `since` (as last written or read): what a refused save loses. */
+const lostText = (texts: Map<string, string>, since: Map<string, string>): string =>
+  [...texts].filter(([id, t]) => t.trim() && since.get(id) !== t).map(([, t]) => t).join('\n\n');
 
 function adopt(rec: DocRecord, doc: EngineDoc): void {
   createdAt = rec.createdAt;
@@ -137,7 +140,7 @@ async function saveNow(): Promise<void> {
   const id = s.docId;
   const seq = ++saveSeq, at = opened, by = session, readAt = baseAt;
   const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc, rev: base };
-  const texts = textsOf(s.doc);
+  const texts = textsOf(s.doc), prior = savedText;
   try {
     let rev: number;
     try { rev = await putDoc(rec, { session: by, readAt }); } catch (e) {
@@ -150,7 +153,11 @@ async function saveNow(): Promise<void> {
     if (seq === saveSeq && get().docId === id) savedText = texts;
     if (seq === saveSeq && get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
   } catch (e) {
-    if (seq !== saveSeq || get().docId !== id) return; // superseded, or its document is closed
+    if (get().docId !== id) { // closed (Home), or another document opened, while it was written
+      if (e instanceof StaleDocumentError) notKept(lostText(texts, prior)); // nothing shows it now, so say so here
+      return;
+    }
+    if (seq !== saveSeq || opened !== at) return; // superseded, or the open copy isn't the one it was made from
     if (e instanceof MissingDocumentError) { leaveDeleted(); return; } // never written back
     if (e instanceof StaleDocumentError) { void follow(id, true); return; } // the other tab's version wins
     useEditor.setState({ saving: 'unsaved' });
@@ -188,7 +195,7 @@ async function follow(id: string, lost: boolean): Promise<void> {
 /** Show the stored version of the open document in place: the stage, Write view and selection stay; undo starts again. */
 function readAgain(rec: DocRecord, lost: boolean): void {
   const s = get();
-  const mine = lost ? s.doc.boxes.filter(b => b.text.trim() && savedText.get(b.id) !== b.text).map(b => b.text).join('\n\n') : '';
+  const mine = lost ? lostText(textsOf(s.doc), savedText) : '';
   clearTimeout(saveTimer); saveTimer = undefined; savePending = false; saveSeq++; // nothing of the earlier copy is written
   cancelLayout();
   dismissMessages(); // a message's Undo was for the earlier copy
@@ -205,7 +212,12 @@ function readAgain(rec: DocRecord, lost: boolean): void {
     selectedId: keep ? s.selectedId : longestBox(doc)?.id ?? null, scope: keep ? s.scope : 'all',
     saving: 'saved', caret: null, ...historyFlags(),
   });
-  toast(lost ? NOT_KEPT : FOLLOWED, mine ? { label: COPY_LOST, fn: () => copyText(mine) } : undefined);
+  if (lost) notKept(mine); else toast(FOLLOWED);
+}
+
+/** This tab's last change wasn't kept (another tab saved first): say so, with Copy for the words it lost. */
+function notKept(mine: string): void {
+  toast(NOT_KEPT, mine ? { label: COPY_LOST, fn: () => copyText(mine) } : undefined);
 }
 
 function copyText(text: string): void {
