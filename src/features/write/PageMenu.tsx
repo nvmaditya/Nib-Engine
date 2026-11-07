@@ -11,26 +11,29 @@ interface Props {
   pages: number;
   /** The button that opens it; by default ⋯ named `Options for page {i}`. */
   trigger?: ReactElement;
-  /** Called with the page's new index after Move up or Move down (a pager follows the page). */
-  onMoved?: (to: number) => void;
+  /**
+   * The page (0-based) a pager should show next: the page's new index after Move up or Move down, the new
+   * page after Add a page after this one, and the page before after Merge into previous page.
+   */
+  onShow?: (page: number) => void;
 }
 
-export function PageMenu({ page, pages, trigger, onMoved }: Props) {
+export function PageMenu({ page, pages, trigger, onShow }: Props) {
   const first = page === 0, last = page >= pages - 1;
-  // A refused move changes nothing, so the pager is told only when the document changed.
-  const move = (to: number) => {
+  // A refused action changes nothing, so the pager is told only when the document changed.
+  const then = (run: () => void, next: number) => () => {
     const v = useEditor.getState().version;
-    movePageTo(page, to);
-    if (useEditor.getState().version !== v) onMoved?.(to);
+    run();
+    if (useEditor.getState().version !== v) onShow?.(next);
   };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger ?? <OptionsButton label={`Options for page ${page + 1}`} />}</DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuItem disabled={first} onSelect={() => move(page - 1)}>Move up</DropdownMenuItem>
-        <DropdownMenuItem disabled={last} onSelect={() => move(page + 1)}>Move down</DropdownMenuItem>
-        <DropdownMenuItem disabled={first} onSelect={() => mergeIntoPreviousPage(page)}>Merge into previous page</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => addPageAt(page + 1)}>Add a page after this one</DropdownMenuItem>
+        <DropdownMenuItem disabled={first} onSelect={then(() => movePageTo(page, page - 1), page - 1)}>Move up</DropdownMenuItem>
+        <DropdownMenuItem disabled={last} onSelect={then(() => movePageTo(page, page + 1), page + 1)}>Move down</DropdownMenuItem>
+        <DropdownMenuItem disabled={first} onSelect={then(() => mergeIntoPreviousPage(page), page - 1)}>Merge into previous page</DropdownMenuItem>
+        <DropdownMenuItem onSelect={then(() => addPageAt(page + 1), page + 1)}>Add a page after this one</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => deletePageAt(page)}>Delete page</DropdownMenuItem>
       </DropdownMenuContent>

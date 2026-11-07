@@ -175,6 +175,35 @@ test('the last page can’t move down; its menu merges and deletes it', async ()
   expect(lastToast()).toBe('Deleted page 2 and everything on it.');
 });
 
+test('the page menu tells a pager which page to show next, only when the document changed', async () => {
+  const onShow = vi.fn();
+  const choose = async (page: number, name: string) => {
+    await openMenu(`Options for page ${page + 1}`);
+    await userEvent.click(item(name));
+  };
+  // Page 2 shows only Main text part 2: moving and merging it are refused, and the pager stays.
+  const { unmount } = render(<PageMenu page={1} pages={2} onShow={onShow} />);
+  await choose(1, 'Move up');
+  await choose(1, 'Merge into previous page');
+  expect(onShow).not.toHaveBeenCalled();
+  await choose(1, 'Add a page after this one');
+  expect(onShow).toHaveBeenLastCalledWith(2);
+  unmount();
+  const three = () => ({ ...docOf(box({ id: 'a', text: 'a' }), box({ id: 'b', page: 1, text: 'b' }), box({ id: 'c', page: 2, text: 'c' })), pageCount: 3 });
+  act(() => open(three()));
+  onShow.mockClear();
+  const r = render(<PageMenu page={1} pages={3} onShow={onShow} />);
+  await choose(1, 'Move down');
+  expect(onShow).toHaveBeenLastCalledWith(2);
+  await choose(1, 'Move up');
+  expect(onShow).toHaveBeenLastCalledWith(0);
+  await choose(1, 'Merge into previous page');
+  expect(onShow).toHaveBeenLastCalledWith(0);
+  await choose(1, 'Delete page');
+  expect(onShow).toHaveBeenCalledTimes(3); // Delete page leaves the pager to clamp itself
+  r.unmount();
+});
+
 test('header fields write the header', async () => {
   render(<HeaderFields boxId="h" />);
   expect(screen.getAllByRole('textbox').map(e => (e as HTMLInputElement).labels![0].textContent)).toEqual(['Name', 'Class', 'Date']);
@@ -200,7 +229,8 @@ test('Write bar', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Add' }));
   expect(items()).toEqual(['Text block', 'Margin note', 'Header', 'Page']);
   await userEvent.click(item('Margin note'));
-  await waitFor(() => expect(lastToast()).toBe('Added a margin note.')); // once the menu has closed
+  // once the menu has closed; Main text fills page 1, so the note starts on page 2
+  await waitFor(() => expect(lastToast()).toBe('Added a margin note. Page 1 has no free line, so it starts on page 2.'));
 });
 
 test('the Outline’s Write bar: no Show group or toolbar; Add and Import', async () => {

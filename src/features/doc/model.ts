@@ -3,8 +3,8 @@
 // it out with the engine whenever it needs to know where the parts are.
 //
 // A block "starts on" the page its first part is shown on. Pushing (layout rule 2) can show that part
-// on a later page than the one the block is stored on (box.page); page moves and merges go by the shown
-// page, and only write a new y when that differs from the stored page. Deleting a page goes by what it shows.
+// on a later page than the one the block is stored on (box.page). Moving, merging and deleting pages go by
+// what each page shows (see the comment above pageRefusal).
 import { headerText, uid } from '@/engine/doc.js';
 import { computeLayout, frameRange, geom, snapX, snapY, splitAtFrame, textWithoutFrame, use } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, FrameRect, HeaderKey, Layout, Seg, Settings } from '@/engine/types';
@@ -119,13 +119,17 @@ export function removeBlock(doc: EngineDoc, boxId: string): Box | null {
 }
 
 // Two notions of a block's page. Its stored page (box.page) is where the person put it; layout rule 2
-// can push its first part onto a later page without changing that. Moving and merging pages go by the
-// page the first part is shown on; a block shown on its stored page keeps its stored y (even if pushed
-// down there), one shown elsewhere is pinned to where it is shown. Deleting a page goes by what it shows.
+// can push its first part onto a later page without changing that. A page's own blocks are the parts it
+// shows: moving, merging and deleting pages go by those, never by what is stored on a page but shown elsewhere.
+// - Moving pages: a block keeps its stored place (and y, even if pushed down) when it shows on its stored
+//   page, or when its stored and shown pages move alike, so layout pushes it there again. Otherwise it goes
+//   with the page it shows on, pinned to where it shows.
+// - Merging: the blocks that start on the page go to the page before, pinned to where they show. When the
+//   page would still show the same parts (the page before is full), nothing changes.
 
-/** A page with no block of its own can't move on its own: its first continuation always follows its start. */
-export function pageRefusal(L: Layout, doc: EngineDoc, page: number): Refused | null {
-  if (doc.boxes.some(b => b.page === page) || L.segs.some(s => s.page === page && s.idx === 0)) return null;
+/** A page that shows something, but no block's first part, can't move on its own: its first continuation always follows its start. */
+export function pageRefusal(L: Layout, page: number): Refused | null {
+  if (L.segs.some(s => s.page === page && s.idx === 0)) return null;
   const c = L.segs.find(s => s.page === page && s.idx > 0);
   return c ? { ok: false, part: c.idx + 1, name: c.box.name } : null;
 }
@@ -159,12 +163,16 @@ export function movePage(S: Settings, doc: EngineDoc, from: number, to: number):
   const L = layoutFor(S, doc);
   const pages = L.pages;
   if (from === to || from < 0 || to < 0 || from >= pages || to >= pages) return { ok: true, followed: null };
-  const no = pageRefusal(L, doc, from);
+  const no = pageRefusal(L, from);
   if (no) return no;
   doc.pageCount = pages;
   const going = doc.boxes.filter(b => startPage(L, b).page === from);
-  const starts = doc.boxes.map(b => startPage(L, b));
-  doc.boxes.forEach((b, k) => place(b, starts[k].seg, moved(starts[k].page, from, to)));
+  const to_ = (p: number) => moved(p, from, to);
+  for (const b of doc.boxes) {
+    const { page: shown, seg } = startPage(L, b); // where its first part shows before the move
+    if (shown === b.page || to_(shown) - shown === to_(b.page) - b.page) b.page = to_(b.page); // pushed there again
+    else place(b, seg, to_(shown)); // it goes with the page it shows on
+  }
   const after = layoutFor(S, doc);
   for (const b of going) {
     const next = partOf(after, b, 1);
@@ -182,16 +190,33 @@ export function moveBlockToPage(_S: Settings, doc: EngineDoc, boxId: string, idx
   return { ok: true };
 }
 
-/** The blocks that start on page `i` move onto the page before. A page left with nothing on it goes. */
-export function mergeIntoPrevious(S: Settings, doc: EngineDoc, i: number): { ranOn: boolean } | null {
-  const L = layoutFor(S, doc);
-  if (i < 1 || i >= L.pages) return null;
-  const ranOn = L.segs.some(s => s.page === i && s.idx > 0);
+/** The blocks that start on page `i` move onto the page before, pinned to where they show. A page left with nothing on it goes. */
+function merge(S: Settings, doc: EngineDoc, i: number, L: Layout = layoutFor(S, doc)): void {
   for (const b of doc.boxes) { const st = startPage(L, b); if (st.page === i) place(b, st.seg, i - 1); }
   if (!layoutFor(S, doc).segs.some(s => s.page === i)) {
     for (const b of doc.boxes) if (b.page > i) b.page--;
     doc.pageCount = Math.max(1, L.pages - 1);
   }
+}
+
+/** The parts page `i` shows, by block id and part, in a fixed order. */
+const shownOn = (L: Layout, i: number): string => JSON.stringify(L.segs.filter(s => s.page === i).map(s => [s.box.id, s.idx]).sort());
+
+/**
+ * Merge page `i` into the page before. It is tried on a copy first: when page `i` would still show exactly
+ * the parts it shows now (the page before has no room for them), it is 'full' and the document is left as it is.
+ */
+export function mergeIntoPrevious(S: Settings, doc: EngineDoc, i: number): { ranOn: boolean } | 'full' | null {
+  const L = layoutFor(S, doc);
+  if (i < 1 || i >= L.pages) return null;
+  const ranOn = L.segs.some(s => s.page === i && s.idx > 0), was = shownOn(L, i);
+  const trial = structuredClone(doc);
+  merge(S, trial, i);
+  if (was !== '[]' && shownOn(layoutFor(S, trial), i) === was) { // (an empty page always goes)
+    use(S, doc); // the engine lays out the document again, not the copy
+    return 'full';
+  }
+  merge(S, doc, i, L); // (L is still the document's own layout: only the copy changed)
   return { ranOn };
 }
 

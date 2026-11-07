@@ -213,6 +213,48 @@ test('Move down in the page menu keeps the pager on the moved page', async () =>
   expect(screen.getByRole('textbox', { name: 'First, page 2' })).toBeInTheDocument();
 });
 
+/** Choose `name` in the page menu of the page on screen. */
+async function pageMenu(page: number, name: string): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: `Options for page ${page}` }));
+  await userEvent.click(await screen.findByRole('menuitem', { name }));
+}
+
+test('Add a page after this one turns to the new page', async () => {
+  await pageMenu(1, 'Add a page after this one');
+  expect(await screen.findByText('Page 2 of 3')).toBeInTheDocument();
+});
+
+/** Open a document whose pages hold one short block each: First, Second, Third… */
+async function openPages(n: number): Promise<void> {
+  cleanup();
+  const names = ['First', 'Second', 'Third'];
+  const doc = { ...docOf(...names.slice(0, n).map((name, page) => box({ id: name, name, text: name.toLowerCase(), page }))), pageCount: n };
+  const id = (await createDoc({ title: 'M', settings: cleanSettings(null, false), doc })).id;
+  location.hash = `#/d/${id}/write`;
+  render(<App />);
+  await screen.findByText(`Page 1 of ${n}`);
+}
+
+test('Merge into previous page turns to the page it went to', async () => {
+  await openPages(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await pageMenu(2, 'Merge into previous page');
+  expect(await screen.findByText('Page 1 of 1')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Second, page 1' })).toBeInTheDocument();
+  // With a page after it, the pager doesn't stay on the merged page's old place (now the page after).
+  await openPages(3);
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await pageMenu(2, 'Merge into previous page');
+  expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Second, page 1' })).toBeInTheDocument();
+});
+
+test('a refused merge leaves the pager where it was', async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await pageMenu(2, 'Merge into previous page'); // page 2 shows only Main text part 2
+  expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+});
+
 test('the top bar uses the 860 px breakpoint', () => {
   cleanup();
   render(<TopBar route={docRoute} ready />);

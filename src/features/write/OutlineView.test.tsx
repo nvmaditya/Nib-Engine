@@ -267,7 +267,7 @@ test('Add puts a new block’s caret in the inspector', async () => {
   await outline(docOf(m()));
   await userEvent.click(screen.getByRole('button', { name: 'Add' }));
   await userEvent.click(await screen.findByRole('menuitem', { name: 'Text block' }));
-  await waitFor(() => expect(lastToast()).toBe('Added a text block.')); // once the menu has closed
+  await waitFor(() => expect(lastToast()).toBe('Added a text block. Page 1 has no free line, so it starts on page 2.')); // once the menu has closed
   const ed = await within(insp()).findByRole('textbox', { name: 'Text block, all pages' });
   await waitFor(() => expect(ed).toHaveFocus());
   expect(get().doc.boxes.at(-1)!.page).toBe(0); // the selected block's page

@@ -168,12 +168,16 @@ export function moveBlockTo(boxId: string, idx: number, page: number): void {
   });
 }
 
-/** Merge page `i` into the page before; like moving it, a page that only holds continuations is refused. */
+/**
+ * Merge page `i` into the page before. Like moving it, a page that shows only continuations is refused; so is
+ * a merge that would leave the page showing what it shows now, because the page before is full.
+ */
 export function mergeIntoPreviousPage(i: number): void {
   restructure('merge-page', s => {
-    const no = pageRefusal(layoutFor(s.S, s.doc), s.doc, i);
+    const no = pageRefusal(layoutFor(s.S, s.doc), i);
     if (no) return refuse(rule4(no));
     const r = mergeIntoPrevious(s.S, s.doc, i);
+    if (r === 'full') return refuse(`Page ${i} is full, so nothing on page ${i + 1} fits on it.`);
     return r && `Merged page ${i + 1} into page ${i}.` + (r.ranOn ? ' Text that runs on from it still continues on the next page.' : '');
   });
 }
@@ -189,14 +193,20 @@ export function addPageAt(at?: number): void {
 
 const ADDED: Record<BlockKind, string> = { text: 'Added a text block.', note: 'Added a margin note.', header: 'Added a header block.' };
 
-/** A new block, selected and ready to type in (a header is filled in through its fields). */
+/**
+ * A new block, selected and ready to type in (a header is filled in through its fields). When `page` has no
+ * free line, the block is pushed onto a later page, and the message says where it starts. The header goes at
+ * the top of page 1, above everything, so it is never pushed.
+ */
 export function addBlock(kind: BlockKind, page: number): void {
   let id = '';
   const added = restructure('add-block', s => {
     const b = newBlock(s.S, s.doc, kind, page);
     if (b === 'header-exists') return refuse('This document already has a header block.');
     s.selectedId = id = b.id;
-    return ADDED[kind];
+    if (kind === 'header') return ADDED.header;
+    const at = layoutFor(s.S, s.doc).segs.find(sg => sg.box === b && sg.idx === 0)?.page ?? page;
+    return ADDED[kind] + (at === page ? '' : ` Page ${page + 1} has no free line, so it starts on page ${at + 1}.`);
   });
   if (!added) return;
   if (kind !== 'header') placeCaret(id, 0);
