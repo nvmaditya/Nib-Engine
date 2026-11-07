@@ -40,9 +40,14 @@ export interface Seg {
 
 export interface Layout { segs: Seg[]; pages: number }
 
+/** The handwriting picker's filters. Joined-up or print follows `conn`; uploaded fonts have none. */
+export type HandTag = 'joined' | 'print' | 'neat' | 'messy' | 'fun';
+
 export interface FontCfg {
   id: string; name: string; family: string; weight: number; scale: number;
   group?: string; conn?: boolean; forms?: number;
+  /** Every built-in hand has these; the engine never reads them. */
+  tags?: HandTag[];
   /** An uploaded font: its file, and whether it is installed under its own family name. */
   buf?: ArrayBuffer; local?: boolean;
 }
