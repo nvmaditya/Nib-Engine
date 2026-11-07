@@ -3,7 +3,7 @@ import { getDb } from '@/store/db';
 import { setPref } from '@/store/documents';
 import { openDocument } from '@/store/editor';
 import { box, docOf, get, open, rec } from '@/test/docs';
-import { DEFAULT_PREFS, IDLE_RUN, loadExportPrefs, setChoose, setExportPrefs, togglePage, useExportPick, useExportPrefs, useExportRun } from './state';
+import { DEFAULT_PREFS, IDLE_RUN, forgetPast, loadExportPrefs, setChoose, setExportPrefs, togglePage, useExportPick, useExportPrefs, useExportRun } from './state';
 
 vi.mock('@/store/documents', async importOriginal => {
   const actual = await importOriginal<typeof import('@/store/documents')>();
@@ -39,3 +39,9 @@ test('a page left out and put back', () => { setChoose(true); togglePage(1); exp
 test('the page choice starts again when another document opens', () => { openDocument(rec('A', docOf(box()))); setChoose(true); togglePage(0); openDocument(rec('B', docOf(box()))); expect(useExportPick.getState()).toEqual({ choose: false, out: [] }); });
 test('none of this is in the document or its undo history', () => { open(docOf(box())); setExportPrefs({ format: 'png' }); setChoose(true); togglePage(0); expect(get().canUndo).toBe(false); });
 test('the run starts idle', () => expect(useExportRun.getState()).toEqual({ kind: null, done: 0, total: 0 }));
+
+test('forgetPast drops the pages left out at or past the end, and changes nothing when there are none', () => {
+  useExportPick.setState({ choose: true, out: [1, 4, 6] });
+  forgetPast(5); expect(useExportPick.getState().out).toEqual([1, 4]);
+  const before = useExportPick.getState(); forgetPast(5); expect(useExportPick.getState()).toBe(before);
+});

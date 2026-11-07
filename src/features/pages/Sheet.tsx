@@ -84,8 +84,10 @@ export function Sheet({ i, pages, segs, allSegs, cssW, mode, tagMenu, onWordClic
   return (
     <figure ref={figRef} className={cn('sheet', pick?.left && 'left-out')} data-i={i}>
       <div ref={paperRef} className="paper" data-paper={i} style={{ width: cssW, height: Math.round(cssW * PAGE_H / PAGE_W) }}>
-        <PaperCanvas i={i} pages={pages} pxW={cssW * dpr} near={near} />
-        <div className="ink-layer">{near && segs.map(sg => <InkCanvas key={segId(sg)} sg={sg} s={s} px={s * dpr} />)}</div>
+        <div className="paper-art">
+          <PaperCanvas i={i} pages={pages} pxW={cssW * dpr} near={near} />
+          <div className="ink-layer">{near && segs.map(sg => <InkCanvas key={segId(sg)} sg={sg} s={s} px={s * dpr} />)}</div>
+        </div>
         <canvas className="scan" aria-hidden="true" />
         {pick && (
           <button type="button" role="checkbox" aria-checked={!pick.left} aria-label={`Include page ${i + 1}`} onClick={pick.toggle}

@@ -3,12 +3,12 @@
 // leave room after the last one for as much as the sheet covers (a spacer, not padding, so the top
 // height doesn't make the document scroll). The page choice and the format live in stores, so the
 // panel can unmount and mount again (crossing 860 px) without losing them.
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { PageView, type PageLayout } from '@/features/pages/PageView';
 import { StageSheet, useSheetSnaps } from '@/features/doc/StageSheet';
 import { useWide } from '@/lib/media';
 import { ExportPanel } from './ExportPanel';
-import { togglePage, useExportPick } from './state';
+import { forgetPast, togglePage, useExportPick } from './state';
 
 /**
  * The lowest the sheet rests, in px, above a phone's home indicator: its handle, the panel's title and
@@ -40,7 +40,10 @@ export function ExportStage({ layout }: { layout: PageLayout | null }) {
   const snaps = useSheetSnaps(stage, !wide, `${EXPORT_PEEK + safe}px`);
   const choose = useExportPick(s => s.choose), out = useExportPick(s => s.out);
   const pick = useMemo(() => (choose ? { out: new Set(out), toggle: togglePage } : null), [choose, out]);
-  const panel = <ExportPanel pages={layout?.pages ?? 1} />;
+  const pages = layout?.pages ?? null;
+  // (While the hands load there is no page count, and pruning then would wipe the choice.)
+  useEffect(() => { if (pages !== null) forgetPast(pages); }, [pages]);
+  const panel = <ExportPanel pages={pages} />;
   if (wide) {
     return (
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_380px] grid-rows-[minmax(0,1fr)] overflow-hidden">

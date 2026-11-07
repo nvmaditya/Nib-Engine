@@ -129,22 +129,31 @@
   .sheet.dragging {
     z-index: 10;
   }
-  /* Dim the page itself, not the checkbox button over it, so its focus ring stays visible. */
-  .sheet.left-out .paper {
-    background: transparent;
-    box-shadow: none;
+  /* A left-out page is dimmed and greyed by one overlay of the desk over it: a filter on the ink layer
+     (whose canvases blend by multiply) would drop whole words. The checkbox button stays above the
+     overlay, so its focus ring keeps its full strength. */
+  .sheet.left-out .paper::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--desk);
+    opacity: 0.65;
+    backdrop-filter: grayscale(1);
+    pointer-events: none;
   }
-  /* Greyed as well as faded: on the light desk, fading alone leaves a pale page that still looks chosen. */
-  .sheet.left-out .paper > :not(.pick) {
-    opacity: 0.35;
-    filter: grayscale(1);
-    transition: opacity 150ms, filter 150ms;
+  .paper .pick {
+    z-index: 1;
   }
   .paper {
     position: relative;
     border-radius: 1px;
     background: #fbfbf8; /* until its canvas is drawn (a sheet far from view isn't) */
     box-shadow: var(--sheet-shadow);
+  }
+  /* The paper's own picture (its canvas and ink): a box the size of the paper, so a stand-in tilt can clip it. */
+  .paper .paper-art {
+    position: absolute;
+    inset: 0;
   }
   .paper .paper-bg {
     position: absolute;
@@ -187,6 +196,14 @@
   .paper.scanned .paper-bg,
   .paper.scanned .ink-layer {
     visibility: hidden;
+  }
+  /* Camera tilt has the same stand-in: the page turned a little and cropped, so the exact tilted page
+     (a moment later, when it is back in view or has been drawn again) doesn't jump from a straight one. */
+  [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art {
+    overflow: hidden;
+  }
+  [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art > :is(.paper-bg, .ink-layer) {
+    transform: rotate(0.5deg) scale(1.02);
   }
   [data-sheets][data-look='scan'] .paper:not(.scanned) {
     filter: brightness(1.08) contrast(1.12) saturate(0.85);
@@ -367,6 +384,14 @@
 @media (width >= 53.75rem) {
   body:has([data-hand-picker]) [data-sonner-toaster][data-x-position='center'] {
     left: calc((100% - 456px) / 2);
+  }
+}
+
+/* On a phone, while the Style or Export sheet is open, its pinned footer (Download and Share) is at the
+   bottom of the screen, so messages (like "Saved …" after a download) are lifted above it. */
+@media (width < 53.75rem) {
+  body:has([data-vaul-drawer]) [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: calc(var(--offset, 24px) + 96px + env(safe-area-inset-bottom));
   }
 }
 

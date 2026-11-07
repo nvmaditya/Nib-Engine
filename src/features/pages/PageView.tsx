@@ -121,7 +121,7 @@ export const PageView = memo(function PageView({ layout, mode, tagMenu, onWordCl
     <main ref={pagesRef} data-pages aria-label="Pages" className={cn('relative bg-desk', className)}>
       {(!layout || !cssW) && <p className="my-10 text-center text-muted">Loading handwriting…</p>}
       <ScanContext.Provider value={rescan}>
-        <div ref={sheetsRef} data-sheets data-look={look} className="flex flex-col items-center gap-8 px-4 pt-6">
+        <div ref={sheetsRef} data-sheets data-look={look} data-tilt={tilt} className="flex flex-col items-center gap-8 px-4 pt-6">
           {layout && cssW > 0 && Array.from({ length: layout.pages }, (_, i) => (
             <Sheet key={i} i={i} pages={layout.pages} segs={layout.segs.filter(sg => sg.page === i)} allSegs={layout.segs}
               cssW={cssW} mode={mode} tagMenu={tagMenu} onWordClick={onWordClick}
