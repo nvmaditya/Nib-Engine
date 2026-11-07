@@ -4,6 +4,7 @@ import { FONTS } from '@/engine/config.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import type { FontCfg } from '@/engine/types';
 import { box, docOf } from '@/test/docs';
+import { fontFile } from '@/test/fonts';
 import { HAND_FILTERS, PANGRAM, docStart, handList, handNote, shapesNote } from './hands';
 
 const find = (id: string) => FONTS.find(f => f.id === id)!;
@@ -41,12 +42,13 @@ test('your own font is found by its name, not by the family Nib gives it', () =>
   expect(handList('upload', 'all', [])).toEqual([]);
 });
 
-test('notes', () => {
-  expect([find('labelle'), find('zeyada'), find('playwrite'), mine('up-a')].map(handNote)).toEqual(['joined-up', 'print, messy', 'joined-up, neat', 'your font']);
+test('notes', async () => {
+  const up: FontCfg = { ...mine('up-a'), buf: await fontFile('labelle', 'Mine.woff').arrayBuffer() }; // an uploaded font, with its file
+  expect([find('labelle'), find('zeyada'), find('playwrite'), up].map(handNote)).toEqual(['joined-up', 'print, messy', 'joined-up, neat', 'your font']);
   expect(shapesNote(find('caveat'))).toBe('3 shapes per letter');
   expect(shapesNote(find('labelle'))).toBeNull();
-  expect(shapesNote(mine('up-a'))).toBe('1 shape per letter');
-  expect(shapesNote({ ...mine('up-a'), forms: 4 })).toBe('4 shapes per letter');
+  expect(shapesNote(up)).toBe('1 shape per letter');
+  expect(shapesNote({ ...up, forms: 4 })).toBe('4 shapes per letter');
 });
 
 test('the start of the document', () => {

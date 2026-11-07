@@ -54,6 +54,15 @@ export function registerFont(rec: FontRecord, stored = false): FontCfg | null {
   return cfg;
 }
 
+/**
+ * Whether the engine can read a hand's outlines. A built-in hand's always can be. An uploaded one's are
+ * read the first time this asks (or it is drawn), and the engine keeps what it read, so a stored file
+ * that is signed as a font but isn't one is found out once, and then said in its note.
+ */
+export function handReadable(cfg: FontCfg): boolean {
+  return !cfg.local || engineFor(cfg) !== null;
+}
+
 function fileName(file: File): string {
   return file.name.replace(/\.[^.]*$/, '').trim().slice(0, 40).trim() || 'Your font';
 }

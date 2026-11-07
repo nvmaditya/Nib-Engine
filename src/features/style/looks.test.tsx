@@ -10,6 +10,7 @@ import { flushSave, undo, update, useEditor } from '@/store/editor';
 import { box, docOf, get, lastToast, lastToastAction, open } from '@/test/docs';
 import { LooksSection } from './LooksSection';
 import { currentLookValues, lookPatch, matchLook, STYLE_LOOKS } from './looks';
+import { resetStylePanel } from './panelState';
 import { addSavedLook, useStylePrefs } from './prefs';
 
 const store = new Map<string, unknown>();
@@ -27,6 +28,7 @@ beforeEach(async () => {
   vi.mocked(sonner).mockClear();
   vi.mocked(setPref).mockClear();
   useStylePrefs.setState({ looks: [], favourites: [], previewText: '' });
+  resetStylePanel(); // every test opens the same document, so Save as a look starts closed again here
 });
 
 function Live() {
@@ -118,6 +120,15 @@ test('a saved look can be removed, and Undo puts it back', async () => {
   open(docOf(box())); await addSavedLook('Mine', { font: 'kalam' }); render(<Live />);
   await userEvent.click(screen.getByRole('button', { name: 'Remove Mine' }));
   expect(lastToast()).toBe('Removed “Mine”.');
+  expect(screen.queryByRole('button', { name: 'Mine' })).toBeNull();
+  act(() => lastToastAction()!());
+  await screen.findByRole('button', { name: 'Mine' });
+});
+test('…and when the device can’t store the removal, Style says so, with Undo', async () => {
+  open(docOf(box())); await addSavedLook('Mine', { font: 'kalam' }); render(<Live />);
+  vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
+  await userEvent.click(screen.getByRole('button', { name: 'Remove Mine' }));
+  await waitFor(() => expect(lastToast()).toBe('Removed “Mine” here, but this device couldn’t save that, so it may come back.'));
   expect(screen.queryByRole('button', { name: 'Mine' })).toBeNull();
   act(() => lastToastAction()!());
   await screen.findByRole('button', { name: 'Mine' });

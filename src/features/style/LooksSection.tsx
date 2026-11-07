@@ -1,5 +1,6 @@
-// Looks: hand, pen, ink, paper and realism in one tap, and the looks saved on this device.
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+// Looks: hand, pen, ink, paper and realism in one tap, and the looks saved on this device. Save as a look
+// (whether it is asking, and the name typed so far) is kept in `useStylePanel`, so crossing 860 px keeps it.
+import { useEffect, useRef, type FormEvent } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Settings } from '@/engine/types';
 import { Button } from '@/components/ui/button';
@@ -10,24 +11,30 @@ import { useStageActive } from '@/features/doc/StageHost';
 import { toast } from '@/store/editor';
 import { HandSample, paperTint } from './HandSample';
 import { currentLookValues, lookMatches, lookPatch, matchLook, pickLook, STYLE_LOOKS } from './looks';
+import { carryOn, useStylePanel, type StylePanelState } from './panelState';
 import { Group } from './parts';
 import { addSavedLook, putBackSavedLook, removeSavedLook, useStylePrefs, type SavedLook } from './prefs';
 
 const DEFAULT_NAME = 'My look';
+const setSaveLook = (p: Partial<StylePanelState['saveLook']>) => useStylePanel.setState(s => ({ saveLook: { ...s.saveLook, ...p } }));
+const setAsking = (asking: boolean) => setSaveLook({ asking });
+const setName = (name: string) => setSaveLook({ name });
 
 export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; blockScope: boolean }) {
   const saved = useStylePrefs(s => s.looks);
   const active = useStageActive();
   const saveRef = useRef<HTMLButtonElement>(null);
-  const [asking, setAsking] = useState(false);
-  const [name, setName] = useState(DEFAULT_NAME);
+  const fieldRef = useRef<HTMLInputElement>(null);
+  const { asking, name } = useStylePanel(s => s.saveLook);
+  // Open already when this mounted: the panel mounted again (crossing 860 px), with a name being typed.
+  const reopened = useRef(asking && active);
   const all = [...STYLE_LOOKS, ...saved];
   const on = matchLook(V, S, all, blockScope);
 
   // A dialog is portalled out of its stage, so it has to be closed when the stage is.
   useEffect(() => { if (!active) setAsking(false); }, [active]);
 
-  const ask = () => { setName(DEFAULT_NAME); setAsking(true); };
+  const ask = () => setSaveLook({ asking: true, name: DEFAULT_NAME });
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setAsking(false);
@@ -42,7 +49,9 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
     const next = card?.nextElementSibling?.querySelector('button');
     (next ?? saveRef.current)?.focus();
     void removeSavedLook(look.id).then(r => {
-      if (r) toast(`Removed “${r.look.name}”.`, { label: 'Undo', fn: () => { void putBackSavedLook(r.look, r.index); } });
+      if (!r) return;
+      const said = r.kept ? `Removed “${r.look.name}”.` : `Removed “${r.look.name}” here, but this device couldn’t save that, so it may come back.`;
+      toast(said, { label: 'Undo', fn: () => { void putBackSavedLook(r.look, r.index); } });
     });
   };
 
@@ -72,12 +81,13 @@ export function LooksSection({ V, S, blockScope }: { V: Settings; S: Settings; b
       </div>
       <Button ref={saveRef} variant="outline" size="sm" className="mt-3" onClick={ask}><Plus />Save the current style as a look</Button>
       <Dialog open={asking && active} onOpenChange={setAsking}>
-        <DialogContent className="sm:max-w-sm" onCloseAutoFocus={e => { e.preventDefault(); saveRef.current?.focus(); }}>
+        <DialogContent className="sm:max-w-sm" onCloseAutoFocus={e => { e.preventDefault(); saveRef.current?.focus(); }}
+          onOpenAutoFocus={e => { if (reopened.current) carryOn(e, fieldRef.current); reopened.current = false; }}>
           <form onSubmit={submit} className="grid gap-4">
             <DialogHeader><DialogTitle>Save as a look</DialogTitle></DialogHeader>
             <div className="grid gap-2">
               <Label htmlFor="look-name">Look name</Label>
-              <Input id="look-name" value={name} maxLength={40} autoComplete="off" onChange={e => setName(e.target.value)} />
+              <Input ref={fieldRef} id="look-name" value={name} maxLength={40} autoComplete="off" onChange={e => setName(e.target.value)} />
             </div>
             <DialogFooter><Button type="submit">Save</Button></DialogFooter>
           </form>

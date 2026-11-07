@@ -8,6 +8,7 @@ import { App } from '@/app/App';
 import type { Stage } from '@/app/route';
 import { StageHost } from '@/features/doc/StageHost';
 import { ExportPanel } from '@/features/export/ExportPanel';
+import { resetStylePanel } from '@/features/style/panelState';
 import { StylePanel } from '@/features/style/StylePanel';
 import { PagesView } from '@/features/write/PagesView';
 import { editBox, select } from '@/features/doc/actions';
@@ -27,7 +28,8 @@ afterAll(() => {
   delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
   vi.unstubAllGlobals();
 });
-beforeEach(() => localStorage.removeItem('nib.styleFolds')); // every Style fold starts closed
+// Every Style fold starts closed, and (as every test opens the same document) the picker too.
+beforeEach(() => { localStorage.removeItem('nib.styleFolds'); resetStylePanel(); });
 
 /** The button in the Stages nav whose label ends with `name` ('1 Write' for Write). */
 const stageButton = (name: string) =>

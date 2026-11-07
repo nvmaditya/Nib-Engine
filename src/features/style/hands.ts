@@ -4,6 +4,7 @@ import { FONTS } from '@/engine/config.js';
 import { parseLine } from '@/engine/core.js';
 import type { Box, EngineDoc, FontCfg, HandTag } from '@/engine/types';
 import { plainText } from '@/features/editor/markup';
+import { handReadable } from './fonts';
 
 export type HandFilter = 'all' | HandTag | 'fav';
 
@@ -30,15 +31,22 @@ export function handList(q: string, filter: HandFilter, favourites: string[]): F
 
 const TAG_WORDS: [HandTag, string][] = [['joined', 'joined-up'], ['print', 'print'], ['neat', 'neat'], ['messy', 'messy'], ['fun', 'fun']];
 
-/** What kind of hand it is: `joined-up` or `print`, then `neat`, `messy`, `fun`; an uploaded font is `your font`. */
+/**
+ * What kind of hand it is: `joined-up` or `print`, then `neat`, `messy`, `fun`; an uploaded font is
+ * `your font`, and says so when its file can't be read here (it draws in a stand-in).
+ */
 export function handNote(cfg: FontCfg): string {
-  if (isMine(cfg)) return 'your font';
+  if (isMine(cfg)) return handReadable(cfg) ? 'your font' : 'your font, which can’t be read on this device';
   const tags = cfg.tags ?? [cfg.conn ? 'joined' : 'print'];
   return TAG_WORDS.filter(([t]) => tags.includes(t)).map(([, w]) => w).join(', ');
 }
 
-/** `3 shapes per letter`. A built-in hand with one shape says nothing; an uploaded font always says, so the person knows it was counted. */
+/**
+ * `3 shapes per letter`. A built-in hand with one shape says nothing; an uploaded font always says, so
+ * the person knows it was counted, unless its file can't be read here (it has no shapes of its own then).
+ */
 export function shapesNote(cfg: FontCfg): string | null {
+  if (isMine(cfg) && !handReadable(cfg)) return null;
   const n = cfg.forms ?? 1;
   return n > 1 ? `${n} shapes per letter` : isMine(cfg) ? '1 shape per letter' : null;
 }

@@ -118,11 +118,11 @@ test('Whole document, the block that grew has its own size: the line spacing cha
   act(() => lastToastAction()!());
   expect([get().S.size, get().S.gap]).toEqual([30, 40]);
 });
-test('Whole document, when nothing in this scope can fit it, it says so and changes nothing', () => {
+test('Whole document, when nothing in this scope can fit it, it says so, names the block with its own letter size, and changes nothing', () => {
   open(withNote(10, { size: 36 })); // only Main text’s own letters would do it, and they keep their own style
   expect(pages()).toBe(4);
   expect(fitBack(2)).toBe(false);
-  expect(lastToast()).toBe('This doesn’t fit on 2 pages, even with the smallest letter size and line spacing.');
+  expect(lastToast()).toBe('This doesn’t fit on 2 pages, even with the smallest letter size and line spacing. “Main text” has its own letter size, which Fit back leaves alone.');
   expect([get().S.size, get().S.gap, get().doc.boxes[0].style, get().canUndo]).toEqual([30, 34, { size: 36 }, false]);
 });
 // Only the block that grew: the tests above (the block gets its own size; Undo takes it away or puts the old one back).
@@ -147,12 +147,41 @@ test('Only “Margin note”, when Main text’s own letters grew: neither lette
   expect([get().S.size, get().S.gap, get().doc.boxes[0].style, get().doc.boxes[1].style, pages()]).toEqual([30, 30, { size: 36 }, {}, 2]);
   expect(lastToast()).toBe('Back to 2 pages. Line spacing is now 30.');
 });
-test('Only “Margin note”, when nothing in this scope can fit it, it says so and changes nothing', () => {
+test('Only “Margin note”, when nothing in this scope can fit it, it says so, names the other block with its own letter size, and changes nothing', () => {
   open(withNote(10, { size: 36 }));
   styleBox('n');
   expect(fitBack(2)).toBe(false);
-  expect(lastToast()).toBe('This doesn’t fit on 2 pages, even with the smallest letter size and line spacing.');
+  expect(lastToast()).toBe('This doesn’t fit on 2 pages, even with the smallest letter size and line spacing. “Main text” has its own letter size, which Fit back leaves alone.');
   expect([get().S.size, get().S.gap, get().doc.boxes[1].style, get().canUndo]).toEqual([30, 34, {}, false]);
+});
+/** A short Main text, and a margin note of 60 lines (with its own letter size `size`), which alone runs past page 1. */
+const longNote = (size?: number): EngineDoc => docOf(
+  box({ id: 'm', name: 'Main text', text: 'a short main text' }),
+  box({ id: 'n', name: 'Margin note', kind: 'note', x: 522, w: 220, y: 400, text: lines(60), style: size === undefined ? {} : { size } }),
+);
+test('when nothing fits because another block keeps its own letter size, the message names it', () => {
+  open(longNote(LIMITS.size[1]));
+  expect(pages()).toBeGreaterThan(1);
+  expect(fitBack(1)).toBe(false);
+  expect(lastToast()).toBe('This doesn’t fit on 1 page, even with the smallest letter size and line spacing. “Margin note” has its own letter size, which Fit back leaves alone.');
+  expect(get().canUndo).toBe(false);
+  // Without an own size, the message is as it was.
+  open(longNote());
+  expect(pages()).toBeGreaterThan(1);
+  expect(fitBack(1)).toBe(false);
+  expect(lastToast()).toBe('This doesn’t fit on 1 page, even with the smallest letter size and line spacing.');
+});
+test('…the first such block, in document order, and never the one Fit back is changing', () => {
+  const d = longNote(40);
+  d.boxes.unshift(box({ id: 'later', name: 'Text block 2', page: 0, y: 900, w: 300, text: 'later', style: { size: 20 } }));
+  d.boxes.push(box({ id: 'top', name: 'Text block 3', page: 0, y: 140, x: 112, w: 300, text: 'top', style: { size: 22 } }));
+  open(d);
+  expect(fitBack(1)).toBe(false);
+  expect(lastToast()).toMatch(/ “Text block 3” has its own letter size, which Fit back leaves alone\.$/);
+  open(longNote(40));
+  styleBox('n'); // Only “Margin note”: its own letter size is the one Fit back would lower
+  expect(fitBack(1)).toBe(false);
+  expect(lastToast()).toBe('This doesn’t fit on 1 page, even with the smallest letter size and line spacing.');
 });
 test('Fit back does nothing while a hand is still arriving', () => {
   open(para(7));

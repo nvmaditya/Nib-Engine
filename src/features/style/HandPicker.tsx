@@ -17,6 +17,7 @@ import { toast, useEditor } from '@/store/editor';
 import { addFontFile, FONT_EXTENSIONS, type AddFontResult } from './fonts';
 import { HAND_FILTERS, handList, handNote, type HandFilter } from './hands';
 import { HandSample, paperTint } from './HandSample';
+import { carryOn } from './panelState';
 import { setPreviewText, toggleFavourite, useStylePrefs } from './prefs';
 
 const CANT_READ = 'That file isn’t a font Nib can read. Try a .ttf, .otf or .woff file.';
@@ -63,7 +64,10 @@ export function HandPicker({ returnTo, open, onOpenChange, V, start, blockName, 
   const [, fontsAdded] = useReducer((n: number) => n + 1, 0);
   const [emptied, markEmptied] = useReducer((n: number) => n + 1, 0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
+  // Open already when this mounted: the panel mounted again (crossing 860 px), with a search being typed.
+  const reopened = useRef(open && active);
   const listRef = useRef<HTMLDivElement>(null);
   const reveal = useRef<string | null>(null);
   const previewId = useId();
@@ -107,7 +111,11 @@ export function HandPicker({ returnTo, open, onOpenChange, V, start, blockName, 
         // On phones the search box isn't focused at first, so the keyboard doesn't cover the list.
         // Closing gives focus back to the button that opened it (the dialog has no trigger of its own).
         onCloseAutoFocus={returnTo ? e => { e.preventDefault(); returnTo.current?.focus(); } : undefined}
-        onOpenAutoFocus={wide ? undefined : e => { e.preventDefault(); contentRef.current?.focus(); }}
+        // After crossing 860 px onto a wide screen, the search keeps its caret where typing goes on.
+        onOpenAutoFocus={e => {
+          if (!wide) { e.preventDefault(); contentRef.current?.focus(); } else if (reopened.current) carryOn(e, searchRef.current);
+          reopened.current = false;
+        }}
         className={cn(
           'flex flex-col gap-0 overflow-hidden p-0 outline-none',
           'top-auto right-0 bottom-0 left-0 h-[85dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-t-2xl rounded-b-none border-x-0 border-b-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none',
@@ -118,7 +126,7 @@ export function HandPicker({ returnTo, open, onOpenChange, V, start, blockName, 
           {blockName && <span className="min-w-0 truncate text-[13px] text-muted">for “{blockName}”</span>}
         </DialogHeader>
         <div className="px-4">
-          <Input type="search" aria-label="Search handwriting" placeholder={`Search ${FONTS.length} hands`} autoComplete="off" spellCheck={false}
+          <Input ref={searchRef} type="search" aria-label="Search handwriting" placeholder={`Search ${FONTS.length} hands`} autoComplete="off" spellCheck={false}
             value={q} onChange={e => onQ(e.target.value)} className="bg-surface-2" />
         </div>
         <div role="group" aria-label="Filter" className="flex flex-wrap gap-1.5 px-4 pt-2.5 pb-2">

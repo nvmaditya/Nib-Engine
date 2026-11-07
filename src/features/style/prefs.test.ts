@@ -29,6 +29,14 @@ test('an unnamed look is My look; names are at most 40 characters', async () => 
 test('a look that can’t be saved is not kept', async () => { vi.mocked(setPref).mockRejectedValueOnce(new Error('quota')); await expect(addSavedLook('A', {})).rejects.toThrow(); expect(useStylePrefs.getState().looks).toEqual([]); });
 test('a removed look goes back where it was', async () => { const [a, b, c] = [await addSavedLook('A', {}), await addSavedLook('B', {}), await addSavedLook('C', {})]; const r = (await removeSavedLook(b.id))!; expect(r.index).toBe(1); await putBackSavedLook(r.look, r.index); expect(useStylePrefs.getState().looks.map(l => l.id)).toEqual([a.id, b.id, c.id]); });
 test('removing a look that isn’t there does nothing', async () => { expect(await removeSavedLook('nope')).toBeNull(); });
+test('a removed look says it was kept', async () => { const a = await addSavedLook('A', {}); expect(await removeSavedLook(a.id)).toEqual({ look: a, index: 0, kept: true }); });
+test('a removal the device can’t store still takes the look off, and says it wasn’t kept', async () => {
+  const a = await addSavedLook('A', {}), b = await addSavedLook('B', {});
+  vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
+  expect(await removeSavedLook(a.id)).toEqual({ look: a, index: 0, kept: false });
+  expect(useStylePrefs.getState().looks).toEqual([b]);
+  expect(((await getPref('looks')) as { name: string }[]).map(l => l.name)).toEqual(['A', 'B']); // still stored, so it may come back
+});
 test('favourites and the preview text are remembered', async () => { await toggleFavourite('caveat'); await toggleFavourite('zeyada'); await toggleFavourite('caveat'); await setPreviewText('Dear Nani,\nthank you ' + 'x'.repeat(100)); useStylePrefs.setState({ favourites: [], previewText: '' }); await loadStylePrefs(); expect(useStylePrefs.getState().favourites).toEqual(['zeyada']); expect(useStylePrefs.getState().previewText).toBe(('Dear Nani, thank you ' + 'x'.repeat(100)).slice(0, 80)); });
 test('a favourite changes at once even when the write fails', async () => { vi.mocked(setPref).mockRejectedValueOnce(new Error('quota')); await toggleFavourite('caveat'); expect(useStylePrefs.getState().favourites).toEqual(['caveat']); });
 test('stored values of the wrong shape are ignored', async () => { const db = await getDb(); await db.put('prefs', 'x', 'looks'); await db.put('prefs', [1, 'caveat'], 'favourites'); await db.put('prefs', 5, 'previewText'); await loadStylePrefs(); expect(useStylePrefs.getState()).toMatchObject({ looks: [], favourites: ['caveat'], previewText: '' }); });

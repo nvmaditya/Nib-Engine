@@ -1,18 +1,23 @@
 // Style's Handwriting section: the current hand writing the start of the document, and Change, which
-// opens the picker. The picker's search and filter live here, so closing it or switching stages keeps them.
-import { useRef, useState } from 'react';
+// opens the picker. Whether the picker is open, and its search and filter, are kept in `useStylePanel`,
+// so closing it, switching stages or crossing 860 px keeps them.
+import { useRef } from 'react';
 import { FONTS } from '@/engine/config.js';
 import type { Settings } from '@/engine/types';
 import { HandPicker } from './HandPicker';
 import { HandSample, paperTint } from './HandSample';
-import { handNote, shapesNote, type HandFilter } from './hands';
+import { handNote, shapesNote } from './hands';
+import { useStylePanel, type StylePanelState } from './panelState';
 import { Group } from './parts';
 
+const setPicker = (p: Partial<StylePanelState['picker']>) => useStylePanel.setState(s => ({ picker: { ...s.picker, ...p } }));
+const setOpen = (open: boolean) => setPicker({ open });
+const setQ = (q: string) => setPicker({ q });
+const setFilter = (filter: StylePanelState['picker']['filter']) => setPicker({ filter });
+
 export function HandSection({ V, start, blockName }: { V: Settings; start: string; blockName: string | null }) {
-  const [open, setOpen] = useState(false);
+  const { open, q, filter } = useStylePanel(s => s.picker);
   const changeRef = useRef<HTMLButtonElement>(null);
-  const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<HandFilter>('all');
   const cfg = FONTS.find(f => f.id === V.font) ?? FONTS[0];
   const shapes = shapesNote(cfg);
   return (
