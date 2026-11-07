@@ -3,9 +3,12 @@ import type { ManifestOptions, VitePWAOptions } from 'vite-plugin-pwa';
 // What vite-plugin-pwa writes at build: the web app manifest and the Workbox service worker (vite.config.ts).
 // Pure data, so a test can check it without a build.
 
-/** The manifest. Every path is relative, so Nib installs wherever it is served from (as /nib-engine/ on GitHub Pages). */
+/**
+ * The manifest. Every path is relative, so Nib installs wherever it is served from (as /nib-engine/ on GitHub Pages).
+ * It has no `id`: an id resolves against start_url's origin, so `./` would make the site's root the app's permanent
+ * identity. Without one, the identity is start_url itself (…/nib-engine/).
+ */
 export const NIB_MANIFEST: Partial<ManifestOptions> = {
-  id: './',
   name: 'Nib',
   short_name: 'Nib',
   description: 'Turn typed text into realistic handwritten pages, then download them as a PDF or images.',
@@ -39,6 +42,8 @@ export const PWA_WORKBOX: NonNullable<VitePWAOptions['workbox']> = {
   // Above the 1.3 MB app bundle and the 1.09 MB pdf.js worker (Workbox's default is 2 MiB).
   maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
   navigateFallback: 'index.html',
+  // Files that are deployed but not precached are opened as themselves, not as the app.
+  navigateFallbackDenylist: [/\/fonts\/licenses\//, /\/icons\/social\.png$/],
   cleanupOutdatedCaches: true,
   clientsClaim: true,
   // A new version waits until a tab asks for it (src/app/pwa.ts): it is offered, never forced.

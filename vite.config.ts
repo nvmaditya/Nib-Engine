@@ -5,7 +5,7 @@ import { configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { NIB_MANIFEST, PWA_WORKBOX } from './src/app/pwaManifest';
+import { NIB_MANIFEST, PWA_WORKBOX } from './src/app/pwaManifest.ts';
 
 // Tests that draw real pixels in the Chromium of the Playwright installed on this machine. Playwright is
 // not a project dependency (CI doesn't have it), so `npm test` leaves them out. `npm run test:browser`
