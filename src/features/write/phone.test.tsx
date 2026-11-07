@@ -9,7 +9,7 @@ import type { Route } from '@/app/route';
 import { addPageAt, deletePageAt } from '@/features/doc/actions';
 import { TopBar } from '@/shell/TopBar';
 import { createDoc } from '@/store/documents';
-import { flushSave, placeCaret } from '@/store/editor';
+import { flushSave, placeCaret, useEditor } from '@/store/editor';
 import { box, docOf, fontsLoad, lines } from '@/test/docs';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
@@ -206,4 +206,20 @@ test('the top bar uses the 860 px breakpoint', () => {
   render(<TopBar route={docRoute} ready />);
   expect(screen.getByRole('button', { name: 'Export' }).className).toMatch(/wide:inline-flex/);
   expect(document.querySelector('header')!.outerHTML).not.toMatch(/\bmd:/);
+});
+
+// Export stays off the phone's top bar (the stage switcher under it has Export), but the save state stays.
+test('on a phone the top bar keeps the save state, as an icon that says it', () => {
+  cleanup();
+  render(<TopBar route={docRoute} ready />);
+  const status = screen.getByRole('status');
+  expect(status.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  expect(status).toHaveAttribute('title', 'Saved');
+  expect(status).toHaveTextContent('Saved'); // read out, though only the icon shows
+  expect(status.querySelector('svg')).toHaveClass('sm:hidden');
+  expect(screen.getByText('Saved')).toHaveClass('sr-only', 'sm:not-sr-only');
+  act(() => { useEditor.setState({ saving: 'unsaved' }); });
+  expect(status).toHaveAttribute('title', 'Not saved');
+  expect(screen.getByText('Not saved')).not.toHaveClass('sr-only'); // a problem shows in words too
+  act(() => { useEditor.setState({ saving: 'saved' }); });
 });

@@ -139,4 +139,20 @@ describe('Write in Chromium, laid out for real', () => {
     expect(Math.abs(m.x - Math.max(8, Math.min(b.x, width - 8 - m.width))), 'how far it is from beside the button (px)').toBeLessThan(1);
     expect(errors).toEqual([]);
   }, 120_000);
+
+  test('on a 390 px phone the top bar shows the save state; Export is in the stage switcher, not the bar', async () => {
+    const page = await openSample(390);
+    const status = page.locator('header [role="status"]');
+    const box = await status.boundingBox();
+    expect(box, 'the save state is laid out').not.toBeNull();
+    const s = box!;
+    expect(s.width, 'its width').toBeGreaterThanOrEqual(12);
+    expect(s.height, 'its height').toBeGreaterThanOrEqual(12);
+    expect(s.x + s.width, 'inside the window').toBeLessThanOrEqual(390);
+    expect(await status.getAttribute('title')).toBe('Saved');
+    expect(await page.evaluate(() => [...document.querySelectorAll('header button')].filter(b => b.textContent === 'Export')
+      .map(b => b.getBoundingClientRect().width)), 'the bar’s Export button, hidden').toEqual([0]);
+    expect(await page.getByRole('navigation', { name: 'Stages' }).getByRole('button', { name: /Export$/ }).boundingBox()).not.toBeNull();
+    expect(errors).toEqual([]);
+  }, 120_000);
 });
