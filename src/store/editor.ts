@@ -93,6 +93,8 @@ export const NOT_ON_DEVICE = 'That document isn’t on this device.';
 // Another tab with the same document open (see installDocFollow).
 export const FOLLOWED = 'Updated with changes from another tab.';
 export const NOT_KEPT = 'This document was changed in another tab, so your last change wasn’t kept.';
+/** The same for a document no longer open (closed, or another opened, while its change was written): it is named. */
+export const notKeptIn = (title: string): string => `“${title}” was changed in another tab, so your last change wasn’t kept.`;
 export const DELETED_ELSEWHERE = 'This document was deleted in another tab.';
 export const COPY_LOST = 'Copy your text';
 export const COPIED = 'Copied your text.';
@@ -155,7 +157,8 @@ async function saveNow(): Promise<void> {
     if (seq === saveSeq && get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
   } catch (e) {
     if (get().docId !== id) { // closed (Home), or another document opened, while it was written
-      if (e instanceof StaleDocumentError) notKept(lostText(texts, prior)); // nothing shows it now, so say so here
+      // Nothing shows it now, so say so here, by the name it had when it was written.
+      if (e instanceof StaleDocumentError) notKept(lostText(texts, prior), rec.title);
       return;
     }
     if (seq !== saveSeq || opened !== at) return; // superseded, or the open copy isn't the one it was made from
@@ -216,9 +219,12 @@ function readAgain(rec: DocRecord, lost: boolean): void {
   if (lost) notKept(mine); else toast(FOLLOWED);
 }
 
-/** This tab's last change wasn't kept (another tab saved first): say so, with Copy for the words it lost. */
-function notKept(mine: string): void {
-  toast(NOT_KEPT, mine ? { label: COPY_LOST, fn: () => copyText(mine) } : undefined);
+/**
+ * This tab's last change wasn't kept (another tab saved first): say so, with Copy for the words it lost. `title` names
+ * a document that is no longer open; the open one is "This document".
+ */
+function notKept(mine: string, title?: string): void {
+  toast(title === undefined ? NOT_KEPT : notKeptIn(title), mine ? { label: COPY_LOST, fn: () => copyText(mine) } : undefined);
 }
 
 function copyText(text: string): void {

@@ -276,16 +276,16 @@ test('after a deploy, a tab of the earlier Nib saving a record it wrote (no revi
   expect(messages(b)).toEqual([NOT_KEPT]);
 });
 
-test('closing a document with a change waiting, after another tab saved first, says the change wasn’t kept, with Copy', async () => {
+test('closing a document with a change waiting, after another tab saved first, says which document’s change wasn’t kept, with Copy', async () => {
   const a = await openTab(), b = await openTab(false); // B doesn't hear of A's save before it closes
   const id = await seed(a);
   await openIn(a, id); await openIn(b, id);
   type(a, ' theirs');
   await a.ed.flushSave();
   type(b, ' mine'); // waiting for the pause in typing
-  await b.ed.closeDocument(); // Home
+  await b.ed.closeDocument(); // Home, where nothing shows which document it was
   expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle theirs');
-  expect(messages(b)).toEqual([NOT_KEPT]);
+  expect(messages(b)).toEqual(['“The Water Cycle” was changed in another tab, so your last change wasn’t kept.']);
   const writeText = vi.fn(async () => {});
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   const opts = b.toast.mock.calls.at(-1)![1] as { action: { label: string; onClick: () => void } };
@@ -293,4 +293,21 @@ test('closing a document with a change waiting, after another tab saved first, s
   opts.action.onClick();
   await vi.waitFor(() => expect(messages(b).at(-1)).toBe('Copied your text.'));
   expect(writeText).toHaveBeenCalledWith('The water cycle mine');
+});
+
+test('opening another document with a change waiting, after another tab saved first, names the one whose change wasn’t kept', async () => {
+  const a = await openTab(), b = await openTab(false);
+  const id = await seed(a), other = (await a.docs.createDoc({ title: 'Week 2', settings: cleanSettings(null, false), doc: doc() })).id;
+  await openIn(a, id); await openIn(b, id);
+  b.ed.renameDocument('My essay'); // the title it has in this tab, not the one A gives it after
+  await b.ed.flushSave();
+  await vi.waitFor(() => expect(state(a).title).toBe('My essay')); // A follows
+  a.ed.renameDocument('Their essay'); type(a, ' theirs');
+  await a.ed.flushSave();
+  type(b, ' mine');
+  await openIn(b, other); // its waiting change is written as it goes, and refused
+  await vi.waitFor(() => expect(messages(b).at(-1)).toBe('“My essay” was changed in another tab, so your last change wasn’t kept.'));
+  expect([state(b).title, (await a.docs.getDoc(id))!.doc.boxes[0].text]).toEqual(['Week 2', 'The water cycle theirs']);
+  const opts = b.toast.mock.calls.at(-1)![1] as { action: { label: string } };
+  expect(opts.action.label).toBe('Copy your text');
 });
