@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
 import { App } from '@/app/App';
-import { LIMITS } from '@/engine/config.js';
+import { FONTS, LIMITS } from '@/engine/config.js';
+import { loadFont } from '@/engine/core.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { select, setV } from '@/features/doc/actions';
 import { createDoc } from '@/store/documents';
@@ -19,7 +20,8 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), 
 
 const wideMatchMedia = window.matchMedia;
 const width = (px: number) => Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => px });
-beforeAll(() => { width(1200); realFonts(); });
+// Every hand's file arrives first: a sample whose hand arrived after its test ended would draw again outside act.
+beforeAll(async () => { width(1200); realFonts(); await Promise.all(FONTS.map(f => loadFont(f.id))); });
 afterAll(() => {
   delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
   vi.unstubAllGlobals();

@@ -6,7 +6,7 @@ import { box, docOf, get, lastToast, lines, open } from '@/test/docs';
 import { flushSave, redo, undo } from '@/store/editor';
 import {
   addBlock, addPageAt, addTextBlockAt, addToEndOf, deleteBlock, deletePageAt, joinBackBlock, mergeIntoPreviousPage,
-  moveBlockTo, movePageTo, removePart, renameBlock, resetBoxStyle, select, setField, setV, showField, shuffleBox, splitAt, writeOut,
+  moveBlockTo, movePageTo, removePart, renameBlock, resetBoxStyle, select, setField, setV, showField, shuffleBox, splitAt,
 } from './actions';
 import { layoutFor, today } from './model';
 
@@ -66,16 +66,6 @@ test('deleting a page moves the later pages up', () => {
   expect([get().doc.pageCount, get().doc.boxes.length]).toEqual([1, 0]);
 });
 
-test('writeOut replaces the pages or adds after the last page', () => {
-  open(docOf(box({ text: 'old' })));
-  writeOut('# T', 'replace', 'f.pdf', 1);
-  expect(get().doc.boxes).toHaveLength(1);
-  expect(get().doc.fileName).toBe('f.pdf');
-  writeOut('more', 'append', undefined, 1);
-  expect(get().doc.boxes[1].page).toBe(1);
-  expect(get().doc.pageCount).toBe(2);
-});
-
 test('setV writes only the selected block’s style when the scope is the block', () => {
   open(docOf(box()));
   expect(get().S.size).toBe(30);
@@ -92,7 +82,6 @@ const cases: [string, () => EngineDoc, () => void][] = [
   ['splitAt', long, () => splitAt('m', 1)],
   ['deleteBlock', long, () => deleteBlock('m')],
   ['deletePageAt', threePages, () => deletePageAt(2)],
-  ['writeOut', long, () => { writeOut('# T', 'replace', 'f.pdf', 1); }],
   ['setV', long, () => setV({ size: 40 })],
   ['resetBoxStyle', styled, () => resetBoxStyle()],
   ['shuffleBox', long, () => shuffleBox('m')],
@@ -114,14 +103,6 @@ test('a split-off block is a continued text block that remembers where it came f
   splitAt('m', 1);
   const [a, b] = get().doc.boxes;
   expect([b.kind, b.name, b.color, b.from]).toEqual(['text', 'Main text (continued)', 1, a.id]);
-});
-
-test('imports name the block Main text when replacing, else by the document', () => {
-  open(long());
-  writeOut('# T', 'replace', 'f.pdf', 1);
-  expect(get().doc.boxes.map(b => b.name)).toEqual(['Main text']);
-  writeOut('more', 'append', undefined, 1);
-  expect(get().doc.boxes.map(b => [b.name, b.color])).toEqual([['Main text', 0], ['Text block', 1]]);
 });
 
 test.each([

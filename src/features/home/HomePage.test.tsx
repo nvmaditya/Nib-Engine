@@ -1,13 +1,25 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Toaster, toast as sonner } from 'sonner';
-import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, onDocsChanged, renameDoc } from '@/store/documents';
+import { NewerDocumentError, createDoc, deleteDoc, duplicateDoc, listDocs, onDocsChanged, renameDoc } from '@/store/documents';
+import { cleanSettings } from '@/engine/doc.js';
 import { HomePage } from './HomePage';
+import { fontsLoad } from '@/test/docs';
+import { forgetThumb, thumbFor } from './thumbs';
+
+fontsLoad();
+vi.mock('@/engine/importers.js', async orig => ({ ...(await orig<typeof import('@/engine/importers.js')>()), readDocument: vi.fn(async () => ({ parts: ['# Essay\nHello'], pages: 0, words: 2, name: 'Essay' })) }));
+
+vi.mock('./thumbs', async orig => ({
+  ...(await orig<typeof import('./thumbs')>()),
+  thumbFor: vi.fn(async () => ({ url: 'data:image/jpeg;base64,AAAA', pages: 2 })),
+  peekThumb: vi.fn(() => null),
+  forgetThumb: vi.fn(async () => {}),
+}));
 
 const mem = vi.hoisted(() => ({ docs: [] as any[] }));
 vi.mock('@/store/documents', () => ({
   NewerDocumentError: class NewerDocumentError extends Error {},
-  MissingDocumentError: class MissingDocumentError extends Error {},
   listDocs: vi.fn(async () => [...mem.docs]),
   getDoc: vi.fn(async (id: string) => mem.docs.find(d => d.id === id)),
   createDoc: vi.fn(async (init: any = {}) => { const r = { id: 'new1', title: init.title ?? 'Untitled', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }; mem.docs.unshift(r); return r; }),
@@ -16,19 +28,21 @@ vi.mock('@/store/documents', () => ({
   putDoc: vi.fn(async (r: any) => { mem.docs = mem.docs.map(d => (d.id === r.id ? r : d)); }),
   renameDoc: vi.fn(async (id: string, title: string) => { mem.docs = mem.docs.map(d => (d.id === id ? { ...d, title } : d)); }),
   onDocsChanged: vi.fn(() => () => {}),
+  MissingDocumentError: class MissingDocumentError extends Error {},
+  getPref: vi.fn(async () => undefined),
+  setPref: vi.fn(async () => {}),
 }));
 
 const NOW = new Date(2026, 10, 6, 12).getTime();
-const mk = (id: string, title: string, updatedAt = NOW) => ({ id, title, createdAt: 1, updatedAt, settings: {}, doc: { pageCount: 2, boxes: [], fileName: '' } });
+const mk = (id: string, title: string, updatedAt = NOW) => ({ id, title, createdAt: 1, updatedAt, settings: { ...cleanSettings(null, false), ...(id === 'b2' ? { font: 'zeyada' } : {}) }, doc: { pageCount: 2, boxes: [], fileName: '' } });
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); mem.docs = [mk('a1', 'A'), mk('b2', 'B', new Date(2026, 10, 3).getTime())]; location.hash = '#/'; });
 
 test('lists recent documents and opens one', async () => {
   render(<HomePage />);
   expect(await screen.findByText('B')).toBeInTheDocument();
-  expect(screen.getAllByText('2 pages').length).toBe(2);
-  expect(screen.getByText('Edited today')).toBeInTheDocument();
-  expect(screen.getByText('Edited 3 November 2026')).toBeInTheDocument();
+  expect(await screen.findByText('2 pages · Exam answer · Edited today')).toBeInTheDocument();
+  expect(await screen.findByText('2 pages · Edited 3 November 2026')).toBeInTheDocument();
   await userEvent.click(screen.getByText('A'));
   expect(location.hash).toBe('#/d/a1/write');
 });
@@ -49,6 +63,25 @@ test('delete asks first', async () => {
 });
 
 afterEach(() => { vi.useRealTimers(); });
+
+test('each document shows its first page, how many pages it has, its look and when it was edited', async () => {
+  render(<HomePage />); expect(await screen.findByText('2 pages · Exam answer · Edited today')).toBeInTheDocument();
+  expect(screen.getByText('A').closest('li')!.querySelector('img')).toHaveAttribute('src', 'data:image/jpeg;base64,AAAA');
+  expect(thumbFor).toHaveBeenCalledWith('doc:a1', expect.objectContaining({ font: 'labelle' }), expect.objectContaining({ boxes: [] }), 156, expect.anything());
+});
+test('the page count is the laid-out one, not the stored minimum', async () => {
+  mem.docs = [{ ...mk('a1', 'A'), doc: { pageCount: 1, boxes: [], fileName: '' } }];
+  vi.mocked(thumbFor).mockResolvedValue({ url: 'data:image/jpeg;base64,AAAA', pages: 5 });
+  render(<HomePage />); expect(await screen.findByText('5 pages · Exam answer · Edited today')).toBeInTheDocument();
+});
+test('until page 1 is drawn, the line leaves the page count out', async () => {
+  vi.mocked(thumbFor).mockReturnValue(new Promise(() => {}));
+  render(<HomePage />); expect(await screen.findAllByText('Exam answer · Edited today')).toHaveLength(1);
+});
+test('Delete forgets the thumbnail', async () => {
+  render(<HomePage />); await userEvent.click(await screen.findByRole('button', { name: 'More for A' })); await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' })); await waitFor(() => expect(forgetThumb).toHaveBeenCalledWith('doc:a1'));
+});
 
 test('leaving a document shows its latest title', async () => {
   const { openDocument, renameDocument } = await import('@/store/editor');
@@ -113,7 +146,6 @@ test('a rename, duplicate or delete that fails says so and closes its dialog', a
 });
 
 const wait = (ms: number) => act(() => new Promise<void>(r => { setTimeout(r, ms); }));
-
 test('while someone types in another tab, Home reads the list again at most once a second, and not while it is hidden', async () => {
   render(<HomePage />);
   await screen.findByText('A');
@@ -137,4 +169,23 @@ test('while someone types in another tab, Home reads the list again at most once
   } finally { delete (document as { visibilityState?: string }).visibilityState; }
   act(() => { document.dispatchEvent(new Event('visibilitychange')); });
   await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(3)); // shown again: what it missed, at once
+});
+
+test('Home, top to bottom: Import, the templates, Recent, then where things are kept', async () => {
+  render(<HomePage />); await screen.findByText('A');
+  const hero = screen.getByRole('button', { name: /^Import a PDF, Word or text file/ }), [tpl, recent] = screen.getAllByRole('heading', { level: 2 });
+  expect([tpl.textContent, recent.textContent]).toEqual(['Start something new', 'Recent']);
+  expect(hero.compareDocumentPosition(tpl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(tpl.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(hero).toHaveTextContent('Headings, lists, bold, underline and crossed-out words come across.');
+  expect(screen.getByText('Everything is saved on this device. Nothing is uploaded.')).toBeInTheDocument();
+});
+test('dragging a file over Home says where to drop it and lights up the hero', async () => {
+  render(<HomePage />); await screen.findByText('A'); fireEvent.dragEnter(window, { dataTransfer: { types: ['Files'] } });
+  expect(screen.getByText('Drop to import this document')).toBeInTheDocument(); expect(screen.getByRole('button', { name: /^Import a PDF/ })).toHaveClass('border-primary');
+  fireEvent.dragLeave(window, { dataTransfer: { types: ['Files'] } }); expect(screen.queryByText('Drop to import this document')).toBeNull();
+});
+test('No documents yet: New document makes a Blank page', async () => {
+  mem.docs = []; render(<HomePage />); await userEvent.click(await screen.findByRole('button', { name: 'New document' }));
+  await waitFor(() => expect(createDoc).toHaveBeenCalledWith(expect.objectContaining({ title: 'Untitled', doc: expect.objectContaining({ boxes: [expect.objectContaining({ name: 'Main text', text: '' })] }) })));
 });

@@ -81,7 +81,8 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savePending = false;
 
 const historyFlags = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
-const snapshotState = () => { const s = get(); return JSON.stringify({ S: s.S, doc: s.doc, title: s.title }); };
+/** The settings, blocks and title, as `update` records them for undo. */
+export const stateSnapshot = (): string => { const s = get(); return JSON.stringify({ S: s.S, doc: s.doc, title: s.title }); };
 
 /** Only documents kept in IndexedDB are saved; the in-memory one (storage blocked) has nowhere to go. */
 const stored = (id: string | null): id is string => id !== null && id !== MEMORY_ID;
@@ -92,6 +93,8 @@ export const NOT_ON_DEVICE = 'That document isn’t on this device.';
 // Another tab with the same document open (see installDocFollow).
 export const FOLLOWED = 'Updated with changes from another tab.';
 export const NOT_KEPT = 'This document was changed in another tab, so your last change wasn’t kept.';
+/** The same for a document no longer open (closed, or another opened, while its change was written): it is named. */
+export const notKeptIn = (title: string): string => `“${title}” was changed in another tab, so your last change wasn’t kept.`;
 export const DELETED_ELSEWHERE = 'This document was deleted in another tab.';
 export const COPY_LOST = 'Copy your text';
 export const COPIED = 'Copied your text.';
@@ -154,7 +157,8 @@ async function saveNow(): Promise<void> {
     if (seq === saveSeq && get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
   } catch (e) {
     if (get().docId !== id) { // closed (Home), or another document opened, while it was written
-      if (e instanceof StaleDocumentError) notKept(lostText(texts, prior)); // nothing shows it now, so say so here
+      // Nothing shows it now, so say so here, by the name it had when it was written.
+      if (e instanceof StaleDocumentError) notKept(lostText(texts, prior), rec.title);
       return;
     }
     if (seq !== saveSeq || opened !== at) return; // superseded, or the open copy isn't the one it was made from
@@ -215,9 +219,12 @@ function readAgain(rec: DocRecord, lost: boolean): void {
   if (lost) notKept(mine); else toast(FOLLOWED);
 }
 
-/** This tab's last change wasn't kept (another tab saved first): say so, with Copy for the words it lost. */
-function notKept(mine: string): void {
-  toast(NOT_KEPT, mine ? { label: COPY_LOST, fn: () => copyText(mine) } : undefined);
+/**
+ * This tab's last change wasn't kept (another tab saved first): say so, with Copy for the words it lost. `title` names
+ * a document that is no longer open; the open one is "This document".
+ */
+function notKept(mine: string, title?: string): void {
+  toast(title === undefined ? NOT_KEPT : notKeptIn(title), mine ? { label: COPY_LOST, fn: () => copyText(mine) } : undefined);
 }
 
 function copyText(text: string): void {
@@ -349,7 +356,7 @@ export function gesture(kind: string): (fn: (s: EditorState) => void, opts?: Omi
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.
 export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOptions = {}): void {
   const { save = true, layout = 'now', history: hist } = opts;
-  if (save && hist !== false) { history.record(snapshotState(), hist ?? 'edit:' + ++edits); historyTick++; }
+  if (save && hist !== false) { history.record(stateSnapshot(), hist ?? 'edit:' + ++edits); historyTick++; }
   if (fn) fn(get());
   const s = get();
   use(s.S, s.doc);
@@ -376,25 +383,34 @@ export function flushLayout(): void {
 }
 beforeRouteChange(flushLayout);
 
-function restore(snap: string): void {
+/** A `stateSnapshot()` read back and cleaned, as it is put back. */
+function readSnapshot(snap: string): { S: Settings; doc: EngineDoc; title: string } {
   const o = JSON.parse(snap) as { S: unknown; doc: unknown; title: string };
+  return { S: cleanSettings(o.S, false), doc: cleanDoc(o.doc) ?? emptyDoc(), title: o.title };
+}
+/** Two snapshots hold the same state, whatever order their keys were written in. */
+const sameState = (a: string, b: string): boolean => a === b || JSON.stringify(readSnapshot(a)) === JSON.stringify(readSnapshot(b));
+
+/** Put back the settings, blocks and title of a `stateSnapshot()`, as a step under the history key `key` (or none). */
+function restore(snap: string, key: string | false): void {
+  const o = readSnapshot(snap);
   update(s => {
     s.title = o.title;
-    s.S = cleanSettings(o.S, false);
-    s.doc = cleanDoc(o.doc) ?? emptyDoc();
+    s.S = o.S;
+    s.doc = o.doc;
     if (s.selectedId && !s.doc.boxes.some(b => b.id === s.selectedId)) s.selectedId = null;
     if (!s.selectedId && s.scope === 'box') s.scope = 'all';
     clearMeasureCache();
-  }, { history: false });
+  }, { history: key });
 }
 
 export function undo(): void {
-  const snap = history.undo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); takeDownUndoMessages(); }
+  const snap = history.undo(stateSnapshot());
+  if (snap !== null) { historyTick++; restore(snap, false); takeDownUndoMessages(); }
 }
 export function redo(): void {
-  const snap = history.redo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); takeDownUndoMessages(); }
+  const snap = history.redo(stateSnapshot());
+  if (snap !== null) { historyTick++; restore(snap, false); takeDownUndoMessages(); }
 }
 
 export function renameDocument(title: string): void {
@@ -441,6 +457,9 @@ export function docAction(label: string, fn: () => void): ToastAction {
 export const snapshot = (): string => JSON.stringify(get().doc);
 export const undoTo = (snap: string, sel: string | null): ToastAction =>
   docAction('Undo', () => update(s => { s.doc = cleanDoc(JSON.parse(snap)) ?? emptyDoc(); s.selectedId = sel; }, { history: 'undo-to' }));
+/** Undo for a change to the settings and the title as well (an import): back to a `stateSnapshot()`, as one step. Nothing to put back records nothing. */
+export const undoToState = (snap: string): ToastAction =>
+  docAction('Undo', () => { if (!sameState(stateSnapshot(), snap)) restore(snap, 'undo-to'); });
 
 let caretSeq = 0;
 /** Ask for the caret at a markup offset of a block (a clicked word, the change an undo made). Also selects the block. */

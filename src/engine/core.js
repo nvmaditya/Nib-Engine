@@ -1450,3 +1450,14 @@ export {
   computeLayout, renderSegment, segBounds, paintPaper, paperKey, composePage, frameShot, applyLook,
   geom, snapX, snapY, rng,
 };
+
+// Whether the photographed sheet has loaded into the engine's own image (false when it failed to load).
+// Read-only: it listens to the image the engine paints from and changes nothing.
+export function photoLoaded() {
+  if (photoReady) return Promise.resolve(true);
+  if (PHOTO.complete) return Promise.resolve(false);
+  return new Promise(resolve => {
+    PHOTO.addEventListener('load', () => resolve(true), { once: true });
+    PHOTO.addEventListener('error', () => resolve(false), { once: true });
+  });
+}

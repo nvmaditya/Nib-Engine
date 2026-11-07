@@ -99,7 +99,7 @@ test('How it looks is the document’s: one undo step each, and choosing it agai
   three(); render(<Live />); await userEvent.click(screen.getByRole('radio', { name: 'As written' })); expect(get().canUndo).toBe(false);
   await userEvent.click(screen.getByRole('radio', { name: 'Black and white' })); expect(get().S.look).toBe('bw');
   await userEvent.click(screen.getByRole('switch', { name: 'Slight camera tilt' })); expect(get().S.tilt).toBe(true);
-  undo(); expect(get().S.tilt).toBe(false); undo(); expect(get().S.look).toBe('none'); expect(get().canUndo).toBe(false);
+  act(() => undo()); expect(get().S.tilt).toBe(false); act(() => undo()); expect(get().S.look).toBe('none'); expect(get().canUndo).toBe(false);
 });
 
 test('the panel itself records nothing for the look or the tilt already chosen', () => {
@@ -125,7 +125,7 @@ test('the file name shows its ending, starts as the title, and one edit is one u
   expect(f).toHaveAttribute('maxlength', '80'); expect(f).toHaveAttribute('spellcheck', 'false'); expect(f).toHaveAttribute('autocomplete', 'off');
   await userEvent.click(f); await userEvent.tab(); expect(get().canUndo).toBe(false); // looked at, not changed
   await userEvent.type(f, 'Week 1/notes.pdf'); await userEvent.tab(); expect(get().doc.fileName).toBe('Week 1 notes');
-  undo(); expect(get().doc.fileName).toBe(''); expect(get().canUndo).toBe(false);
+  act(() => undo()); expect(get().doc.fileName).toBe(''); expect(get().canUndo).toBe(false);
 });
 
 test('Enter leaves the file name field, cleaned', async () => {
@@ -134,7 +134,7 @@ test('Enter leaves the file name field, cleaned', async () => {
   expect(f).not.toHaveFocus(); expect(get().doc.fileName).toBe('notes final');
   // A second edit is a second step.
   await userEvent.type(f, '!'); await userEvent.tab();
-  undo(); expect(get().doc.fileName).toBe('notes final'); undo(); expect(get().doc.fileName).toBe(''); expect(get().canUndo).toBe(false);
+  act(() => undo()); expect(get().doc.fileName).toBe('notes final'); act(() => undo()); expect(get().doc.fileName).toBe(''); expect(get().canUndo).toBe(false);
 });
 
 test('the file name placeholder follows the title, cleaned', () => {

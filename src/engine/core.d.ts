@@ -6,6 +6,7 @@ export function loadFont(id: string): Promise<boolean>;
 export const fontReady: (id: string) => boolean;
 export function engineFor(cfg: FontCfg): unknown;
 export const PHOTO_URL: string;
+export function photoLoaded(): Promise<boolean>;
 
 export const settingsKey: () => string;
 export const segId: (sg: Seg) => string;

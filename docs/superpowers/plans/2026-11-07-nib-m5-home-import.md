@@ -118,6 +118,7 @@ Exact strings, used verbatim. `{x}` is filled in. `{pages}` is `1 page` or `{n} 
 | Import: footer | `Cancel` · `Write it out` |
 | Import: refusals | the Formats table's messages · `There’s no text to write out.` (the preview was emptied) |
 | After Write it out | Replace, or a new document: `Written out. Each page’s part can be moved, resized, edited or split off on its own.` (with `Undo` in an open document) · Add after: `Added after the last page, carrying on “{block}”.` or `Added after the last page as “{block}”.` (with `Undo`) · a document that can't be made (M1): `Nib can’t create documents on this device right now.` |
+| Leaving a document (Home, or another document opened) whose last change another tab beat | `“{title}” was changed in another tab, so your last change wasn’t kept.`, with `Copy your text`. `{title}` is its title when the change was written. (The open document's own conflict stays `This document was changed in another tab, so your last change wasn’t kept.`) |
 
 ## Review Focus
 

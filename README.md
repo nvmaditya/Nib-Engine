@@ -10,8 +10,8 @@ The repository was renamed from `longhand` to `nib-engine`, so the old address (
 
 ## What it does today
 
-- **Home** lists your documents. They are saved on the device, in the browser's own storage.
-- **Import** reads a PDF, Word (.docx) or text file; headings, lists, bold, underline and crossed-out words come across.
+- **Home** puts Import first, then six templates, each with its own look and paper, then Recent: your documents, each with its first page drawn, its page count, look and last edit, and Rename, Duplicate and Delete. They are saved on the device, in the browser's own storage.
+- **Import** reads a PDF, Word or text file into a rich, editable preview. Replace what is on the pages or Add after the last page; start a new page where the file does; pick a look; add a Header block if you like. The text becomes one main block that flows page by page.
 - **Write, Style and Export** are the three stages of a document. Write is for the text and where it sits on the pages, Style is for the hand, pen, ink and paper, and Export downloads the result.
 - **Hands and pens**: 33 hands, or upload your own font (TTF, OTF, WOFF), which Nib remembers on the device. Fineliner, ballpoint, gel, felt tip and pencil, drawn at the pen's real line width.
 - **Realism**: each letter bends a little differently, lines climb and sag, the pen presses harder on downstrokes, and the ink runs darker and lighter. Optional mistakes are crossed out and written again.
@@ -21,6 +21,41 @@ The repository was renamed from `longhand` to `nib-engine`, so the old address (
 - **Simple markup** in the editor: `# Title`, `## Heading`, `**bold**`, `*underline*`, `==highlight==`, `~~cross out~~`, `- lists`, `> notes`, `\newpage`.
 
 Everything happens in the browser. Nothing is uploaded.
+
+## Home
+
+Home is where you start. The big **Import a PDF, Word or text file** button comes first, and you can also drop a file anywhere on the page. Under it, **Start something new** has six templates. Each one is an ordinary document with its own look, so you can change everything later:
+
+- **Blank page**: Exam answer on ruled paper, nothing on it yet.
+- **Assignment**: Exam answer, with a Header block (today's date filled in), a title and a heading.
+- **Class notes**: Neat notes on grid paper, with a heading and a list.
+- **Letter**: the Letter look on plain paper, with `Dear …,` and `With love,`.
+- **Journal page**: Journal on a yellow pad, starting with today's date.
+- **Card**: the Letter look at a large size, with one message in the middle of the page.
+
+**Recent** lists your documents. Each row shows page 1 as the engine draws it, the title, and a line such as `2 pages · Neat notes · Edited today` (the page count appears once page 1 has been laid out, and the look only when one matches). The ⋯ menu has Rename, Duplicate and Delete. Everything is saved on the device and nothing is uploaded.
+
+### Working in more than one tab
+
+Tabs follow each other: a document you rename, duplicate or delete in one tab changes in the Home of another, and an open document picks up edits made in another tab. If both tabs changed the same document, Nib keeps the newer version and offers **Copy your text**, so what you wrote in the other one is not lost.
+
+## Import
+
+Import (Home's big button, the top bar's **Import a file**, or Write's **Import**) reads the file in the browser and shows its text in a preview before anything is written.
+
+- **PDF**: the text of each page, with headings by size, lists, joined-up lines, and no page numbers. One part per page. A PDF with no text (a scan or a photo) or with a password is refused, with a message that says why.
+- **Word (.docx)**: headings, bold, underline, crossed-out words, lists, quotes and table rows come across; images do not. A page break starts a new part. An old `.doc`, a locked file, `.rtf`, `.odt` and pictures are refused with their own messages.
+- **Text and Markdown** (`.txt`, `.md`): read as Nib's markup. A form feed starts a new part.
+- Anything else, an empty file, or one over 40 MB says so, and the dialog lets you choose another file.
+
+The preview is the same rich editor as Write: fix anything before it is written out. It has its own undo (Ctrl+Z inside it never touches the document behind). The choices:
+
+- **Where it goes** (in an open document): **Replace what's on the pages**, or **Add after the last page**. Add after carries on the writing that ends on the last page, from the top of a new page, or starts a block of its own when nothing ends there. **Split here** at that page separates it again.
+- **Pages**: **Start a new page where the file does**, for files with more than one part.
+- **Look**: Keep this document's look (open documents only), one of the built-in looks or one you saved, each drawn in its own hand.
+- **Header**: **Add a header block** with Name, Class and Date, at the top right of page 1.
+
+**Write it out** makes one main block that flows page by page. In an open document it is one undo step. From Home it makes a new document. On phones the dialog is full screen. The file is read on the device: nothing is uploaded.
 
 ## Write
 
@@ -123,6 +158,9 @@ The workflow in `.github/workflows/deploy.yml` installs, runs the tests, builds 
 - `src/app/` holds the root component and the route between Home and the document stages.
 - `src/main.tsx` starts the app: it applies the saved theme, adds a `@font-face` for each hand (the browser downloads a file only when something on screen uses it) and renders `App`.
 - `src/shell/` holds the top bar, the stage navigation and the undo shortcuts.
+- `src/features/home/` is Home: `HomePage.tsx`, `TemplateGrid.tsx` and `templates.ts` (the six templates), `RecentList.tsx` and `recent.ts`, `PageThumb.tsx` and `thumbs.ts` (page 1 drawn by the engine and kept in `prefs`), and `actions.ts`.
+- `src/features/import/` is the Import dialog: `ImportDialog.tsx`, `ImportPreview.tsx` and `preview.ts`, `ImportOptions.tsx` and `options.ts`, and `apply.ts` (writing it out).
+- `src/features/doc/build.ts` builds new and imported documents.
 - `src/features/` holds one folder per part of the app: `home`, `import`, `write`, `style`, `export`, `doc`, `editor` (the rich-text block editor and its toolbar) and `pages` (the handwritten page views, block frames and dragging). `write` holds the Pages and Outline views, menus and page dragging, and `doc` holds the actions that change blocks and pages.
   - `style` holds the Style panel: `StylePanel.tsx` with its sections (`ScopeBar`, `LooksSection`, `HandSection` and `HandPicker`, `PenInkSection`, `PaperSection`, `NaturalSection`, `SizeSection`), `looks.ts`, `hands.ts` (the picker's search and filters), `fonts.ts` (uploaded fonts: reading, registering and storing them), `prefs.ts` (saved looks, favourites and preview text, kept on the device), and `fit.ts` (the page count and Fit back, which tries sizes on copies laid out by the engine). `HandSample.tsx` draws a sample of any hand, look or paper through the engine's `drawSample`.
   - `doc/StageSheet.tsx` is the phone sheet that Style and Export share: it rests at three heights and keeps the pages above it live.
@@ -134,7 +172,7 @@ The workflow in `.github/workflows/deploy.yml` installs, runs the tests, builds 
     - `build.ts`: renders the pages and wraps them into the file. `run.ts`: Download and Share. `estimate.ts`: the size estimate.
 - `src/components/ui/` holds the shared interface components (Radix primitives styled in the shadcn way). `drawer.tsx` is the bottom sheet (vaul) that Style and Export use on phones.
 - `src/brand/` holds the Nib logo; `src/lib/` holds small helpers such as the theme and `media.ts` (the 860 px `wide:` breakpoint as a `useWide()` hook, which switches Write between its wide and phone layouts); `src/styles/app.css` holds the Tailwind setup and design tokens.
-- `scripts/smoke.mjs` is the browser smoke test.
+- `scripts/smoke.mjs` is the browser smoke test. It picks a free port, so two runs can go side by side. `scripts/fixtures.mjs` makes the `.docx` and PDF that the tests and the smoke run import.
 - `public/fonts/` holds the handwriting fonts, which load only when used. Their licences are in `public/fonts/licenses/`, and [FONTS.md](FONTS.md) lists them all.
 - `public/paper/photo.webp` is the photographed sheet used by the Photo paper.
 
