@@ -1,4 +1,5 @@
-// The Style panel's sticky header: its title, New variation, and which blocks the panel changes.
+// The Style panel's sticky header: its title, New variation, the page count notice, and which blocks
+// the panel changes. (The notice comes before the scope switch, so a phone's lowest sheet shows it.)
 import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import { Shuffle } from 'lucide-react';
 import { hasOwnStyle } from '@/engine/core.js';
@@ -17,7 +18,7 @@ export function ownStyleLine(names: string[]): string {
 
 const seg = 'flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium text-muted transition-colors hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:bg-surface aria-pressed:text-fg aria-pressed:shadow-sm';
 
-export function ScopeBar({ children }: { children?: ReactNode }) {
+export function ScopeBar({ notice }: { notice?: ReactNode }) {
   const scopeState = useEditor(s => s.scope);
   const selectedId = useEditor(s => s.selectedId);
   // One string per change that matters here, so a text edit or a drag doesn't redraw the header.
@@ -42,6 +43,8 @@ export function ScopeBar({ children }: { children?: ReactNode }) {
           <Shuffle />New variation
         </Button>
       </div>
+      {/* Takes no room while there is no notice (:empty). */}
+      <div className="mb-3 empty:hidden">{notice}</div>
       {b && (
         <div role="group" aria-label="Apply changes to" className="grid grid-cols-2 gap-1 rounded-lg bg-surface-2 p-1">
           <button type="button" className={seg} aria-pressed={scope === 'all'} onClick={() => setScope('all')}>Whole document</button>
@@ -58,7 +61,6 @@ export function ScopeBar({ children }: { children?: ReactNode }) {
           <Button variant="outline" size="sm" onClick={resetBoxStyle}>Match document</Button>
         </div>
       )}
-      {children}
     </div>
   );
 }

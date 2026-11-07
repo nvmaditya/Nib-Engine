@@ -1,6 +1,6 @@
 // The Style panel as a whole: its sections in order, every setting the engine reads, Only a block,
 // Fit back in the real app, and where the panel sits (beside the pages, or a sheet over them on phones).
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
@@ -119,6 +119,29 @@ test('on a phone, Style is a sheet over the pages, and it goes with the stage', 
   expect(screen.queryByRole('dialog', { name: 'Style', hidden: true })).toBeNull();
   await userEvent.click(stageButton('Style'));
   expect(await screen.findByRole('dialog', { name: 'Style' })).toBeInTheDocument();
+});
+
+test('on a phone, the sheet opens up to just below the stage switcher, and the pages make room for it', async () => {
+  phone();
+  // The Style stage starts 89 px down, below the top bar and its stage switcher (jsdom's window is 768 px tall).
+  const rect = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return this.parentElement?.dataset.stage === 'style' ? new DOMRect(0, 89, 390, 679) : rect.call(this);
+  });
+  try {
+    await openApp('style');
+    const sheet = await screen.findByRole('dialog', { name: 'Style' });
+    const room = () => screen.getByRole('main', { name: 'Pages' }).parentElement!.style.getPropertyValue('--sheet-shown');
+    expect(room()).toBe('55dvh');
+    // Up one height: the top one, whose top edge is at 89 px.
+    screen.getByRole('button', { name: 'Drag to show more or less of Style' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(sheet.style.getPropertyValue('--snap-point-height')).toBe('89px'));
+    expect(room()).toBe('679px');
+    expect(screen.getByRole('main', { name: 'Pages' })).toHaveClass('pb-[calc(var(--sheet-shown)+12px)]');
+  } finally {
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
+  }
 });
 
 test('on a phone, the sheet doesn’t keep Escape from leaving the block', async () => {
