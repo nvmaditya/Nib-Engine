@@ -141,7 +141,7 @@ test('live follow: a tab with nothing waiting shows the other tab’s save in pl
   expect([s.writeView, s.selectedId, s.scope, s.canUndo, s.saving]).toEqual(['outline', 'm', 'box', false, 'saved']);
   expect(s.layoutTick).toBeGreaterThan(tick);
   expect(messages(b)).toEqual(['Did it.', FOLLOWED]);
-  expect(b.toast.dismiss.mock.calls).toEqual([['Did it.']]); // messages whose Undo was for the old version go, one by one
+  expect(b.toast.dismiss.mock.calls).toEqual([['Did it.#0']]); // messages whose Undo was for the old version go, one by one (by id)
 });
 
 test('a message’s Undo from before a follow does nothing', async () => {
