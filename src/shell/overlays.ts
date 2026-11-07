@@ -40,14 +40,15 @@ const focusFirstIn = (root: Element | null): boolean => !!root && [...root.query
  * An overlay's `onCloseAutoFocus`. A modal Radix dialog gives the focus to its trigger when it closes, and the
  * overlays have none, so the focus would be left on the page itself. Instead it goes back to what had it before
  * the first overlay opened, or stays in the overlay that took this one's place. When that can't take it any more
- * (gone, or in a stage no longer shown), it goes to the first control in the stage on screen, else the top bar's.
+ * (gone, or in a stage no longer shown), it goes to `instead` if that takes it, else the first control in the
+ * stage on screen, else the top bar's.
  */
-export function focusBack(e: Event): void {
+export function focusBack(e: Event, instead?: () => boolean): void {
   e.preventDefault();
   if (useOverlays.getState().open) return;
   const el = before;
   before = null;
-  if (!el || focusOn(el)) return;
+  if (!el || focusOn(el) || instead?.()) return;
   if (!focusFirstIn(document.querySelector('[data-stage]:not([hidden])'))) focusFirstIn(document.querySelector('header'));
 }
 

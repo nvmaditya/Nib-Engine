@@ -10,6 +10,7 @@ import { closeOverlay, focusBack, useOverlays } from './overlays';
 import { SHORTCUTS } from './shortcuts';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
+vi.mock('./CommandPalette', () => ({ CommandPalette: () => null })); // a stand-in takes its place here (its own tests: CommandPalette.test.tsx)
 
 beforeEach(async () => { await flushSave(); useOverlays.setState({ open: null }); });
 afterEach(() => { delete (navigator as unknown as Record<string, unknown>).platform; });

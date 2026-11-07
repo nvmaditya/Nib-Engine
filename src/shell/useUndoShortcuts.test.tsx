@@ -9,6 +9,7 @@ import { openOverlay, useOverlays } from './overlays';
 import { useUndoShortcuts } from './useUndoShortcuts';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
+vi.mock('./CommandPalette', () => ({ CommandPalette: () => null })); // a stand-in takes its place here (its own tests: CommandPalette.test.tsx)
 
 function Page() {
   useUndoShortcuts();
