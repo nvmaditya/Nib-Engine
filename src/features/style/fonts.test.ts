@@ -4,7 +4,7 @@ import { engineFor, fontReady } from '@/engine/core.js';
 import { getDb } from '@/store/db';
 import { setPref } from '@/store/documents';
 import { fontFile } from '@/test/fonts';
-import { addFontFile, loadUploadedFonts, storedFontIds } from './fonts';
+import { addFontFile, FONT_KEY_PREFIX, fontId, loadUploadedFonts, storedFontIds } from './fonts';
 
 vi.mock('@/store/documents', async importOriginal => {
   const actual = await importOriginal<typeof import('@/store/documents')>();
@@ -39,5 +39,14 @@ test('a hand without letter alternates has one shape per letter', async () => { 
 test('an empty name becomes Your font and a long one is cut to 40 characters', async () => {
   expect(await addFontFile(fontFile('labelle', '.woff'))).toMatchObject({ name: 'Your font' });
   expect(await addFontFile(fontFile('caveat', 'y'.repeat(60) + '.woff'))).toMatchObject({ name: 'y'.repeat(40) });
+});
+test('a font another tab stored after this page started is registered the next time, once', async () => {
+  await addFontFile(fontFile('caveat', 'Mine.woff'));
+  const buf = await fontFile('kalam', 'Theirs.woff').arrayBuffer(), id = fontId(buf);
+  await (await getDb()).put('prefs', { id, name: 'Theirs', buf, forms: 1, addedAt: Date.now() }, FONT_KEY_PREFIX + id);
+  expect(FONTS.some(f => f.id === id)).toBe(false);
+  expect(await loadUploadedFonts()).toBe(1);
+  expect(FONTS.find(f => f.id === id)).toMatchObject({ name: 'Theirs', group: 'mine' });
+  expect(await loadUploadedFonts()).toBe(0);
 });
 test('a broken stored record is skipped', async () => { await (await getDb()).put('prefs', { id: 'up-x', name: 'X', buf: new ArrayBuffer(8), forms: 1, addedAt: 1 }, 'font:up-x'); expect(await loadUploadedFonts()).toBe(0); expect(FONTS.some(f => f.id === 'up-x')).toBe(false); });

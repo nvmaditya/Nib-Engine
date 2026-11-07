@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { loadUploadedFonts } from '@/features/style/fonts';
 import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, putDoc, type DocRecord } from '@/store/documents';
 import { SAVE_NEWER, closeDocument, toast, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
@@ -33,7 +34,10 @@ export function HomePage() {
   const memory = useEditor(s => s.docId === MEMORY_ID);
   const memTitle = useEditor(s => s.title);
   const memDoc = useEditor(s => s.doc);
+  // Reading a document cleans it, which drops a hand this page doesn't know, and a rename or duplicate
+  // would write that loss. Another tab may have added one since this page started, so register it first.
   const reload = useCallback(async () => {
+    await loadUploadedFonts();
     try { setDocs(await listDocs()); } catch { setDocs('unreadable'); }
   }, []);
   useEffect(() => {
@@ -74,7 +78,7 @@ export function HomePage() {
     setRenaming(null);
     await change(() => putDoc({ ...d, title, updatedAt: Date.now() }));
   };
-  const doDuplicate = (d: DocRecord) => change(() => duplicateDoc(d.id));
+  const doDuplicate = (d: DocRecord) => change(() => loadUploadedFonts().then(() => duplicateDoc(d.id)));
   const doDelete = async () => {
     if (!deleting) return;
     const d = deleting;

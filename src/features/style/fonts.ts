@@ -80,16 +80,31 @@ function wellFormed(v: unknown): v is FontRecord {
     && typeof r.forms === 'number' && typeof r.addedAt === 'number';
 }
 
-/** Register every stored font. Run before any document is read, so no document loses its hand. Never rejects. */
+/**
+ * Register every stored font this page doesn't have yet, and say how many. Run before any document is
+ * read (another tab may have added a font since this page started), so no document loses its hand.
+ * Only the new ones' files are read, so it is cheap to run again. Never rejects.
+ */
 export async function loadUploadedFonts(): Promise<number> {
   try {
-    const all = (await (await getDb()).getAll('prefs', RANGE())) as unknown[];
-    const recs = all.filter(wellFormed).sort((a, b) => a.addedAt - b.addedAt);
+    const db = await getDb();
+    const keys = (await db.getAllKeys('prefs', RANGE())).map(String);
+    const missing = keys.filter(k => !unusable.has(k) && !FONTS.some(f => FONT_KEY_PREFIX + f.id === k));
+    if (!missing.length) return 0;
+    const tx = db.transaction('prefs');
+    const found = await Promise.all(missing.map(async key => ({ key, rec: (await tx.store.get(key)) as unknown })));
     let n = 0;
-    for (const rec of recs) { try { if (registerFont(rec)) n++; } catch { /* skip this one */ } }
+    for (const { key, rec } of found.sort((a, b) => order(a.rec) - order(b.rec))) {
+      let ok = false;
+      try { ok = wellFormed(rec) && !!registerFont(rec); } catch { /* skip this one */ }
+      if (ok) n++; else unusable.add(key);
+    }
     return n;
   } catch { return 0; }
 }
+/** Stored records that aren't a font Nib can use: they are not read again. */
+const unusable = new Set<string>();
+const order = (rec: unknown): number => (wellFormed(rec) ? rec.addedAt : 0);
 
 export async function storedFontIds(): Promise<string[]> {
   try { return (await (await getDb()).getAllKeys('prefs', RANGE())).map(k => String(k).slice(FONT_KEY_PREFIX.length)); } catch { return []; }
