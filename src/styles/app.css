@@ -241,6 +241,13 @@
     cursor: grabbing;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
   }
+  /* The frames lie under the ink, but a turned frame, or one being dragged, is a stacking context of its
+     own: its name tag (z-index 3) would then be ranked inside it, under the ink. While the tag shows,
+     such a frame is raised over the ink as a whole. */
+  .block-frame.tilted:is(:hover, :focus-within, .selected, .own),
+  .sheet.dragging .block-frame.selected {
+    z-index: 3;
+  }
   .block-frame:focus-visible {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--bc) 40%, transparent);
   }

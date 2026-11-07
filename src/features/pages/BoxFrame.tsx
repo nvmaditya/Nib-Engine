@@ -36,14 +36,24 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
   const tilt = segTilt(sg);
   useLayoutEffect(() => { if (!drag.active && ref.current) ref.current.style.transform = ''; });
   // The name tag hangs from the block's left edge; where that would put its right end past the page's
-  // (a margin note on a phone, with its Own style badge), it shifts left to end at the page's edge.
+  // (a margin note on a phone, with its Own style badge), it shifts left to end at the page's edge. The
+  // tag's `left` starts inside the frame's border, and a turned note carries its tag round with it, so
+  // after the layout sum the tag's drawn box is measured and moved in by whatever still sticks out.
   const tagRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    const t = tagRef.current, paper = ref.current?.closest<HTMLElement>('[data-paper]');
-    if (!t || !paper) return;
-    const left = Math.min(-2, paper.clientWidth - sg.x * s - t.offsetWidth);
-    t.style.left = left < -2 && paper.clientWidth > 0 ? `${Math.max(left, -sg.x * s)}px` : '';
-  }, [sg.x, s, box.name, label, own]);
+    const t = tagRef.current, f = ref.current, paper = f?.closest<HTMLElement>('[data-paper]');
+    if (!t || !f || !paper) return;
+    const least = -sg.x * s;
+    const place = (left: number) => { t.style.left = left < -2 && paper.clientWidth > 0 ? `${Math.max(left, least)}px` : ''; };
+    place(Math.min(-2, paper.clientWidth - sg.x * s - f.clientLeft - t.offsetWidth));
+    for (let n = 0; n < 3; n++) {
+      const over = t.getBoundingClientRect().right - paper.getBoundingClientRect().right;
+      if (!(over > 0.5)) break;
+      const at = parseFloat(t.style.left) || -2;
+      if (at <= least) break;
+      place(at - over);
+    }
+  }, [sg.x, s, box.name, label, own, tilt]);
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -85,7 +95,7 @@ export function BoxFrame({ sg, s, gap, parts, selected, mode, tagMenu, onWordCli
     '--bc': blockColor(box), rotate: tilt ? `${tilt}rad` : undefined,
   } as CSSProperties;
   return (
-    <div ref={ref} className={cn('block-frame', selected && 'selected', sg.idx > 0 && 'cont', own && 'own', !box.text.trim() && 'empty')}
+    <div ref={ref} className={cn('block-frame', selected && 'selected', sg.idx > 0 && 'cont', own && 'own', tilt !== 0 && 'tilted', !box.text.trim() && 'empty')}
       data-id={segId(sg)} tabIndex={0} role="group" aria-label={label ? `${box.name}, part ${label}` : box.name} style={style}
       onPointerDown={onPointerDown} onClick={onClick} onKeyDown={onKeyDown}
       onFocus={() => { if (!selected) select(box.id); }}>
