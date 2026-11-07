@@ -42,6 +42,12 @@ test('Ctrl+K works from a field and the editor as well, and the browser’s own 
   screen.getByLabelText('Editor').focus(); press('K', { ctrlKey: true }); expect(open()).toBe(null);
 });
 
+test('a held Ctrl+K toggles once, however long it repeats', () => { press('k', { ctrlKey: true }); expect(press('k', { ctrlKey: true, repeat: true })).toBe(false); expect(open()).toBe('palette'); });
+
+test('keys pressed while an input method composes are its own', () => { press('?', { shiftKey: true, isComposing: true }); press('k', { ctrlKey: true, isComposing: true }); expect(open()).toBe(null); });
+
+test('Ctrl+Alt+K and Ctrl+Alt+/ aren’t the app’s', () => { expect(press('k', { ctrlKey: true, altKey: true })).toBe(true); expect(press('/', { ctrlKey: true, altKey: true })).toBe(true); expect(open()).toBe(null); });
+
 test('one overlay at a time: Ctrl+K swaps the shortcuts for the palette', () => { press('?', { shiftKey: true }); press('k', { ctrlKey: true }); expect(open()).toBe('palette'); });
 
 test('and Ctrl+/ swaps the palette for the shortcuts', () => { press('k', { ctrlKey: true }); press('/', { ctrlKey: true }); expect(open()).toBe('shortcuts'); });
