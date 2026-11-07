@@ -89,7 +89,7 @@ export function ExportPanel({ pages }: { pages: number | null }) {
   const known = pages !== null;
   const plan = planOf({ format, zip, quality }, { choose, out }, pages ?? 1, fileName, title);
   const n = plan.pages.length;
-  const sample = useSizeEstimate(plan.pages[0] ?? null);
+  const sample = useSizeEstimate(plan.pages);
   const progress = making(run);
   const size = known && !progress && n && sample ? formatSize(estimateBytes(plan, sample)) : null;
   const waiting = !fontsInUse().every(fontReady);

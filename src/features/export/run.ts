@@ -1,7 +1,8 @@
 // Download and Share. Each makes the files from a copy of the document frozen when it was pressed, so
 // nothing typed, undone or opened meanwhile gets into them, and says in one message what happened.
-// Download saves each file through a link to its bytes. Share hands the files to the system share
-// sheet: images go as images (never in a ZIP), because most share targets can't open a ZIP.
+// Download saves each file through a link to its Blob. Share hands the files to the system share
+// sheet: images go as images (never in a ZIP), because most share targets can't open a ZIP. Neither
+// copies a file's bytes: the link is to the file's own Blob, and a shared File is made of it.
 import { toast } from '@/store/editor';
 import { buildExport, type ExportFile } from './build';
 import { failMessage, planOf, savedMessage, type ExportPlan } from './plan';
@@ -15,15 +16,15 @@ export const currentPlan = (f: Frozen): ExportPlan =>
 const wait = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
 /**
- * Saves each file through an `<a download>` to an object URL of its bytes, about a quarter of a second
+ * Saves each file through an `<a download>` to an object URL of its Blob, about a quarter of a second
  * apart (a browser may ask to allow several downloads). Each URL is let go 30 s later, once the
  * browser has long had the bytes.
  */
 export async function saveFiles(files: ExportFile[]): Promise<void> {
   for (let k = 0; k < files.length; k++) {
     if (k) await wait(250);
-    const { name, type, bytes } = files[k];
-    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const { name, blob } = files[k];
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = name; a.rel = 'noopener';
     document.body.append(a); a.click(); a.remove();
@@ -100,7 +101,7 @@ export async function share(): Promise<void> {
   useExportRun.setState({ kind: 'share', done: 0, total: plan.pages.length });
   let files: File[];
   try {
-    files = (await buildExport(plan, f, progress)).map(x => new File([x.bytes], x.name, { type: x.type }));
+    files = (await buildExport(plan, f, progress)).map(x => new File([x.blob], x.name, { type: x.blob.type }));
   } catch {
     toast(failMessage(plan));
     return;

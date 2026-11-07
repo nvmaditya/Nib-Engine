@@ -92,6 +92,31 @@ test('the canvases a page passes through are let go once it is drawn (a phone ha
   const composed = vi.mocked(composePage).mock.results[0].value as HTMLCanvasElement, framed = vi.mocked(frameShot).mock.results[0].value as HTMLCanvasElement;
   expect([dims(composed), dims(framed), dims(c)]).toEqual([[0, 0], [0, 0], [794, 1123]]);
 });
+test('a page that fails to draw lets go of the canvases it had made, so trying again has their memory', () => {
+  open(docOf(box({ text: 'x' }))); update(s => { s.S.look = 'scan'; s.S.tilt = true; }, { history: false });
+  const f = freeze();
+  vi.mocked(applyLook).mockImplementationOnce(() => { throw new Error('canvas'); }); // out of canvas memory on the scan look
+  expect(() => renderPage(f, 0, 794)).toThrow('canvas');
+  const composed = vi.mocked(composePage).mock.results[0].value as HTMLCanvasElement, framed = vi.mocked(frameShot).mock.results[0].value as HTMLCanvasElement;
+  expect(framed).not.toBe(composed);
+  expect([dims(composed), dims(framed)]).toEqual([[0, 0], [0, 0]]);
+  expect(settings).toBe(get().S); // and the engine is back on the open document
+});
+test('…and when the tilt is what fails, the page it was given goes', () => {
+  open(docOf(box({ text: 'x' }))); update(s => { s.S.look = 'scan'; s.S.tilt = true; }, { history: false });
+  vi.mocked(frameShot).mockImplementationOnce(() => { throw new Error('canvas'); });
+  expect(() => renderPage(freeze(), 0, 794)).toThrow('canvas');
+  expect(dims(vi.mocked(composePage).mock.results[0].value as HTMLCanvasElement)).toEqual([0, 0]);
+  expect(applyLook).not.toHaveBeenCalled();
+});
+test('…and so does a canvas a step had handed back as it was given', () => {
+  open(docOf(box({ text: 'x' }))); update(s => { s.S.look = 'scan'; }, { history: false }); // no tilt: frameShot hands back the page
+  vi.mocked(applyLook).mockImplementationOnce(() => { throw new Error('canvas'); });
+  expect(() => renderPage(freeze(), 0, 794)).toThrow('canvas');
+  const composed = vi.mocked(composePage).mock.results[0].value as HTMLCanvasElement;
+  expect(vi.mocked(frameShot).mock.results[0].value).toBe(composed);
+  expect(dims(composed)).toEqual([0, 0]);
+});
 test('a step that hands back the canvas it was given leaves it alone: that canvas is the page', () => {
   open(docOf(box({ text: 'x' }))); const c = renderPage(freeze(), 0, 794); // As written, without the tilt
   expect(vi.mocked(composePage).mock.results[0].value).toBe(c);

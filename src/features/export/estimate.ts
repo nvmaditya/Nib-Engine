@@ -1,10 +1,12 @@
-// The download size estimate: one real page, drawn at Standard size and encoded three ways, measured
-// after a pause while the Export stage is shown, and kept by the settings and blocks it came from.
-import { useEffect, useState } from 'react';
+// The download size estimate: one real page, the chosen page with the most writing, drawn at Standard
+// size and encoded three ways, measured after a pause while the Export stage is shown, and kept by the
+// settings and blocks it came from.
+import { useEffect, useMemo, useState } from 'react';
 import { fontReady, fontsInUse } from '@/engine/core.js';
+import { layoutFor } from '@/features/doc/model';
 import { useStageActive } from '@/features/doc/StageHost';
 import { useEditor } from '@/store/editor';
-import { QUALITY, type Sample } from './plan';
+import { QUALITY, fullestPage, type Sample } from './plan';
 import { encodeCanvas, freeze, renderPage, type Frozen } from './render';
 
 export const ESTIMATE_DELAY = 600;
@@ -33,26 +35,40 @@ function remember(key: string, s: Sample): void {
   while (cache.size > KEEP) cache.delete(cache.keys().next().value as string);
 }
 
-/** The measured sizes of the first chosen page, or null until measured (or if it can't be). */
-export function useSizeEstimate(firstPage: number | null): Sample | null {
+/**
+ * The measured sizes of the `chosen` page with the most writing (see `fullestPage`), or null until
+ * measured (or if it can't be, or with no page chosen).
+ */
+export function useSizeEstimate(chosen: readonly number[]): Sample | null {
   const active = useStageActive();
   const version = useEditor(s => (active ? s.version : -1)); // watch changes only while the stage is shown
+  const layoutTick = useEditor(s => s.layoutTick), fontTick = useEditor(s => s.fontTick);
   const [, setDone] = useState(0);
-  const key = active ? JSON.stringify([useEditor.getState().S, useEditor.getState().doc.boxes, useEditor.getState().doc.pageCount, firstPage]) : '';
+  const want = chosen.join(',');
+  // Which page has the most writing changes only when the pages are laid out again, so it is looked for
+  // then, as the pages shown are laid out, and not on every render: a run re-renders the panel each page.
+  const page = useMemo(() => {
+    if (!active || !chosen.length) return null;
+    const s = useEditor.getState();
+    return fullestPage(layoutFor(s.S, s.doc).segs, chosen);
+  // `chosen` is read through `want` (it is a new array each render).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, layoutTick, fontTick, want]);
+  const key = active ? JSON.stringify([useEditor.getState().S, useEditor.getState().doc.boxes, useEditor.getState().doc.pageCount, page]) : '';
   const hit = active ? cache.get(key) ?? null : null;
   useEffect(() => {
-    if (!active || firstPage === null || cache.has(key)) return;
+    if (!active || page === null || cache.has(key)) return;
     let live = true;
     const t = setTimeout(() => {
       if (!fontsInUse().every(fontReady)) return; // a font arriving bumps `version`, which starts the wait again
       if (inFlight.has(key)) return;
       inFlight.add(key);
-      measurePage(freeze(), firstPage).then(
+      measurePage(freeze(), page).then(
         s => { inFlight.delete(key); remember(key, s); if (live) setDone(n => n + 1); },
         () => { inFlight.delete(key); },
       );
     }, ESTIMATE_DELAY);
     return () => { live = false; clearTimeout(t); };
-  }, [active, firstPage, key, version]);
+  }, [active, page, key, version]);
   return hit;
 }

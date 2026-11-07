@@ -110,12 +110,13 @@ test('an image the scrubber refuses stops the export: nothing unscrubbed is save
   expect(useExportRun.getState()).toEqual(IDLE_RUN);
 });
 
-test('each file is saved through a link to its bytes, about a quarter of a second apart, and each address is let go after 30 s', async () => {
+test('each file is saved through a link to its Blob, about a quarter of a second apart, and each address is let go after 30 s', async () => {
   vi.useFakeTimers();
-  const p = saveFiles([
-    { name: 'a.png', type: 'image/png', bytes: Uint8Array.of(1, 2, 3) },
-    { name: 'b.jpg', type: 'image/jpeg', bytes: Uint8Array.of(4, 5) },
-  ]);
+  const files = [
+    { name: 'a.png', blob: new Blob([Uint8Array.of(1, 2, 3)], { type: 'image/png' }) },
+    { name: 'b.jpg', blob: new Blob([Uint8Array.of(4, 5)], { type: 'image/jpeg' }) },
+  ];
+  const p = saveFiles(files);
   expect(saved).toEqual(['a.png']);
   await vi.advanceTimersByTimeAsync(240); expect(saved).toEqual(['a.png']);
   await vi.advanceTimersByTimeAsync(20); expect(saved).toEqual(['a.png', 'b.jpg']);
@@ -126,6 +127,7 @@ test('each file is saved through a link to its bytes, about a quarter of a secon
   ]);
   expect(document.querySelectorAll('a').length).toBe(0); // each link is gone once clicked
   const [a, b] = links.map(l => blobs.get(l.href)!);
+  expect(a).toBe(files[0].blob); expect(b).toBe(files[1].blob); // the file's own Blob, not a copy of its bytes
   expect([a.type, new Uint8Array(await a.arrayBuffer())]).toEqual(['image/png', Uint8Array.of(1, 2, 3)]);
   expect([b.type, new Uint8Array(await b.arrayBuffer())]).toEqual(['image/jpeg', Uint8Array.of(4, 5)]);
   await vi.advanceTimersByTimeAsync(29_700); expect(revokeObjectURL).not.toHaveBeenCalled();
