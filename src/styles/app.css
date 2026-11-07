@@ -129,6 +129,15 @@
   .sheet.dragging {
     z-index: 10;
   }
+  /* Dim the page itself, not the checkbox button over it, so its focus ring stays visible. */
+  .sheet.left-out .paper {
+    background: transparent;
+    box-shadow: none;
+  }
+  .sheet.left-out .paper > :not(.pick) {
+    opacity: 0.35;
+    transition: opacity 150ms;
+  }
   .paper {
     position: relative;
     border-radius: 1px;
