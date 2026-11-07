@@ -24,9 +24,14 @@ export function navigate(r: Route): void {
   if (location.hash !== h) location.hash = h;
 }
 
+const before: (() => void)[] = [];
+/** Run `fn` whenever the address changes, before the app hears of it (so a store can catch up first). */
+export function beforeRouteChange(fn: () => void): void { before.push(fn); }
+
 const subscribe = (cb: () => void) => {
-  window.addEventListener('hashchange', cb);
-  return () => window.removeEventListener('hashchange', cb);
+  const changed = () => { for (const fn of before) fn(); cb(); };
+  window.addEventListener('hashchange', changed);
+  return () => window.removeEventListener('hashchange', changed);
 };
 
 export function useRoute(): Route {

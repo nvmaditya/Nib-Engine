@@ -1410,6 +1410,7 @@ export const clearMeasureCache = () => mCache.clear();
 export function drawSample(canvas, settings, markup, heightPx) {
   if (!markup.trim()) return null;
   const keepS = S, keepDoc = doc, keepE = ENG, keepSegs = SEGS, keepPages = PAGES;
+  let tmp = null;
   try {
     use(settings, { pageCount:1, fileName:'', boxes:[] });
     const top = geom().top;
@@ -1419,7 +1420,7 @@ export function drawSample(canvas, settings, markup, heightPx) {
     const g = geom(), one = { ...sg, w:Math.ceil(r.w) + 12, rows:[r], bottom:r.ruleY + g.gap * 0.35 };
     // segBounds pads for ascenders, descenders, tilt and drift, so the row is drawn large on a scratch canvas, its ink
     // (the alpha channel) found, and just that ink fitted to 85% of heightPx, centred and with side margins.
-    const tmp = document.createElement('canvas');
+    tmp = document.createElement('canvas');
     renderSegment(tmp, one, 4 * heightPx / segBounds(one).h);
     const tw = tmp.width, th = tmp.height, tctx = tmp.getContext('2d'), px = tctx.getImageData(0, 0, tw, th).data;
     let x0 = tw, x1 = -1, y0 = th, y1 = -1;
@@ -1431,7 +1432,10 @@ export function drawSample(canvas, settings, markup, heightPx) {
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(tmp, x0, y0, sw, sh, side, (heightPx - sh * f) / 2, sw * f, sh * f);
     return canvas.width;
-  } finally { S = keepS; doc = keepDoc; ENG = keepE; SEGS = keepSegs; PAGES = keepPages; }
+  } finally {
+    S = keepS; doc = keepDoc; ENG = keepE; SEGS = keepSegs; PAGES = keepPages;
+    if (tmp) tmp.width = tmp.height = 0; // let the large scratch canvas go now (Safari limits canvas memory)
+  }
 }
 
 export {

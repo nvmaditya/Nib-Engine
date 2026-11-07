@@ -95,6 +95,18 @@ test('save the current style as a look; it is in Looks in every document', async
   act(() => open(docOf(box({ id: 'other' }))));
   expect(screen.getByRole('button', { name: 'Kalam small' })).toBeInTheDocument();
 });
+test('a look saved from a document drawn As drawn doesn’t carry that pen to other documents', async () => {
+  open(docOf(box())); update(s => { s.S.tip = 'font'; s.S.ink = 'red'; }, { history: false }); render(<Live />);
+  await save('Red');
+  expect(useStylePrefs.getState().looks[0].v).toMatchObject({ ink: 'red' });
+  expect(useStylePrefs.getState().looks[0].v).not.toHaveProperty('tip');
+});
+test('a saved look shows pressed even when a built-in one matches too', async () => {
+  open(docOf(box())); render(<Live />); // a new document is an Exam answer
+  await save('Mine');
+  expect(screen.getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Exam answer' })).toHaveAttribute('aria-pressed', 'false');
+});
 test('a look that can’t be saved says so', async () => {
   open(docOf(box())); render(<Live />);
   vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));

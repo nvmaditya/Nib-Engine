@@ -26,10 +26,15 @@ export function lookPatch(look: SavedLook, blockScope: boolean): Partial<Setting
   return v;
 }
 
-/** The first Look all of whose values are what the panel shows (paper against the document's, unless it is for one block). */
+/**
+ * The Look all of whose values are what the panel shows (paper against the document's, unless it is
+ * for one block). Saved looks are checked first: one holds every handwriting key, so when it matches
+ * it is the one the person chose, even where a built-in one (which holds fewer) matches too.
+ */
 export function matchLook(V: Settings, S: Settings, looks: SavedLook[], blockScope: boolean): SavedLook | null {
   const cur = V as unknown as Record<string, unknown>;
-  return looks.find(l => Object.entries(l.v).every(([k, val]) => {
+  const builtIn = (l: SavedLook) => STYLE_LOOKS.includes(l);
+  return [...looks.filter(l => !builtIn(l)), ...looks.filter(builtIn)].find(l => Object.entries(l.v).every(([k, val]) => {
     if (k === 'paper') return blockScope || S.paper === val;
     return cur[k] === val;
   })) ?? null;
@@ -37,9 +42,13 @@ export function matchLook(V: Settings, S: Settings, looks: SavedLook[], blockSco
 
 export const pickLook = (look: SavedLook): void => setV(lookPatch(look, !!scopeBox()), step('look'));
 
-/** The handwriting keys as the panel shows them, and the document's paper: what saving a look keeps. */
+/**
+ * The handwriting keys as the panel shows them, and the document's paper: what saving a look keeps.
+ * Not the As drawn pen, which isn't offered: a look made from such a document leaves the pen alone.
+ */
 export function currentLookValues(): Partial<Settings> {
   const V = view() as unknown as Record<string, unknown>;
   const v = Object.fromEntries(BOX_KEYS.map(k => [k, V[k]])) as Partial<Settings>;
+  if (v.tip === 'font') delete v.tip;
   return { ...v, paper: useEditor.getState().S.paper };
 }

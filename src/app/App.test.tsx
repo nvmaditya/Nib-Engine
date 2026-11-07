@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { toast as sonner } from 'sonner';
 import { FONTS } from '@/engine/config.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
-import { addFontFile } from '@/features/style/fonts';
-import { fontFile } from '@/test/fonts';
+import { addFontFile, FONT_KEY_PREFIX, fontId } from '@/features/style/fonts';
+import { useStylePrefs } from '@/features/style/prefs';
+import { box, docOf } from '@/test/docs';
+import { fontFile, paragraphs, realFonts } from '@/test/fonts';
 import { deleteBlock } from '@/features/doc/actions';
-import { createDoc, getDoc } from '@/store/documents';
-import { flushSave, useEditor } from '@/store/editor';
+import { createDoc, getDoc, setPref } from '@/store/documents';
+import { flushSave, update, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { App } from './App';
 import { parseHash } from './route';
@@ -134,4 +136,55 @@ test('a document that uses an uploaded hand opens with it on a fresh page', asyn
   location.hash = `#/d/${rec.id}/write`; render(<App />);
   await waitFor(() => expect(useEditor.getState().docId).toBe(rec.id));
   expect(useEditor.getState().S.font).toBe(r.id);
+});
+
+/** What another tab leaves when it adds a font after this page started: the record in storage, and no hand in this page's list. */
+async function fontFromAnotherTab(hand: string): Promise<string> {
+  const buf = await fontFile(hand, 'Theirs.woff').arrayBuffer(), id = fontId(buf);
+  await setPref(FONT_KEY_PREFIX + id, { id, name: 'Theirs', buf, forms: 1, addedAt: Date.now() });
+  return id;
+}
+
+test('a hand another tab added after this page started is kept when a document that uses it opens', async () => {
+  location.hash = '#/'; render(<App />);
+  await screen.findByRole('heading', { name: 'Recent' });
+  const id = await fontFromAnotherTab('kalam');
+  const rec = await createDoc({ title: 'Theirs', settings: { ...cleanSettings(null, false), font: id } });
+  act(() => { location.hash = `#/d/${rec.id}/write`; });
+  await waitFor(() => expect(useEditor.getState().docId).toBe(rec.id));
+  expect(useEditor.getState().S.font).toBe(id);
+});
+
+test('coming back to the tab shows the looks another tab saved', async () => {
+  location.hash = '#/'; render(<App />);
+  await screen.findByRole('heading', { name: 'Recent' });
+  await setPref('looks', [{ id: 'look-a', name: 'Theirs', v: { tip: 'gel' } }]);
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  await waitFor(() => expect(useStylePrefs.getState().looks.map(l => l.name)).toEqual(['Theirs']));
+});
+
+// (Last: it loads a real hand's file, which stays loaded.)
+test('typing that adds a page, then Style before the pages are laid out again: no page notice for it', async () => {
+  realFonts();
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1200 }); // room for the pages
+  try {
+    const rec = await createDoc({ title: 'Fit', settings: { ...cleanSettings(null, false), size: 34 }, doc: docOf(box({ id: 'm', name: 'Main text', text: paragraphs(7) })) });
+    const go = (stage: string) => act(() => { location.hash = `#/d/${rec.id}/${stage}`; window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    location.hash = `#/d/${rec.id}/style`;
+    render(<App />);
+    await screen.findAllByText('Page 2 of 2');
+    go('write');
+    act(() => { // a paragraph typed, and Style pressed within the pause typing waits for
+      update(s => { s.doc.boxes[0].text += '\n' + paragraphs(1); }, { layout: 'soon', history: 'type:m' });
+      go('style');
+    });
+    expect(await screen.findAllByText('Page 3 of 3')).not.toHaveLength(0);
+    await act(() => new Promise(r => setTimeout(r, 200)));
+    expect(screen.queryByText(/^Now \d pages? \(was \d\)$/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Fit back/ })).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  }
 });

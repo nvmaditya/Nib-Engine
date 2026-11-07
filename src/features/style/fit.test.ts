@@ -23,14 +23,21 @@ afterAll(() => vi.unstubAllGlobals());
 beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); });
 
 const para = (n: number): EngineDoc => docOf(box({ id: 'm', name: 'Main text', text: paragraphs(n) }));
+/** Main text, and a short margin note beside it on page 1 (its letters never move a page). */
+const withNote = (n: number, mainStyle: Partial<Settings> = {}): EngineDoc => docOf(
+  box({ id: 'm', name: 'Main text', text: paragraphs(n), style: mainStyle }),
+  box({ id: 'n', name: 'Margin note', kind: 'note', x: 522, w: 220, y: 400, text: 'a short note' }),
+);
 const S = cleanSettings(null, false);
+const pages = (): number => layoutFor(get().S, get().doc).pages;
 
 test('a page count is said in words', () => expect([pagesWord(1), pagesWord(2), pagesWord(3)]).toEqual(['1 page', '2 pages', '3 pages']));
 
-test('Fit back lowers the letter size until the document fits again', () => expect(fitPlan({ ...S, size: 36 }, para(7), null, 2)).toEqual({ size: 34, gap: 34, pages: 2 }));
-test('then the line spacing, once the letters are as small as they go', () => expect(fitPlan(S, para(8), null, 1)).toEqual({ size: 18, gap: 30, pages: 1 }));
+test('Fit back lowers the letter size until the document fits again', () => expect(fitPlan({ ...S, size: 36 }, para(7), null, 2)).toEqual({ size: { of: 'document', to: 34 }, gap: 34, pages: 2 }));
+test('then the line spacing, once the letters are as small as they go', () => expect(fitPlan(S, withNote(9), null, 1)).toEqual({ size: { of: 'document', to: 18 }, gap: 26, pages: 1 }));
+test('smaller letters alone don’t fit 8 paragraphs on 1 page, but with closer lines they do: both change', () => expect(fitPlan(S, para(8), null, 1)).toEqual({ size: { of: 'document', to: 18 }, gap: 30, pages: 1 }));
 test('it says when nothing fits', () => expect(fitPlan(S, para(12), null, 1)).toBeNull());
-test('in Only a block, it lowers that block’s letter size', () => { const d = para(7); d.boxes[0].style = { size: 36 }; expect(fitPlan(S, d, 'm', 2)).toEqual({ size: 34, gap: 34, pages: 2 }); });
+test('in Only a block, it lowers that block’s letter size', () => { const d = para(7); d.boxes[0].style = { size: 36 }; expect(fitPlan(S, d, 'm', 2)).toEqual({ size: { of: 'block', to: 34 }, gap: 34, pages: 2 }); });
 test('working it out changes nothing and leaves the engine on the document', () => {
   const S2 = { ...S, size: 36 }, d = para(7), before = JSON.stringify([S2, d]);
   fitPlan(S2, d, null, 2);
@@ -87,6 +94,65 @@ test('when nothing fits, nothing changes', () => {
   expect(fitBack(1)).toBe(false);
   expect(lastToast()).toBe('This doesn’t fit on 1 page, even with the smallest letter size and line spacing.');
   expect(get().canUndo).toBe(false);
+});
+
+// Fit back only pulls a lever that changes the page count, and says exactly which it pulled.
+// Whole document, no block with its own size: the tests above (the letter size, then the line spacing).
+test('Whole document, letters already as small as they go: only the line spacing changes, and the message says so', () => {
+  open(para(8));
+  update(s => { s.S.size = 18; }, { history: false });
+  expect(fitBack(1)).toBe(true);
+  expect([get().S.size, get().S.gap, pages()]).toEqual([18, 30, 1]);
+  expect(lastToast()).toBe('Back to 1 page. Line spacing is now 30.');
+  act(() => lastToastAction()!());
+  expect([get().S.size, get().S.gap]).toEqual([18, 34]);
+});
+test('Whole document, the block that grew has its own size: the line spacing changes, not every other block’s letters', () => {
+  open(withNote(7, { size: 30 }));
+  expect(pages()).toBe(2);
+  setV({ gap: 40 });
+  expect(pages()).toBe(3);
+  expect(fitBack(2)).toBe(true);
+  expect([get().S.size, get().S.gap, get().doc.boxes[0].style, pages()]).toEqual([30, 38, { size: 30 }, 2]);
+  expect(lastToast()).toBe('Back to 2 pages. Line spacing is now 38.');
+  act(() => lastToastAction()!());
+  expect([get().S.size, get().S.gap]).toEqual([30, 40]);
+});
+test('Whole document, when nothing in this scope can fit it, it says so and changes nothing', () => {
+  open(withNote(10, { size: 36 })); // only Main text’s own letters would do it, and they keep their own style
+  expect(pages()).toBe(4);
+  expect(fitBack(2)).toBe(false);
+  expect(lastToast()).toBe('This doesn’t fit on 2 pages, even with the smallest letter size and line spacing.');
+  expect([get().S.size, get().S.gap, get().doc.boxes[0].style, get().canUndo]).toEqual([30, 34, { size: 36 }, false]);
+});
+// Only the block that grew: the tests above (the block gets its own size; Undo takes it away or puts the old one back).
+test('Only “Margin note”, when the whole document’s letters grew: the whole document’s letter size goes back, and the note gets no size of its own', () => {
+  open(withNote(7));
+  setV({ size: 36 });
+  expect(pages()).toBe(3);
+  styleBox('n');
+  expect(fitBack(2)).toBe(true);
+  expect([get().S.size, get().S.gap, get().doc.boxes[1].style, pages()]).toEqual([30, 34, {}, 2]);
+  expect(lastToast()).toBe('Back to 2 pages. The whole document’s letter size is now 30.');
+  act(() => lastToastAction()!());
+  expect([get().S.size, get().doc.boxes[1].style]).toEqual([36, {}]);
+});
+test('Only “Margin note”, when Main text’s own letters grew: neither letter size helps, so only the line spacing changes', () => {
+  open(withNote(7));
+  styleBox('m');
+  setV({ size: 36 });
+  expect(pages()).toBe(3);
+  styleBox('n');
+  expect(fitBack(2)).toBe(true);
+  expect([get().S.size, get().S.gap, get().doc.boxes[0].style, get().doc.boxes[1].style, pages()]).toEqual([30, 30, { size: 36 }, {}, 2]);
+  expect(lastToast()).toBe('Back to 2 pages. Line spacing is now 30.');
+});
+test('Only “Margin note”, when nothing in this scope can fit it, it says so and changes nothing', () => {
+  open(withNote(10, { size: 36 }));
+  styleBox('n');
+  expect(fitBack(2)).toBe(false);
+  expect(lastToast()).toBe('This doesn’t fit on 2 pages, even with the smallest letter size and line spacing.');
+  expect([get().S.size, get().S.gap, get().doc.boxes[1].style, get().canUndo]).toEqual([30, 34, {}, false]);
 });
 test('Fit back does nothing while a hand is still arriving', () => {
   open(para(7));
