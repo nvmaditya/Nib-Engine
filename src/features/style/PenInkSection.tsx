@@ -22,7 +22,7 @@ export function PenInkSection({ V }: { V: Settings }) {
       <Group title="Pen" value={pen?.name}>
         <div role="group" aria-label="Pen" className="grid grid-cols-3 gap-1.5">
           {PEN_CHOICES.map(p => (
-            <button key={p.id} type="button" aria-pressed={p.id === V.tip} onClick={() => setV({ tip: p.id })}
+            <button key={p.id} type="button" aria-pressed={p.id === V.tip} onClick={() => { if (p.id !== V.tip) setV({ tip: p.id }); }}
               className={cn(option, 'flex flex-col items-start gap-1 px-2.5 py-2 text-left text-[13px] leading-tight font-medium')}>
               <svg viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true" className="block h-3 w-full text-fg">
                 <path d="M3 7 C 25 1, 45 12, 65 5 S 90 4, 97 6" fill="none" stroke="currentColor" strokeWidth={Math.min(4.5, p.w * 1.25)} strokeLinecap="round"
@@ -38,7 +38,7 @@ export function PenInkSection({ V }: { V: Settings }) {
       <Group title="Ink" value={inkLabel}>
         <div role="group" aria-label="Ink" className="flex flex-wrap gap-3">
           {INKS.map(i => (
-            <button key={i.id} type="button" aria-pressed={i.id === V.ink} aria-label={i.name + ' ink'} title={i.name} onClick={() => setV({ ink: i.id })}
+            <button key={i.id} type="button" aria-pressed={i.id === V.ink} aria-label={i.name + ' ink'} title={i.name} onClick={() => { if (i.id !== V.ink) setV({ ink: i.id }); }}
               style={{ background: i.c }}
               className="size-9 rounded-full ring-1 ring-line-strong ring-offset-2 ring-offset-surface transition-shadow focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none aria-pressed:ring-2 aria-pressed:ring-primary" />
           ))}

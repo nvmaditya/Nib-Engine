@@ -26,7 +26,7 @@ export function PaperSection({ S, blockScope }: { S: Settings; blockScope: boole
     <Group title="Paper" meta={blockScope ? 'shared by every page' : undefined}>
       <div role="group" aria-label="Paper" className="grid grid-cols-3 gap-1.5">
         {Object.entries(PAPERS).map(([id, p]) => (
-          <button key={id} type="button" aria-pressed={id === S.paper} onClick={() => setS('paper', id)}
+          <button key={id} type="button" aria-pressed={id === S.paper} onClick={() => { if (id !== S.paper) setS('paper', id); }}
             className={cn(option, 'flex flex-col items-center gap-1.5 px-1 py-2 text-center text-xs leading-tight font-medium')}>
             <span className={'pv pv-' + id} aria-hidden="true" style={p.photo ? { backgroundImage: `url("${PHOTO_URL}")` } : undefined} />
             <span>{p.name}</span>
