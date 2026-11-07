@@ -22,11 +22,12 @@ let state: UpdateState = 'current';
 let applyUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null; // asks the waiting version to take over
 let reload = (): void => location.reload();
 let asked = false; // this tab pressed Reload while a new version was waiting
-let reloaded = false;
+let reloading = false; // on its way: the last change is being written, then the page reloads
 let fallback: ReturnType<typeof setTimeout> | undefined;
 let stopChecks = (): void => {};
 let putAway = false; // the Import dialog put the message away (as it does every message, for its footer on phones)
 let unfollow = (): void => {};
+let unhear = (): void => {};
 
 export const updateState = (): UpdateState => state;
 
@@ -64,11 +65,47 @@ function followEditor(): () => void {
   });
 }
 
-function reloadOnce(): void {
+/** The last change can't be written: keep the page, say so, and offer the new version again, to try again. */
+function keepPage(): void {
+  toast(SAVE_FAILED);
+  if (state !== 'current') offer();
+}
+
+/**
+ * Reload, once, writing the last change right before: the focus went back to the editor when Reload was pressed, so
+ * the person may have typed while the new version took over. Someone still typing is let pause first. Then the page
+ * lets go of the focus and takes no more (`inert`, which a message's action giving the focus back respects too): the
+ * old page stays on screen while the new one loads, and anything typed into it then would be lost. If the change
+ * can't be written, the page stays.
+ */
+async function reloadOnce(): Promise<void> {
   clearTimeout(fallback);
-  if (reloaded) return;
-  reloaded = true;
+  if (reloading) return;
+  reloading = true;
+  if (await writeBeforeReload({ pause: true }) === 'failed') {
+    reloading = false; asked = false;
+    keepPage();
+    return;
+  }
+  document.body.setAttribute('inert', ''); // (first: then nothing, sonner's own focus return included, can focus into it)
+  (document.activeElement as HTMLElement | null)?.blur?.();
   reload();
+}
+
+/**
+ * The page's own service worker container: a new version taking charge of this page. vite-plugin-pwa says so
+ * (onNeedReload) only in a tab a service worker controlled when it registered, not on a first visit or after a hard
+ * reload. Returns the remover.
+ */
+function hearTakeover(): () => void {
+  const container = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+  if (!container) return () => {};
+  const onChange = () => {
+    if (asked) { void reloadOnce(); return; } // this tab pressed Reload
+    if (state === 'waiting') { state = 'active'; offer(); } // another tab did (a first install taking charge is no news)
+  };
+  container.addEventListener('controllerchange', onChange);
+  return () => container.removeEventListener('controllerchange', onChange);
 }
 
 /**
@@ -79,11 +116,12 @@ export function startUpdates(register: Register, hooks: { reload(): void } = { r
   reload = () => hooks.reload();
   setReloader(() => { void reloadToNewVersion(); });
   unfollow(); unfollow = followEditor();
+  unhear(); unhear = hearTakeover();
   applyUpdate = register({
     onNeedRefresh() { state = 'waiting'; offer(); },
     onNeedReload() {
       state = 'active';
-      if (asked) reloadOnce(); // this tab pressed Reload
+      if (asked) void reloadOnce(); // this tab pressed Reload
       else offer(); // another tab did: nothing changes here but the message
     },
     onOfflineReady() { toast(OFFLINE_READY); },
@@ -99,16 +137,12 @@ export function startUpdates(register: Register, hooks: { reload(): void } = { r
  */
 export async function reloadToNewVersion(): Promise<void> {
   if (inMemory()) return; // (never offered there: nothing would be kept)
-  if (await writeBeforeReload() === 'failed') {
-    toast(SAVE_FAILED);
-    if (state !== 'current') offer();
-    return;
-  }
-  if (state !== 'waiting' || !applyUpdate) { reloadOnce(); return; }
+  if (await writeBeforeReload() === 'failed') { keepPage(); return; }
+  if (state !== 'waiting' || !applyUpdate) { await reloadOnce(); return; }
   asked = true;
   clearTimeout(fallback);
-  fallback = setTimeout(reloadOnce, RELOAD_FALLBACK);
-  try { await applyUpdate(true); } catch { reloadOnce(); }
+  fallback = setTimeout(() => { void reloadOnce(); }, RELOAD_FALLBACK);
+  try { await applyUpdate(true); } catch { await reloadOnce(); }
 }
 
 /** Look for a new version every hour while the page is shown, and when it is shown again an hour or more since. */
@@ -126,8 +160,10 @@ function checkHourly(registration: ServiceWorkerRegistration): void {
 export function resetUpdatesForTests(): void {
   stopChecks(); stopChecks = () => {};
   unfollow(); unfollow = () => {}; putAway = false;
+  unhear(); unhear = () => {};
+  document.body.removeAttribute('inert');
   clearTimeout(fallback); fallback = undefined;
-  state = 'current'; applyUpdate = null; asked = false; reloaded = false;
+  state = 'current'; applyUpdate = null; asked = false; reloading = false;
   reload = () => location.reload();
   setReloader(() => location.reload());
 }

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, test, vi, type Mock } from 'vitest';
 import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
 import { closeImport, openImport } from '@/features/doc/actions';
 import { ImportDialog } from '@/features/import/ImportDialog';
+import { installFocusMemory } from '@/lib/focus';
 import { NewerDocumentError, putDoc } from '@/store/documents';
 import { SAVE_FAILED, SAVE_NEWER, closeDocument, flushSave, openDocument, update, useEditor } from '@/store/editor';
 import { rec } from '@/test/docs';
@@ -17,6 +18,7 @@ vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/st
 
 let opts: RegisterSWOptions, applyUpdate: Mock<(reloadPage?: boolean) => Promise<void>>, reload: Mock<() => void>;
 let shown: DocumentVisibilityState = 'visible';
+let sw: EventTarget; // navigator.serviceWorker, which jsdom has none of
 
 const tick = (ms = 50) => act(() => { vi.advanceTimersByTime(ms); });
 /** Let `ms` go by a frame at a time, with React drawing between frames as a browser does (sonner's exits run in effects). */
@@ -37,6 +39,8 @@ beforeEach(async () => {
   vi.mocked(putDoc).mockReset().mockResolvedValue(1);
   shown = 'visible';
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => shown });
+  sw = new EventTarget();
+  Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: sw });
   resetUpdatesForTests(); applyUpdate = vi.fn(async () => {}); reload = vi.fn();
   startUpdates(o => { opts = o; return applyUpdate; }, { reload });
   render(createElement(Toaster, { expand: true, visibleToasts: 3 }));
@@ -49,6 +53,7 @@ afterEach(async () => {
   resetUpdatesForTests();
   vi.useRealTimers();
   Reflect.deleteProperty(document, 'visibilityState');
+  Reflect.deleteProperty(navigator, 'serviceWorker');
 });
 
 test('a new version waiting says so with Reload, and stays up', () => {
@@ -71,7 +76,7 @@ test('Reload writes the last change first, then reloads only this tab', async ()
   expect(applyUpdate).toHaveBeenCalledTimes(1);
   expect(vi.mocked(putDoc).mock.invocationCallOrder[0]).toBeLessThan(applyUpdate.mock.invocationCallOrder[0]); // written first
   expect(reload).not.toHaveBeenCalled(); // not until the new version is in charge
-  act(() => opts.onNeedReload!());
+  act(() => opts.onNeedReload!()); await settle(0); // (it writes once more first)
   expect(reload).toHaveBeenCalledTimes(1);
   await settle(RELOAD_FALLBACK * 2);
   expect(reload).toHaveBeenCalledTimes(1); // once
@@ -105,7 +110,7 @@ test('if the new version never takes over, Reload reloads anyway after 3 s', asy
   expect(reload).not.toHaveBeenCalled();
   await settle(200);
   expect(reload).toHaveBeenCalledTimes(1);
-  act(() => opts.onNeedReload!()); // late
+  act(() => opts.onNeedReload!()); await settle(0); // late
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
@@ -133,7 +138,7 @@ test('a document a newer Nib saved offers Reload, which goes to the new version'
   await settle(0);
   expect(applyUpdate).toHaveBeenCalledTimes(1);
   expect(reload).not.toHaveBeenCalled();
-  act(() => opts.onNeedReload!());
+  act(() => opts.onNeedReload!()); await settle(0); // (it writes once more first)
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
@@ -212,7 +217,7 @@ test('Reload with a change that can’t be written keeps the page, says so, and 
   expect(putDoc).toHaveBeenCalledTimes(1);
   expect(vi.mocked(putDoc).mock.calls[0][0].doc.boxes[0].text).toBe('xy');
   expect(applyUpdate).toHaveBeenCalledTimes(1);
-  act(() => opts.onNeedReload!());
+  act(() => opts.onNeedReload!()); await settle(0); // (it writes once more first)
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
@@ -231,4 +236,121 @@ test('a new version offered before Nib finds it has no storage is taken down', (
   expect(message(NEW_VERSION)).not.toBeNull();
   act(() => openDocument({ ...rec('Mem', 'a'), id: MEMORY_ID })); frames(500); // (App's boot, with storage blocked)
   expect(message(NEW_VERSION)).toBeNull();
+});
+
+test('an edit made while Reload waits for the new version is written before the page reloads', async () => {
+  openDocument(rec('A', 'x'));
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(1);
+  const field = document.createElement('textarea'); document.body.append(field); field.focus(); // the focus is back where it was
+  let focusAtReload: Element | null = null;
+  reload.mockImplementation(() => { focusAtReload = document.activeElement; });
+  update(s => { s.doc.boxes[0].text = 'x, typed during the wait'; });
+  await settle(100); // (before the pause in typing is over)
+  vi.mocked(putDoc).mockClear();
+  act(() => opts.onNeedReload!()); await settle(0);
+  expect(reload).not.toHaveBeenCalled(); // not in the middle of typing: once it pauses
+  await settle(400);
+  expect(putDoc).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(putDoc).mock.calls[0][0].doc.boxes[0].text).toBe('x, typed during the wait');
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(putDoc).mock.invocationCallOrder[0]).toBeLessThan(reload.mock.invocationCallOrder[0]);
+  expect(focusAtReload).toBe(document.body); // nothing more is typed into the page on its way out
+  expect(document.body).toHaveAttribute('inert');
+  field.remove();
+});
+
+test('…and so is one made before the 3 s are up, when the new version never takes over', async () => {
+  openDocument(rec('A', 'x'));
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  await settle(RELOAD_FALLBACK - 200);
+  update(s => { s.doc.boxes[0].text = 'x, typed late'; });
+  vi.mocked(putDoc).mockClear();
+  await settle(600); // the 3 s, then the pause in typing
+  expect(putDoc).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(putDoc).mock.calls[0][0].doc.boxes[0].text).toBe('x, typed late');
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+test('a failing save already on its way when Reload is pressed keeps the page, and says so', async () => {
+  vi.mocked(putDoc).mockImplementation(() => new Promise((_, no) => { setTimeout(() => no(new Error('disk full')), 1000); }));
+  openDocument(rec('A', 'x'));
+  update(s => { s.doc.boxes[0].text = 'xy'; });
+  act(() => opts.onNeedRefresh!()); frames(100);
+  await settle(400); // the pause in typing is over: the save has started, and its write takes a while
+  expect(putDoc).toHaveBeenCalledTimes(1);
+  press(reloadIn(NEW_VERSION));
+  await settle(6000); frames(500);
+  expect(applyUpdate).not.toHaveBeenCalled();
+  expect(reload).not.toHaveBeenCalled();
+  expect(message(SAVE_FAILED)).not.toBeNull();
+  expect(message(NEW_VERSION)).not.toBeNull();
+});
+
+test('a change that can’t be written when the new version takes over keeps the page, and Reload tries again', async () => {
+  openDocument(rec('A', 'x'));
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(applyUpdate).toHaveBeenCalledTimes(1);
+  update(s => { s.doc.boxes[0].text = 'x and more'; });
+  vi.mocked(putDoc).mockRejectedValue(new Error('disk full'));
+  act(() => opts.onNeedReload!()); await settle(1000); frames(500);
+  expect(reload).not.toHaveBeenCalled();
+  expect(message(SAVE_FAILED)).not.toBeNull();
+  expect(message(NEW_VERSION)).not.toBeNull();
+  await settle(RELOAD_FALLBACK * 2);
+  expect(reload).not.toHaveBeenCalled();
+
+  vi.mocked(putDoc).mockReset().mockResolvedValue(3);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(vi.mocked(putDoc).mock.calls[0][0].doc.boxes[0].text).toBe('x and more');
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(applyUpdate).toHaveBeenCalledTimes(1); // (the new version is in charge already)
+});
+
+test('a tab that had no service worker when it opened reloads as soon as the new version takes over', async () => {
+  // vite-plugin-pwa calls onNeedReload only in a tab a service worker controlled when it registered (not on a
+  // first visit, nor after a hard reload); the page's own controllerchange is heard in every tab.
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(reload).not.toHaveBeenCalled();
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1);
+  act(() => opts.onNeedReload!()); await settle(RELOAD_FALLBACK * 2);
+  expect(reload).toHaveBeenCalledTimes(1); // once
+});
+
+test('a new version taking over without Reload pressed here changes nothing but the message', async () => {
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); // the first install taking charge
+  expect(updateState()).toBe('current');
+  act(() => opts.onNeedRefresh!()); frames(100);
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); }); // another tab pressed Reload
+  await settle(RELOAD_FALLBACK * 2);
+  expect(reload).not.toHaveBeenCalled();
+  expect(updateState()).toBe('active');
+  expect(message(NEW_VERSION)).not.toBeNull();
+  press(reloadIn(NEW_VERSION)); await settle(0);
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(applyUpdate).not.toHaveBeenCalled();
+});
+
+test('once the page is on its way out, nothing takes the focus back into it', async () => {
+  const off = installFocusMemory();
+  const field = document.createElement('textarea'); document.body.append(field); field.focus();
+  act(() => opts.onNeedRefresh!()); frames(100);
+  press(reloadIn(NEW_VERSION)); // (a message's action gives the focus back after a timer)
+  await act(async () => {}); // promises only: the new version takes over before that timer
+  expect(applyUpdate).toHaveBeenCalledTimes(1);
+  act(() => { sw.dispatchEvent(new Event('controllerchange')); });
+  await act(async () => {});
+  expect(reload).toHaveBeenCalledTimes(1);
+  await settle(100);
+  // Nothing can be typed into a page whose new copy is loading: the focus is nowhere, or inside what is inert, which
+  // a browser never lets take the focus or input (jsdom has no inert, so the focus may sit there).
+  expect(document.body).toHaveAttribute('inert');
+  const at = document.activeElement;
+  expect(at === document.body || !!at?.closest('[inert]')).toBe(true);
+  off(); field.remove();
 });

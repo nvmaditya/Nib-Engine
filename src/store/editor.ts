@@ -136,7 +136,18 @@ function adopt(rec: DocRecord, doc: EngineDoc): void {
 /** Refusals a second try can't change. */
 const refused = (e: unknown) => e instanceof NewerDocumentError || e instanceof StaleDocumentError || e instanceof MissingDocumentError;
 
-async function saveNow(): Promise<void> {
+let writing: Promise<void> | null = null; // the save being written now (its second try too)
+
+/** Write the open document now. While it is being written, `writing` holds it, so a reload can wait for it. */
+function saveNow(): Promise<void> {
+  const p = writeNow();
+  writing = p;
+  const done = () => { if (writing === p) writing = null; };
+  p.then(done, done);
+  return p;
+}
+
+async function writeNow(): Promise<void> {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   savePending = false;
@@ -297,13 +308,21 @@ export function flushSave(): Promise<void> {
 }
 
 /**
- * Before the page reloads onto a new version: write the change waiting for a pause in typing, or try again a change
- * an earlier save couldn't write. Says what became of the open document's last change: `written` (or nothing to
- * write), `newer` (a newer Nib wrote the document, so only the new version can), or `failed` (it isn't written).
+ * Right before the page reloads: wait for a save being written, write the change waiting for a pause in typing, and
+ * try once more a change an earlier save couldn't write. With `pause`, someone still typing is let finish: the change
+ * is written at the pause, as it always is, and only then does this resolve. Says what became of the open document's
+ * last change: `written` (or nothing to write), `newer` (a newer Nib wrote the document, so only the new version can),
+ * or `failed` (it isn't written).
  */
-export async function writeBeforeReload(): Promise<'written' | 'newer' | 'failed'> {
-  const id = get().docId;
-  if (savePending || (stored(id) && failing === id)) await saveNow();
+export async function writeBeforeReload(o: { pause?: boolean } = {}): Promise<'written' | 'newer' | 'failed'> {
+  for (let tried = false; ;) {
+    while (writing) await writing;
+    if (o.pause && savePending) { await new Promise(r => setTimeout(r, 100)); continue; }
+    const id = get().docId, failed = stored(id) && failing === id;
+    if (failed ? tried : !savePending) break; // (typed while it was written: write that too)
+    tried = true;
+    await saveNow();
+  }
   const now = get().docId;
   if (!stored(now) || failing !== now) return 'written';
   return failingNewer ? 'newer' : 'failed';
