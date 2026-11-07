@@ -47,4 +47,3 @@ export function openImportPicker(): void {
   input.onchange = () => { const f = input.files?.[0]; if (f) openImport(f); };
   input.click();
 }
-
