@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { LIMITS } from '@/engine/config.js';
 import type { Settings } from '@/engine/types';
 import { view } from '@/features/doc/actions';
-import { flushSave, undo, update, useEditor } from '@/store/editor';
+import { flushSave, redo, undo, update, useEditor } from '@/store/editor';
 import { box, docOf, get, open } from '@/test/docs';
 import { PenInkSection } from './PenInkSection';
 import { Range } from './Range';
@@ -46,7 +46,51 @@ test('…and moved on, then partly back, keeps the presses that were not taken b
   act(() => undo()); expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false);
 });
 
-test('a slider dragged and brought back to where it began, then left, records nothing', () => {
+test('Right, Right, Left, Left leaves none, and Redo comes back', async () => {
+  open(docOf(box())); render(<Live id="size" />);
+  act(() => { update(s => { s.S.size = 31; }); undo(); }); // Redo would give 31
+  act(() => thumb().focus());
+  await userEvent.keyboard('{ArrowRight}{ArrowRight}{ArrowLeft}{ArrowLeft}');
+  expect(get()).toMatchObject({ canUndo: false, canRedo: true }); // already, before the slider is left
+  act(() => thumb().blur());
+  expect(get().S.size).toBe(30); expect(get()).toMatchObject({ canUndo: false, canRedo: true });
+  act(() => redo()); expect(get().S.size).toBe(31);
+});
+
+test('Right ×3, Left ×3 leaves none', async () => {
+  open(docOf(box())); render(<Live id="size" />);
+  act(() => thumb().focus());
+  await userEvent.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}{ArrowLeft}{ArrowLeft}');
+  act(() => thumb().blur());
+  expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false);
+});
+
+test('another edit in between ends the joining', async () => {
+  open(docOf(box())); render(<Live id="size" />);
+  act(() => thumb().focus());
+  await userEvent.keyboard('{ArrowRight}');
+  act(() => update(s => { s.S.gap = 40; }));
+  await userEvent.keyboard('{ArrowLeft}');
+  act(() => thumb().blur());
+  expect(get().S).toMatchObject({ size: 30, gap: 40 });
+  act(() => undo()); expect(get().S).toMatchObject({ size: 31, gap: 40 });
+  act(() => undo()); expect(get().S.gap).toBe(34);
+  act(() => undo()); expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false); // three steps
+});
+
+test('…but the presses after it can be taken back, as each is the newest step', async () => {
+  open(docOf(box())); render(<Live id="size" />);
+  act(() => thumb().focus());
+  await userEvent.keyboard('{ArrowRight}');
+  act(() => update(s => { s.S.gap = 40; }));
+  await userEvent.keyboard('{ArrowLeft}{ArrowRight}');
+  act(() => thumb().blur());
+  expect(get().S).toMatchObject({ size: 31, gap: 40 });
+  act(() => undo()); expect(get().S).toMatchObject({ size: 31, gap: 34 });
+  act(() => undo()); expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false); // two steps: the first Right, and the gap
+});
+
+test('a slider dragged and brought back to where it began, then let go, records nothing', () => {
   open(docOf(box())); render(<Live id="size" />);
   // jsdom has no layout or pointer capture: the slider is as many pixels wide as Letter size has steps (18–44).
   const root = thumb().closest<HTMLElement>('[data-slot="slider"]')!;
@@ -58,6 +102,8 @@ test('a slider dragged and brought back to where it began, then left, records no
   fireEvent.pointerDown(root, { pointerId: 1, clientX: 31 - 18 }); expect(get().S.size).toBe(31);
   fireEvent.pointerMove(root, { pointerId: 1, clientX: 36 - 18 }); expect(get().S.size).toBe(36);
   fireEvent.pointerMove(root, { pointerId: 1, clientX: 30 - 18 }); fireEvent.pointerUp(root, { pointerId: 1, clientX: 30 - 18 });
+  expect(get().S.size).toBe(30); expect(get()).toMatchObject({ canUndo: false, canRedo: false }); // at once, with the slider still focused
+  act(() => undo()); expect(get()).toMatchObject({ canUndo: false, canRedo: false }); // so Undo has nothing to turn into a Redo
   act(() => thumb().blur());
   expect(get().S.size).toBe(30); expect(get().canUndo).toBe(false);
 });

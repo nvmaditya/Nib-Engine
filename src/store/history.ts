@@ -4,8 +4,11 @@ export class History<T> {
   private redoStack: T[] = [];
   private lastKey: string | undefined;
   private lastAt = 0;
-  /** What the latest `record` cleared from Redo, while that step can still be taken back (see `retract`). */
-  private latest: { redo: T[] } | null = null;
+  /**
+   * The steps `record` added since the last undo, redo or clear, newest last, while they can still be taken back
+   * (see `retract`): each one's key, and what it cleared from Redo. Never more than Undo holds.
+   */
+  private recent: { key: string | undefined; redo: T[] }[] = [];
 
   constructor(private limit = 100) {}
 
@@ -17,23 +20,27 @@ export class History<T> {
     if (burst) return;
     this.undoStack.push(snapshot);
     if (this.undoStack.length > this.limit) this.undoStack.splice(0, this.undoStack.length - this.limit);
-    this.latest = { redo: this.redoStack };
+    this.recent.push({ key, redo: this.redoStack });
+    if (this.recent.length > this.undoStack.length) this.recent.splice(0, this.recent.length - this.undoStack.length);
     this.redoStack = [];
   }
 
   /**
-   * Take back the latest step `record` added (a change that came to nothing): its snapshot goes, and the Redo
-   * steps it cleared come back. False if the history has moved since: an undo, a redo, a clear, or another record.
+   * Take back the newest step `record` added (a change that came to nothing): its snapshot goes, and the Redo
+   * steps it cleared come back. Again, the one before it, and so on. False once an undo, a redo or a clear has
+   * come since, or there is none.
    */
   retract(): boolean {
-    const latest = this.latest;
-    if (!latest) return false;
-    this.latest = null;
+    const step = this.recent.pop();
+    if (!step) return false;
     this.undoStack.pop();
-    this.redoStack = latest.redo;
+    this.redoStack = step.redo;
     this.lastKey = undefined;
     return true;
   }
+
+  /** The key of the newest step, while `retract` can still take it back. */
+  get newest(): string | undefined { return this.recent.at(-1)?.key; }
 
   /** Step back: returns the earlier snapshot, and keeps `current` so redo can return to it. */
   undo(current: T): T | null {
@@ -41,7 +48,7 @@ export class History<T> {
     if (prev === undefined) return null;
     this.redoStack.push(current);
     this.lastKey = undefined;
-    this.latest = null;
+    this.recent = [];
     return prev;
   }
 
@@ -50,7 +57,7 @@ export class History<T> {
     if (next === undefined) return null;
     this.undoStack.push(current);
     this.lastKey = undefined;
-    this.latest = null;
+    this.recent = [];
     return next;
   }
 
@@ -58,7 +65,7 @@ export class History<T> {
     this.undoStack = [];
     this.redoStack = [];
     this.lastKey = undefined;
-    this.latest = null;
+    this.recent = [];
   }
 
   get canUndo(): boolean { return this.undoStack.length > 0; }
