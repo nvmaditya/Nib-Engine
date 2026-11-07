@@ -25,6 +25,12 @@ export const toggleOverlay = (o: Overlay): void => show(useOverlays.getState().o
 
 export const closeOverlay = (): void => show(null);
 
+/**
+ * What had the focus before the first overlay opened. A dialog an overlay's command opens (the palette's Import)
+ * gives the focus back there, not to the overlay's field, which is gone by then.
+ */
+export const focusBeforeOverlay = (): HTMLElement | null => before;
+
 const CONTROLS = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
 
 // Focus `el` if it can take the focus (still in the page, and not in a stage or part that is hidden or inert,
@@ -40,14 +46,18 @@ const focusFirstIn = (root: Element | null): boolean => !!root && [...root.query
  * An overlay's `onCloseAutoFocus`. A modal Radix dialog gives the focus to its trigger when it closes, and the
  * overlays have none, so the focus would be left on the page itself. Instead it goes back to what had it before
  * the first overlay opened, or stays in the overlay that took this one's place. When that can't take it any more
- * (gone, or in a stage no longer shown), it goes to the first control in the stage on screen, else the top bar's.
+ * (gone, or in a stage no longer shown), it goes to `instead` if that takes it, else the first control in the
+ * stage on screen, else the top bar's. It is given back only if it was lost (on the page itself): when the
+ * overlay closed into another dialog (the palette's Import, which gives it back itself, to `focusBeforeOverlay()`),
+ * or something took it meanwhile (New document's caret), it stays there, and nothing is kept for later.
  */
-export function focusBack(e: Event): void {
+export function focusBack(e: Event, instead?: () => boolean): void {
   e.preventDefault();
   if (useOverlays.getState().open) return;
   const el = before;
   before = null;
-  if (!el || focusOn(el)) return;
+  const taken = document.activeElement !== null && document.activeElement !== document.body && !document.activeElement.closest('[data-overlay]');
+  if (taken || otherModalOpen() || !el || focusOn(el) || instead?.()) return;
   if (!focusFirstIn(document.querySelector('[data-stage]:not([hidden])'))) focusFirstIn(document.querySelector('header'));
 }
 

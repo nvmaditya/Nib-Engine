@@ -1,9 +1,10 @@
 // The built-in Looks, and how a Look is matched and applied.
 import { FONTS } from '@/engine/config.js';
+import { clearMeasureCache } from '@/engine/core.js';
 import { BOX_KEYS } from '@/engine/doc.js';
 import type { Settings } from '@/engine/types';
 import { scopeBox, setV, step, view } from '@/features/doc/actions';
-import { useEditor } from '@/store/editor';
+import { update, useEditor } from '@/store/editor';
 import type { SavedLook } from './prefs';
 
 const NEAT = { mess: 15, wobble: 12, variety: 35, flow: 30 };
@@ -43,6 +44,17 @@ export function lookMatches(look: SavedLook, V: Settings, S: Settings, blockScop
 }
 
 export const pickLook = (look: SavedLook): void => setV(lookPatch(look, !!scopeBox()), step('look'));
+
+/**
+ * The palette's Looks: a look on the whole document, whatever Style's panel is set to, as one step. Blocks with
+ * their own style keep it, as with Style's Everything. A look already in place records nothing, and so does one
+ * whose hand is gone when the rest of it is.
+ */
+export function pickDocumentLook(look: SavedLook): void {
+  const { S } = useEditor.getState(), v = lookPatch(look, false);
+  if (lookMatches({ ...look, v }, S, S, false)) return;
+  update(s => { Object.assign(s.S, v); clearMeasureCache(); }, { history: step('look') });
+}
 
 /**
  * The handwriting keys as the panel shows them, and the document's paper: what saving a look keeps.
