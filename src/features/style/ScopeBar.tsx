@@ -35,16 +35,16 @@ export function ScopeBar({ notice }: { notice?: ReactNode }) {
   else line = ownStyleLine(owners) || 'Changes apply to the whole document.';
 
   return (
-    <div className="sticky top-0 z-10 border-b border-line bg-surface px-5 pt-3 pb-3">
+    <div data-style-head="" className="sticky top-0 z-10 border-b border-line bg-surface px-5 pt-3 pb-3">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Style</h2>
+        <h2 tabIndex={-1} className="text-base font-semibold outline-none">Style</h2>
         <Button variant="outline" size="sm" onClick={newVariation}
           title={scope === 'box' ? 'Draw this block with new random shapes' : 'Draw the whole document with new random shapes'}>
           <Shuffle />New variation
         </Button>
       </div>
-      {/* Takes no room while there is no notice (:empty). */}
-      <div className="mb-3 empty:hidden">{notice}</div>
+      {/* A status region that is always there, so its text is announced when it arrives; it takes no room while empty. */}
+      <div role="status" className="mb-3 empty:mb-0">{notice}</div>
       {b && (
         <div role="group" aria-label="Apply changes to" className="grid grid-cols-2 gap-1 rounded-lg bg-surface-2 p-1">
           <button type="button" className={seg} aria-pressed={scope === 'all'} onClick={() => setScope('all')}>Whole document</button>

@@ -1,5 +1,5 @@
 // Looks: six built-in ones and the ones saved on this device.
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
@@ -118,4 +118,44 @@ test('the save dialog doesn’t stay open over another stage', async () => {
   expect(screen.getByRole('dialog', { name: 'Save as a look' })).toBeInTheDocument();
   rerender(r('write'));
   expect(screen.queryByRole('dialog', { name: 'Save as a look' })).toBeNull();
+});
+
+test.each([
+  ['Escape', async () => { await userEvent.keyboard('{Escape}'); }],
+  ['×', async () => { await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' })); }],
+  ['Save', async () => { await userEvent.click(screen.getByRole('button', { name: 'Save' })); }],
+])('closing Save as a look by %s puts focus back on its button', async (_n, close) => {
+  open(docOf(box())); render(<Live />);
+  await userEvent.click(screen.getByRole('button', { name: 'Save the current style as a look' }));
+  await close();
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Save as a look' })).toBeNull());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save the current style as a look' })).toHaveFocus());
+});
+test('Remove moves focus to the next card, or to Save when it was the last', async () => {
+  open(docOf(box()));
+  await addSavedLook('One', { font: 'kalam' }); await addSavedLook('Two', { font: 'caveat' });
+  render(<Live />);
+  await userEvent.click(screen.getByRole('button', { name: 'Remove One' }));
+  expect(screen.getByRole('button', { name: 'Two' })).toHaveFocus();
+  await userEvent.click(screen.getByRole('button', { name: 'Remove Two' }));
+  expect(screen.getByRole('button', { name: 'Save the current style as a look' })).toHaveFocus();
+});
+test('pressing the Look that is already chosen records nothing and keeps Redo', async () => {
+  open(docOf(box())); render(<Live />);
+  await userEvent.click(screen.getByRole('button', { name: 'Journal' }));
+  act(() => undo());
+  expect(get().canRedo).toBe(true);
+  await userEvent.click(screen.getByRole('button', { name: 'Exam answer' }));
+  expect(get().canRedo).toBe(true);
+  expect(get().canUndo).toBe(false);
+});
+test('a saved Look can be pressed while it is chosen without a step', async () => {
+  open(docOf(box())); await addSavedLook('Mine', { font: 'kalam' }); render(<Live />);
+  await userEvent.click(screen.getByRole('button', { name: 'Journal' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Mine' }));
+  act(() => undo());
+  expect(screen.getByRole('button', { name: 'Journal' })).toHaveAttribute('aria-pressed', 'true');
+  expect(get().canRedo).toBe(true);
+  await userEvent.click(screen.getByRole('button', { name: 'Journal' }));
+  expect(get().canRedo).toBe(true);
 });

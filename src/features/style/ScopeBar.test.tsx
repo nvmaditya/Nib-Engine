@@ -107,3 +107,13 @@ test('the page notice sits right under the title row, above the scope switch', (
   expect(after(screen.getByRole('button', { name: /New variation/ }), notice)).toBe(true);
   expect(after(notice, screen.getByRole('group', { name: 'Apply changes to' }))).toBe(true);
 });
+
+test('the notice slot is a status region that exists before its text', () => {
+  open(docOf(box({ id: 'n', name: 'Main text' })));
+  const { rerender } = render(<ScopeBar notice={null} />);
+  const slot = screen.getByRole('status');
+  expect(slot).toBeEmptyDOMElement();
+  rerender(<ScopeBar notice={<p>Now 3 pages (was 2)</p>} />);
+  expect(screen.getByRole('status')).toBe(slot);
+  expect(slot).toHaveTextContent('Now 3 pages (was 2)');
+});

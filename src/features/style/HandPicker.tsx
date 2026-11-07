@@ -2,7 +2,7 @@
 // one filter at a time, favourites, and your own font. A panel on the right on wide screens, a bottom
 // sheet on phones. It is open only while the Style stage is shown; its search and filter are kept by
 // the Handwriting section, so they are still there when it opens again.
-import { useId, useLayoutEffect, useReducer, useRef, type ChangeEvent } from 'react';
+import { useId, useLayoutEffect, useReducer, useRef, type ChangeEvent, type RefObject } from 'react';
 import { Star, Upload } from 'lucide-react';
 import { FONTS } from '@/engine/config.js';
 import type { FontCfg, Settings } from '@/engine/types';
@@ -54,8 +54,8 @@ function HandRow({ cfg, V, text, chosen, favourite }: { cfg: FontCfg; V: Setting
   );
 }
 
-export function HandPicker({ open, onOpenChange, V, start, blockName, q, onQ, filter, onFilter }: {
-  open: boolean; onOpenChange(open: boolean): void; V: Settings; start: string; blockName: string | null;
+export function HandPicker({ returnTo, open, onOpenChange, V, start, blockName, q, onQ, filter, onFilter }: {
+  returnTo?: RefObject<HTMLElement | null>; open: boolean; onOpenChange(open: boolean): void; V: Settings; start: string; blockName: string | null;
   q: string; onQ(q: string): void; filter: HandFilter; onFilter(f: HandFilter): void;
 }) {
   const active = useStageActive();
@@ -107,6 +107,8 @@ export function HandPicker({ open, onOpenChange, V, start, blockName, q, onQ, fi
     <Dialog open={open && active} onOpenChange={onOpenChange}>
       <DialogContent ref={contentRef} aria-describedby={undefined} data-hand-picker=""
         // On phones the search box isn't focused at first, so the keyboard doesn't cover the list.
+        // Closing gives focus back to the button that opened it (the dialog has no trigger of its own).
+        onCloseAutoFocus={returnTo ? e => { e.preventDefault(); returnTo.current?.focus(); } : undefined}
         onOpenAutoFocus={wide ? undefined : e => { e.preventDefault(); contentRef.current?.focus(); }}
         className={cn(
           'flex flex-col gap-0 overflow-hidden p-0 outline-none',
