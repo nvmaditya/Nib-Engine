@@ -6,6 +6,7 @@ import { SAMPLE_BODY } from '@/engine/config.js';
 import { srcOffset } from '@/engine/core.js';
 import { flushSave, openDocument, placeCaret, undo, update } from '@/store/editor';
 import { get, rec } from '@/test/docs';
+import { setActiveEditor } from './active';
 import { BlockEditor, type BlockEditorProps } from './BlockEditor';
 import { FormatToolbar } from './FormatToolbar';
 import { offsetAt, posAt } from './positions';
@@ -106,6 +107,14 @@ test('Bold, page break and text style write markup', async () => {
 
 test('the toolbar is disabled until an editor has focus', () => {
   render(<FormatToolbar />);
+  expect(screen.getByRole('button', { name: 'Bold' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: 'Text style' })).toBeDisabled();
+});
+
+test('the toolbar is off for an editor in a view that isn’t shown (hidden and inert)', () => {
+  openDocument(rec('A', 'x'));
+  render(<><div inert><BlockEditor boxId="b1" range={null} label="Hidden" onReady={e => (ed = e)} /></div><FormatToolbar /></>);
+  act(() => setActiveEditor(ed, 'b1'));
   expect(screen.getByRole('button', { name: 'Bold' })).toBeDisabled();
   expect(screen.getByRole('combobox', { name: 'Text style' })).toBeDisabled();
 });

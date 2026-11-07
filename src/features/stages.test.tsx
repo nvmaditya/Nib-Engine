@@ -91,10 +91,11 @@ test('an inactive stage stays in the page but hidden', async () => {
 test('a caret request goes to the Write view on screen, not to a hidden one', async () => {
   location.hash = `#/d/${id}/outline`;
   render(<App />);
-  await screen.findByRole('button', { name: 'Outline', pressed: true });
+  const outlineEditor = await screen.findByRole('textbox', { name: 'Main text, all pages' }); // Outline's inspector
   await userEvent.click(stageButton('Style'));
   location.hash = `#/d/${id}/write`;
   const shown = await screen.findByRole('textbox', { name: 'Main text, page 1' });
+  expect(outlineEditor.closest('[data-stage]')).toHaveAttribute('data-stage', 'outline');
   act(() => placeCaret('b1', 5));
   await waitFor(() => expect(document.activeElement).toBe(shown));
   const ed = (shown as HTMLElement & { editor: Editor }).editor;
@@ -145,7 +146,7 @@ test('a menu left in a hidden stage doesn’t keep Escape from leaving the block
 test('Write goes back to the Write view you used last', async () => {
   location.hash = `#/d/${id}/outline`;
   render(<App />);
-  await screen.findByRole('button', { name: 'Outline', pressed: true });
+  await screen.findByRole('region', { name: 'Outline' });
   await userEvent.click(stageButton('Style'));
   await search();
   await userEvent.click(stageButton('Write'));
