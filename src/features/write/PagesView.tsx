@@ -11,7 +11,7 @@ import type { PageLayout } from '@/features/pages/PageView';
 import { useWide } from '@/lib/media';
 import { update, useEditor } from '@/store/editor';
 import { PageRow } from './PageRow';
-import { PhonePages } from './PhonePages';
+import { nothingWritten, PhonePages } from './PhonePages';
 import { PartMenu } from './TypedPage';
 import { WriteBar, type WriteMode } from './WriteBar';
 
@@ -43,7 +43,11 @@ export const PagesView = memo(function PagesView({ layout }: { layout: PageLayou
 function WidePages({ layout }: { layout: PageLayout | null }) {
   const active = useStageActive();
   const scrollToPage = useEditor(s => s.scrollToPage);
-  const [mode, setModeState] = useState<WriteMode>(readMode);
+  // A document with nothing written yet opens with its typed page showing (the mode kept for others stays).
+  const [mode, setModeState] = useState<WriteMode>(() => {
+    const m = readMode();
+    return m === 'hand' && nothingWritten(useEditor.getState().doc) ? 'side' : m;
+  });
   const [width, setWidth] = useState(0);
   const [inView, setInView] = useState(0);
   const pagesRef = useRef<HTMLElement>(null);

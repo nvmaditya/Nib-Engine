@@ -180,6 +180,18 @@ test('a swipe that starts on the handwritten writing turns the page', async () =
   expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
 });
 
+test('a document with nothing written opens on its typed page, and the face kept for others stays', async () => {
+  cleanup();
+  localStorage.setItem('nib.phoneFace', 'hand');
+  const id = (await createDoc({ title: 'New', settings: cleanSettings(null, false), doc: docOf() })).id;
+  location.hash = `#/d/${id}/write`;
+  render(<App />);
+  await screen.findByText('Page 1 of 1');
+  expect(screen.getByRole('button', { name: 'Typed' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText('Empty page. Use + Add, or drag a block here in Outline.')).toBeInTheDocument();
+  expect(localStorage.getItem('nib.phoneFace')).toBe('hand');
+});
+
 test('a mouse drag does not turn the page', () => {
   const at = (x: number) => ({ pointerId: 3, pointerType: 'mouse', isPrimary: true, button: 0, clientX: x, clientY: 300 });
   fireEvent.pointerDown(pageArea(), at(250));

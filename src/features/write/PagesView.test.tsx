@@ -79,6 +79,25 @@ test('a part sits where its handwriting is, in its block’s colour, with the pa
   expect([typed(1).style.width, typed(1).style.minHeight]).toEqual(['500px', `${Math.round(500 * 1123 / 794)}px`]);
 });
 
+test('a document with nothing written opens with its typed page showing, and the Show kept for others stays', async () => {
+  localStorage.setItem('nib.writeMode', 'hand');
+  await openWrite(docOf()); // a new document: no blocks yet
+  expect(screen.getByRole('button', { name: 'Side by side' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText('Empty page. Use + Add, or drag a block here in Outline.')).toBeInTheDocument();
+  expect(localStorage.getItem('nib.writeMode')).toBe('hand');
+  cleanup();
+  await openWrite(docOf(m(' '), box({ id: 'n', name: 'Margin note', kind: 'note', text: '' }))); // blank blocks: still nothing written
+  expect(screen.getByRole('button', { name: 'Side by side' })).toHaveAttribute('aria-pressed', 'true');
+  cleanup();
+  await openWrite(docOf(m('Some words')));
+  expect(screen.getByRole('button', { name: 'Handwritten' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByRole('textbox', { name: 'Main text, page 1' })).toBeNull();
+  localStorage.setItem('nib.writeMode', 'typed');
+  cleanup();
+  await openWrite(docOf());
+  expect(screen.getByRole('button', { name: 'Typed' })).toHaveAttribute('aria-pressed', 'true'); // the typed page shows already
+});
+
 test('Show switches and is remembered', async () => {
   await openWrite();
   const pages = screen.getByRole('main', { name: 'Pages' });
