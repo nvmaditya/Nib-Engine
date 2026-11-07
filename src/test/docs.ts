@@ -6,7 +6,7 @@ import { cleanSettings } from '@/engine/doc.js';
 import { computeLayout, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Layout, Settings } from '@/engine/types';
 import type { DocRecord } from '@/store/documents';
-import { openDocument, useEditor } from '@/store/editor';
+import { closeDocument, openDocument, useEditor } from '@/store/editor';
 
 export const get = useEditor.getState;
 
@@ -30,7 +30,14 @@ export function layoutOf(doc: EngineDoc, S: Settings = cleanSettings(null, false
   return computeLayout();
 }
 
-export const open = (doc: EngineDoc): void => openDocument(rec('A', doc));
+/**
+ * Open `doc` as document `dA`. Every test opens that same id, so whatever is open is left first (as
+ * Home does): what is kept for the open document only, Style's panel say, starts afresh each time.
+ */
+export function open(doc: EngineDoc): void {
+  void closeDocument();
+  openDocument(rec('A', doc));
+}
 
 /**
  * Let the hands' font files "arrive", so the open document's pages get laid out. The bytes are not a

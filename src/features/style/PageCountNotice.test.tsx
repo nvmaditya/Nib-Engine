@@ -12,7 +12,6 @@ import { flushSave, openDocument, update } from '@/store/editor';
 import { box, docOf, get, open, rec } from '@/test/docs';
 import { paragraphs, realFonts } from '@/test/fonts';
 import { PageCountNotice } from './PageCountNotice';
-import { resetStylePanel } from './panelState';
 import { ScopeBar } from './ScopeBar';
 
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
@@ -20,8 +19,7 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }
 
 beforeAll(async () => { realFonts(); expect(await loadFont('labelle')).toBe(true); });
 afterAll(() => vi.unstubAllGlobals());
-// (every test opens the same document, so the count starts again here)
-beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); resetStylePanel(); });
+beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); });
 
 const para = (n: number): EngineDoc => docOf(box({ id: 'm', name: 'Main text', text: paragraphs(n) }));
 const status = () => screen.getByText(/^Now /).parentElement!;

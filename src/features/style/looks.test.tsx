@@ -10,7 +10,6 @@ import { flushSave, undo, update, useEditor } from '@/store/editor';
 import { box, docOf, get, lastToast, lastToastAction, open } from '@/test/docs';
 import { LooksSection } from './LooksSection';
 import { currentLookValues, lookPatch, matchLook, STYLE_LOOKS } from './looks';
-import { resetStylePanel } from './panelState';
 import { addSavedLook, useStylePrefs } from './prefs';
 
 const store = new Map<string, unknown>();
@@ -28,7 +27,6 @@ beforeEach(async () => {
   vi.mocked(sonner).mockClear();
   vi.mocked(setPref).mockClear();
   useStylePrefs.setState({ looks: [], favourites: [], previewText: '' });
-  resetStylePanel(); // every test opens the same document, so Save as a look starts closed again here
 });
 
 function Live() {

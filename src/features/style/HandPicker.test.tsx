@@ -16,7 +16,6 @@ import { box, docOf, fontsLoad, get, lastToast, open } from '@/test/docs';
 import { fontFile } from '@/test/fonts';
 import { docStart } from './hands';
 import { HandSection } from './HandSection';
-import { resetStylePanel } from './panelState';
 import { useStylePrefs } from './prefs';
 
 vi.mock('@/engine/core.js', async orig => ({ ...(await orig<typeof import('@/engine/core.js')>()), drawSample: vi.fn(() => 100) }));
@@ -39,7 +38,6 @@ beforeEach(async () => {
   vi.mocked(sonner).mockClear(); vi.mocked(drawSample).mockClear(); vi.mocked(setPref).mockClear();
   prefs.clear();
   useStylePrefs.setState({ looks: [], favourites: [], previewText: '' });
-  resetStylePanel(); // every test opens the same document, so the picker starts closed again here
 });
 afterEach(() => { for (let i = FONTS.length - 1; i >= 0; i--) if (FONTS[i].group === 'mine') FONTS.splice(i, 1); });
 
