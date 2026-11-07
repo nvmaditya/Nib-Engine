@@ -100,4 +100,26 @@ describe('Write in Chromium, laid out for real', () => {
     expect(withInk.equals(without), 'the outline hides the ink where letters cross the block’s left edge').toBe(false);
     expect(errors).toEqual([]);
   }, 120_000);
+
+  test.each([1280, 390])('at %i px, typing past the bottom of a typed page stays inside the page, which is A4 again once the editor is left', async width => {
+    const page = await openSample(width);
+    await page.getByRole('textbox', { name: 'Main text, page 1' }).click();
+    await page.keyboard.press('Control+End');
+    for (let k = 1; k <= 14; k++) { await page.keyboard.press('Enter'); await page.keyboard.type(`More words, line ${k}`); }
+    await page.getByText('Page 2 starts here').waitFor();
+    const at = await page.evaluate(() => {
+      const ed = document.querySelector('[role="textbox"][aria-label="Main text, page 1"]')!;
+      const card = ed.closest('.typed-page')!, caption = card.parentElement!.querySelector('figcaption');
+      return { card: card.getBoundingClientRect().bottom, part: ed.closest('.typed-part')!.getBoundingClientRect().bottom, caption: caption?.getBoundingClientRect().top ?? null };
+    });
+    expect(at.part, 'the frozen part’s bottom').toBeLessThanOrEqual(at.card);
+    if (at.caption !== null) expect(at.caption, 'the caption under the page').toBeGreaterThanOrEqual(at.card);
+    // Leaving the editor ends the freeze: the lines past the page go on to page 2, and page 1 is its own size again.
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await page.waitForFunction(() => {
+      const card = document.querySelector<HTMLElement>('.typed-page[data-paper="0"]')!;
+      return Math.round(card.getBoundingClientRect().height) === Math.round(parseFloat(card.style.width) * 1123 / 794);
+    }, null, { timeout: 5_000 });
+    expect(errors).toEqual([]);
+  }, 120_000);
 });

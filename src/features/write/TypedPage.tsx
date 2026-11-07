@@ -227,11 +227,12 @@ export function TypedPage({ page, segs, s }: { page: number; segs: Seg[]; s: num
 
 interface TypedSheetProps { page: number; s: number; gap: number; parts: Part[]; sig: string; seg(id: string): Seg | undefined }
 
-// Drawn again only when something it shows changed: typing re-renders only the editor typed in.
+// Drawn again only when something it shows changed: typing re-renders only the editor typed in. The page is A4
+// and grows to hold its parts (typed.css), so lines typed past its bottom while a part is frozen stay on it.
 const TypedSheet = memo(function TypedSheet({ page, s, gap, parts, seg }: TypedSheetProps) {
   return (
-    <div className="typed-page relative overflow-visible border border-line bg-surface" data-paper={page}
-      style={{ width: Math.round(PAGE_W * s), height: Math.round(PAGE_H * s) }}>
+    <div className="typed-page relative border border-line bg-surface" data-paper={page}
+      style={{ width: Math.round(PAGE_W * s), minHeight: Math.round(PAGE_H * s) }}>
       {parts.map(p => <TypedPart key={p.id} p={p} s={s} gap={gap} seg={seg} />)}
       {!parts.length && (
         <p className="absolute inset-x-0 top-[44%] m-0 px-8 text-center text-[12px] leading-snug text-muted">
@@ -270,7 +271,7 @@ function TypedPart({ p, s, gap, seg }: { p: Part; s: number; gap: number; seg(id
   const b = p.body;
   return (
     <div ref={ref} className={cn('typed-part', selected && 'selected')} data-part={p.id} data-top={p.top}
-      style={{ left: p.x * s, top: p.top * s, width: p.w * s, minHeight: p.h * s, '--bc': color } as CSSProperties}>
+      style={{ marginLeft: p.x * s, marginTop: p.top * s, width: p.w * s, minHeight: p.h * s, '--bc': color } as CSSProperties}>
       <div className="typed-tag">
         <button type="button" aria-label={`Move ${name}`} title="Drag to move" onPointerDown={onGrip} onKeyDown={onGripKey}
           className={cn(gripClass, 'grid h-[18px] w-4 place-items-center rounded-[3px] text-white/85 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-[13px]')}>

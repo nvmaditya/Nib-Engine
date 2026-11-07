@@ -68,14 +68,15 @@ test('a part sits where its handwriting is, in its block’s colour, with the pa
   const sg = layoutFor(get().S, get().doc).segs.find(p => p.box.id === 'm' && p.idx === 1)!;
   const part = typed(1).querySelector<HTMLElement>('[data-part="m:1"]')!;
   const px = (v: string) => parseFloat(v); // jsdom keeps 6 significant digits
-  const placed = [part.style.left, part.style.top, part.style.width, part.style.minHeight].map(px);
+  const placed = [part.style.marginLeft, part.style.marginTop, part.style.width, part.style.minHeight].map(px);
   [sg.x, sg.top + 3.4, sg.w, sg.bottom - sg.top - 3.4].forEach((v, k) => expect(placed[k]).toBeCloseTo(v * s, 2));
   expect(part.style.getPropertyValue('--bc')).toBe('#D9661F');
   expect(within(part).getByText('2 of 2')).toBeInTheDocument();
   const body = textbox('Main text, page 2').closest<HTMLElement>('.typed-body')!;
   expect(px(body.style.fontSize)).toBeCloseTo(34 * s * 0.56, 3);
   expect(px(body.style.lineHeight)).toBeCloseTo(34 * s, 3);
-  expect([typed(1).style.width, typed(1).style.height]).toEqual(['500px', `${Math.round(500 * 1123 / 794)}px`]);
+  // A4, growing to hold its parts (while a part is frozen past the bottom, its page is longer).
+  expect([typed(1).style.width, typed(1).style.minHeight]).toEqual(['500px', `${Math.round(500 * 1123 / 794)}px`]);
 });
 
 test('Show switches and is remembered', async () => {
