@@ -197,13 +197,14 @@
   .paper.scanned .ink-layer {
     visibility: hidden;
   }
-  /* Camera tilt has the same stand-in: the page turned a little and cropped, so the exact tilted page
-     (a moment later, when it is back in view or has been drawn again) doesn't jump from a straight one. */
+  /* Camera tilt's stand-in until the exact tilted page is drawn: only the shot's slight zoom. Each page
+     turns its own way (±0.3–0.9°, either sign), so one fixed angle would turn half the pages the wrong
+     way first. Showing each page's own angle here needs the engine's angle as a value (Milestone 6). */
   [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art {
     overflow: hidden;
   }
   [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art > :is(.paper-bg, .ink-layer) {
-    transform: rotate(0.5deg) scale(1.02);
+    transform: scale(1.02);
   }
   [data-sheets][data-look='scan'] .paper:not(.scanned) {
     filter: brightness(1.08) contrast(1.12) saturate(0.85);
