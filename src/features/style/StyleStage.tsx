@@ -1,7 +1,7 @@
 // Style: the pages in the middle and the Style panel on the right (380 px). On phones the pages fill
 // the stage and the panel is a sheet over them; the pages leave room after the last sheet for as much as the
 // sheet covers (a spacer, not padding, so the top snap doesn't make the document scroll), so the last one can scroll clear of it.
-import { useRef, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { PageView, type PageLayout } from '@/features/pages/PageView';
 import { StageSheet, useSheetSnaps } from '@/features/doc/StageSheet';
 import { useWide } from '@/lib/media';
@@ -10,8 +10,11 @@ import { StylePanel } from './StylePanel';
 export function StyleStage({ layout }: { layout: PageLayout | null }) {
   const wide = useWide();
   const stage = useRef<HTMLDivElement>(null);
-  const snaps = useSheetSnaps(stage, !wide, '148px');
-  const panel = <StylePanel pages={layout?.pages ?? null} />;
+  // The lowest height is where the sticky header really ends (it is taller with a notice or a selected
+  // block); 148 px until it has been measured.
+  const [head, setHead] = useState(148);
+  const snaps = useSheetSnaps(stage, !wide, `${head}px`);
+  const panel = <StylePanel pages={layout?.pages ?? null} onHead={setHead} />;
   if (wide) {
     return (
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_380px] grid-rows-[minmax(0,1fr)] overflow-hidden">
