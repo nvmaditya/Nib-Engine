@@ -262,6 +262,24 @@ test('and so does a closing that finds what had the focus gone', async () => {
   expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Home' }));
 });
 
+test('with nothing to give back (the focus on the page itself as it opened, as after opening a document from Home), the first control of the stage on screen has it', async () => {
+  render(<><Overlays /><header><a href="#/">Home</a></header><div data-stage="write"><p>Write</p><button>In Write</button></div></>);
+  expect(document.activeElement).toBe(document.body);
+  fireEvent.keyDown(document.body, { key: '?', shiftKey: true });
+  expect(sheet()).toContainElement(document.activeElement as HTMLElement);
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(button('In Write'));
+});
+
+test('…and on Home, which has no stage, the top bar’s first control', async () => {
+  render(<><Overlays /><header><a href="#/">nib</a><button>New document</button></header><main><p>Recent</p></main></>);
+  fireEvent.keyDown(document.body, { key: '/', ctrlKey: true });
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  await later();
+  expect(document.activeElement).toBe(screen.getByRole('link', { name: 'nib' }));
+});
+
 test('or in a part made inert, though still shown', async () => {
   render(<><Overlays /><header><a href="#/">Home</a></header><div data-stage="write"><div inert><button>Inert</button></div><button>Live</button></div></>);
   act(() => { button('Inert').focus(); }); // (jsdom lets an inert control take the focus, so it gets here at all)

@@ -67,6 +67,18 @@ function focusPages(): () => void {
   return stop;
 }
 
+// Focus `el` if it can take the focus (still in the page, not the page itself, and not in a part that is hidden or
+// inert, where focus() does nothing); whether it took it.
+function focusOn(el: Element | null): boolean {
+  if (!(el instanceof HTMLElement) || el === document.body || !el.isConnected || el.closest('[inert], [hidden]')) return false;
+  el.focus({ preventScroll: true });
+  return document.activeElement === el;
+}
+// Where the focus goes on closing when what opened it is gone (the palette's field) or nothing had it (a file
+// dropped on the page): in a document the stage on screen's step, on Home its Import, else New document.
+const INSTEAD = ['nav[aria-label="Stages"] [aria-current="step"]', 'main button', 'header button'];
+const focusInstead = (): boolean => INSTEAD.some(sel => [...document.querySelectorAll(sel)].some(focusOn));
+
 export function ImportDialog({ open, file, target, onClose }: { open: boolean; file: File | null; target: ImportTarget; onClose(): void }) {
   // The focus on its way to the pages outlives the panel (closing is part of Write it out) but not the editor around
   // it. (From Home the page itself goes with the navigation, which is the point: the route check handles that.)
@@ -201,7 +213,7 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
         e.preventDefault();
         if (toPages.current) return; // written out on a phone: focusPages has it, not the opener
         if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[contenteditable="true"]')) return;
-        if (opener?.isConnected) opener.focus();
+        if (!focusOn(opener)) focusInstead();
       }}
       onKeyDown={keepUndo}
       onDragOver={e => { e.preventDefault(); if (!busy) setOver(true); }}

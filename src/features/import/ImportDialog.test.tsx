@@ -237,6 +237,26 @@ test.each([
   await userEvent.click(button); await ready(); expect(button).not.toHaveFocus();
   await close(); await waitFor(() => expect(button).toHaveFocus());
 });
+/** The top bar's stages in a document, Write's the one on screen. */
+function Steps() { return <nav aria-label="Stages"><button type="button" aria-current="step">1 Write</button><button type="button">2 Style</button></nav>; }
+const step = () => screen.getByRole('button', { name: '1 Write' });
+test('closing with what opened it gone (the palette’s field, say) gives the focus to the stage on screen’s step', async () => {
+  open(docOf(box())); render(<><Steps /><Open /></>);
+  const gone = document.createElement('button'); document.body.append(gone); gone.focus();
+  act(() => openImport()); await ready(); gone.remove();
+  await userEvent.keyboard('{Escape}'); await waitFor(() => expect(step()).toHaveFocus());
+});
+test('…and so does closing it when nothing had the focus as it opened (a file dropped on the page)', async () => {
+  open(docOf(box())); render(<><Steps /><Open /></>); expect(document.activeElement).toBe(document.body);
+  act(() => openImport()); await ready();
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' })); await waitFor(() => expect(step()).toHaveFocus());
+});
+test('from Home, with nothing to give it back to, the focus goes to Home’s Import', async () => {
+  render(<><header><a href="#/">nib</a><button type="button">New document</button></header><main><button type="button">Import a PDF, Word or text file</button></main><HomeLike /></>);
+  act(() => openImport(essay())); await ready(); // a file dropped on Home, with nothing focused
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Import a PDF, Word or text file' })).toHaveFocus());
+});
 test('Write it out puts the caret where the imported text starts, in the document', async () => {
   open(docOf(box({ id: 'm', name: 'Main text', text: 'mine' }))); let behind!: Editor;
   render(<><ImportButton /><BlockEditor boxId="m" range={null} label="Main text" acceptCaret onReady={e => (behind = e)} /><Open /></>);
