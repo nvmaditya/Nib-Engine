@@ -9,7 +9,7 @@ import { setPref } from '@/store/documents';
 import { flushSave, undo, update, useEditor } from '@/store/editor';
 import { box, docOf, get, lastToast, lastToastAction, open } from '@/test/docs';
 import { LooksSection } from './LooksSection';
-import { currentLookValues, lookPatch, matchLook, STYLE_LOOKS } from './looks';
+import { currentLookValues, lookPatch, matchLook, pickDocumentLook, STYLE_LOOKS } from './looks';
 import { addSavedLook, useStylePrefs } from './prefs';
 
 const store = new Map<string, unknown>();
@@ -122,6 +122,15 @@ test('a saved look can be removed, and Undo puts it back', async () => {
   act(() => lastToastAction()!());
   await screen.findByRole('button', { name: 'Mine' });
 });
+test('…and when the device can’t store the removal, Style says so, with Undo', async () => {
+  open(docOf(box())); await addSavedLook('Mine', { font: 'kalam' }); render(<Live />);
+  vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
+  await userEvent.click(screen.getByRole('button', { name: 'Remove Mine' }));
+  await waitFor(() => expect(lastToast()).toBe('Removed “Mine” here, but this device couldn’t save that, so it may come back.'));
+  expect(screen.queryByRole('button', { name: 'Mine' })).toBeNull();
+  act(() => lastToastAction()!());
+  await screen.findByRole('button', { name: 'Mine' });
+});
 test('the save dialog doesn’t stay open over another stage', async () => {
   open(docOf(box()));
   const r = (stage: 'style' | 'write') => <StageHost stage={stage} render={s => s === 'style' ? <Live /> : <p>write</p>} />;
@@ -181,4 +190,34 @@ test('a built-in Look that a saved one matches records nothing when pressed', as
   expect(get().canRedo).toBe(true);
   await userEvent.click(screen.getByRole('button', { name: 'Journal' }));
   expect(get().canRedo).toBe(true);
+});
+
+/* ---------- The palette's Looks: for the whole document ---------- */
+
+const look = (id: string) => STYLE_LOOKS.find(l => l.id === id)!;
+test('the palette puts a look on the whole document as one step, even with Style set to one block', () => {
+  open(docOf(box(), box({ id: 'n', kind: 'note', name: 'Margin note', style: { font: 'kalam' } }))); styleBox('n');
+  act(() => pickDocumentLook(look('scribble')));
+  expect(get().S).toMatchObject({ font: 'reenie', tip: 'pencil', ink: 'black', paper: 'grid', mess: 72, wobble: 50, variety: 75, flow: 70 });
+  expect(get().doc.boxes[1].style).toEqual({ font: 'kalam' }); // a block with its own hand keeps it, as in Style's Everything
+  act(() => undo());
+  expect(get().S).toMatchObject({ font: 'labelle', paper: 'ruled' });
+  expect(get().canUndo).toBe(false);
+});
+test('the palette’s look already in place records nothing, and keeps Redo', () => {
+  open(docOf(box()));
+  act(() => pickDocumentLook(look('journal')));
+  act(() => pickDocumentLook(look('journal')));
+  act(() => undo());
+  expect(get().canUndo).toBe(false);
+  expect(get().canRedo).toBe(true);
+  act(() => pickDocumentLook(look('exam'))); // a new document's look
+  expect(get().canRedo).toBe(true);
+});
+test('nor does a saved look whose hand is gone, when the rest is in place', () => {
+  open(docOf(box()));
+  act(() => pickDocumentLook({ id: 'x', name: 'X', v: { font: 'up-gone', tip: 'ball', paper: 'ruled' } }));
+  expect(get().canUndo).toBe(false);
+  act(() => pickDocumentLook({ id: 'x', name: 'X', v: { font: 'up-gone', tip: 'gel', paper: 'ruled' } }));
+  expect([get().S.font, get().S.tip, get().canUndo]).toEqual(['labelle', 'gel', true]);
 });

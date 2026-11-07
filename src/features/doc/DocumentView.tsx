@@ -14,6 +14,8 @@ import { ExportStage } from '@/features/export/ExportStage';
 import { ImportDialog } from '@/features/import/ImportDialog';
 import { closeImport, openImport, select } from './actions';
 import { StageHost } from './StageHost';
+import { Tips } from './Tips';
+import { showTipsIfDue } from './tipsSeen';
 
 /** Fetch the font files the document needs, and lay the pages out again once they arrive. */
 function usePageLayout(): PageLayout | null {
@@ -94,6 +96,7 @@ export function DocumentView({ stage }: { stage: Stage }) {
   const importFile = useEditor(s => s.importFile);
 
   useEffect(() => { if (stage === 'write' || stage === 'outline') setWriteView(stage); }, [stage]);
+  useEffect(() => showTipsIfDue(), []); // the first document to open on this device
 
   // Escape leaves the selected block, unless an editor, a field, a dialog or a menu has the key. Who has
   // it is settled as the key goes down (on the window, before a Radix dialog closes itself in its own
@@ -121,6 +124,7 @@ export function DocumentView({ stage }: { stage: Stage }) {
             : s === 'style' ? <StyleStage layout={layout} />
               : <ExportStage layout={layout} />
       )} />
+      <Tips />
       <ImportDialog open={importOpen} file={importFile} target="open" onClose={closeImport} />
       {veil && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-[3px] border-dashed border-primary bg-primary/10 text-lg font-semibold text-fg">

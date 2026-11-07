@@ -2,11 +2,12 @@
 import { useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
 import { Bold, Highlighter, List, ListOrdered, SeparatorHorizontal, Strikethrough, Underline } from 'lucide-react';
+import { chordLabel } from '@/lib/keys';
 import { cn } from '@/lib/utils';
 import { useActiveEditor } from './active';
 import { FORMAT_STEP, insertPageBreak, setTextStyle, textStyleOf, type TextStyle } from './extensions';
 
-// `keys` is the shortcut after the modifier (Ctrl+ or ⌘), shown in the tooltip.
+// `keys` is the key pressed with the modifier (Ctrl, or ⌘ on Apple), shown in the tooltip.
 interface Tool { label: string; keys?: string; icon: ReactNode; on?: string; run(e: Editor): void }
 
 // Each tool's change is an undo step of its own.
@@ -33,12 +34,6 @@ const usable = (e: Editor | null): e is Editor => !!e && !e.isDestroyed && !e.vi
 // The selection's text style and active marks, as one string so the toolbar redraws only when they change.
 const snapshot = (e: Editor | null) => (usable(e) ? [textStyleOf(e), ...ON.filter(k => e.isActive(k))].join(' ') : '');
 
-// Apple keyboards say ⌘ where others say Ctrl+.
-function modKey(): string {
-  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
-  return /mac|iphone|ipad|ipod/i.test(nav.userAgentData?.platform || nav.platform || '') ? '⌘' : 'Ctrl+';
-}
-
 const ring = 'focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none';
 
 /** Whether the focus went to one of the tools, which format the selection of the editor it left. */
@@ -57,7 +52,7 @@ export function FormatToolbar({ className, editor: given }: { className?: string
   }, [editor]);
   const snap = useSyncExternalStore(subscribe, () => snapshot(editor));
   const [style = 'paragraph', ...on] = snap ? snap.split(' ') : [];
-  const off = !usable(editor), mod = modKey();
+  const off = !usable(editor);
 
   return (
     <div role="toolbar" aria-label="Formatting" data-format-toolbar="" className={cn('flex flex-wrap items-center gap-0.5', className)}>
@@ -69,7 +64,7 @@ export function FormatToolbar({ className, editor: given }: { className?: string
       {TOOLS.map((t, i) => t === 'sep'
         ? <span key={i} aria-hidden className="mx-1 h-5 w-px bg-line" />
         : (
-          <button key={t.label} type="button" aria-label={t.label} title={t.keys ? `${t.label} (${mod}${t.keys})` : t.label} disabled={off}
+          <button key={t.label} type="button" aria-label={t.label} title={t.keys ? `${t.label} (${chordLabel(['Mod', t.keys])})` : t.label} disabled={off}
             aria-pressed={t.on ? on.includes(t.on) : undefined}
             onMouseDown={e => e.preventDefault()} // keep the caret in the editor
             onClick={() => { if (usable(editor)) t.run(editor); }}

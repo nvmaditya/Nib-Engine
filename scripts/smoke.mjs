@@ -1,8 +1,13 @@
-// Smoke run: build, serve with `vite preview`, and drive the real app in Chromium through Home, Write,
-// Style and Export, then Home, the templates and Import (reading the downloaded PDF and ZIP byte by byte). Prints "smoke ok" and exits 0, or exits 1 on any failure or console error.
+// Smoke run: build, serve with `vite preview` at /nib-engine/ (where GitHub Pages serves it), and drive the real app in
+// Chromium through Home, Write, Style and Export, then Home, the templates and Import (reading the downloaded PDF and ZIP
+// byte by byte), then the shortcut sheet, the palette, the theme, the tips, every stage at 390 and 320 px, a new version
+// in two tabs, and installing and working offline with the server stopped. Prints "smoke ok" and exits 0, or exits 1 on
+// any failure or console error.
 // Uses the Playwright that is installed on the machine (it is not a project dependency).
 import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { once } from 'node:events';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
@@ -107,18 +112,21 @@ async function waitForServer(url, ms = 30000) {
 
 async function main() {
   PORT = await freePort();
-  BASE = `http://localhost:${PORT}/`;
+  BASE = `http://localhost:${PORT}/nib-engine/`;
   const built = spawnSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
   if (built.status !== 0) fail('the build failed');
 
   const vite = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
-  const server = spawn(process.execPath, [vite, 'preview', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'ignore' });
-  let browser;
+  // Served where GitHub Pages serves it, so the service worker's scope and the manifest's paths are tested where they live.
+  const server = spawn(process.execPath, [vite, 'preview', '--base', '/nib-engine/', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'ignore' });
+  const serverUp = () => server.exitCode === null && server.signalCode === null;
+  let browser, profile, pwa;
   try {
     await waitForServer(BASE);
     const { chromium } = require('playwright');
     browser = await chromium.launch();
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true });
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true, serviceWorkers: 'block' });
+    await ctx.addInitScript(() => { try { localStorage.setItem('nib.tips', 'seen'); } catch {} }); // the tips seen: the steps see only the documents
     const page = await ctx.newPage();
     const errors = [];
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -160,20 +168,22 @@ async function main() {
       await page.getByText('The Water Cycle').waitFor({ timeout: 15000 });
     });
 
+    /** The first page of the stage on screen has its paper painted and, once the font file arrives (fontTick), writing on its ink canvases. */
+    const pageOneInked = p => p.waitForFunction(() => {
+      const painted = c => {
+        if (!c || !c.width) return false;
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0 && (d[i] < 250 || d[i + 1] < 250 || d[i + 2] < 250)) return true;
+        return false;
+      };
+      const sheet = document.querySelector('[data-stage]:not([hidden]) .sheet');
+      return !!sheet && painted(sheet.querySelector('.paper-bg')) && [...sheet.querySelectorAll('.ink-layer canvas')].some(painted);
+    }, null, { timeout: 20000 });
+
     await step('the document opens and its first page is drawn in handwriting', async () => {
       await page.getByText('The Water Cycle').click();
       await page.getByRole('textbox', { name: 'Main text, page 1' }).waitFor();
-      // The paper is painted and, once the font file arrives (fontTick), the ink canvases get writing.
-      await page.waitForFunction(() => {
-        const painted = c => {
-          if (!c || !c.width) return false;
-          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-          for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0 && (d[i] < 250 || d[i + 1] < 250 || d[i + 2] < 250)) return true;
-          return false;
-        };
-        const sheet = document.querySelector('.sheet');
-        return !!sheet && painted(sheet.querySelector('.paper-bg')) && [...sheet.querySelectorAll('.ink-layer canvas')].some(painted);
-      }, null, { timeout: 20000 });
+      await pageOneInked(page);
     });
 
     await step('Write: Outline, a page break in Main text', async () => {
@@ -557,7 +567,8 @@ async function main() {
     });
 
     await step('Phone: Home and Import at 390 px, and Longhand work brought over on a first visit', async () => {
-      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, acceptDownloads: true });
+      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, acceptDownloads: true, serviceWorkers: 'block' });
+      await phone.addInitScript(() => { try { localStorage.setItem('nib.tips', 'seen'); } catch {} });
       try {
         await phone.addInitScript(() => {
           localStorage['longhand.v2'] = JSON.stringify({ s: {}, doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b1', page: 0, x: 112, y: 110, w: 630, text: '# My Longhand notes\nhello', style: {}, shuffle: 0, frames: {} }] } });
@@ -600,10 +611,353 @@ async function main() {
       } finally { await phone.close(); }
     });
 
+    // ---- Milestone 6: the shortcut sheet, the palette, the theme, the tips, phones, a new version, install and offline ----
+    /** `p`'s console errors and uncaught errors fail the step they happen in, except those `skip(url of their source)` lets by. */
+    const watch = (p, skip = () => false) => {
+      p.on('console', m => { if (m.type() === 'error' && !skip(m.location()?.url ?? '')) errors.push(m.text()); });
+      p.on('pageerror', e => errors.push(e.message));
+      return p;
+    };
+    /** Whether box `b` is inside 0–w across (and 0–h down). */
+    const inside = (b, w, h = Infinity) => !!b && b.x >= -0.5 && b.y >= -0.5 && b.x + b.width <= w + 0.5 && b.y + b.height <= h + 0.5;
+    const shortcutSheet = p => p.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    const palette = p => p.getByRole('dialog', { name: 'Search commands and documents' });
+    const fromMenu = async (p, item) => {
+      await p.getByRole('button', { name: 'Menu' }).click();
+      await p.getByRole('menuitem', { name: new RegExp(`^${item}`) }).click();
+    };
+    const stageNav = (p, name) => p.getByRole('navigation', { name: 'Stages' }).getByRole('button', { name: new RegExp(`${name}$`) });
+    const TIPS = [
+      'Click or tap a word on a handwritten page to put the caret there in its text.',
+      'Drag a block by its name tag to move it. Its ⋯ menu splits it, joins it back or removes one page’s part.',
+      'Press Ctrl+K to open a document, go to a stage or change the theme, and ? to see every shortcut.',
+    ];
+
+    await step('Shortcuts: ? and Ctrl+/ open the sheet, which lists the real shortcuts', async () => {
+      await page.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Pages' }).click();
+      await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+      await page.keyboard.press('?');
+      const sheet = shortcutSheet(page);
+      await sheet.waitFor({ timeout: 5000 });
+      const heads = await sheet.locator('h3').allTextContents();
+      const want = ['Anywhere', 'In a document', 'A block on a handwritten page', 'In the text', 'As you type'];
+      if (heads.join('|') !== want.join('|')) fail(`the sheet's headings are ${heads.join(', ')}`);
+      await page.keyboard.press('Escape');
+      await sheet.waitFor({ state: 'hidden', timeout: 5000 });
+      await page.getByRole('textbox', { name: /^Main text/ }).first().click();
+      await page.keyboard.press('Control+/');
+      await sheet.waitFor({ timeout: 5000 });
+      await page.keyboard.press('Escape');
+      await sheet.waitFor({ state: 'hidden', timeout: 5000 });
+      await page.waitForFunction(() => !!document.activeElement?.closest('.ProseMirror'), null, { timeout: 5000 });
+    });
+
+    await step('Palette: Ctrl+K finds a stage, a look and a document, gives the focus back to the Menu, and never opens over the Import dialog', async () => {
+      const pal = palette(page);
+      const run = async q => {
+        await page.keyboard.press('Control+K');
+        await pal.waitFor({ timeout: 5000 });
+        await page.keyboard.type(q);
+        await page.keyboard.press('Enter');
+        await pal.waitFor({ state: 'hidden', timeout: 5000 });
+      };
+      await run('Style');
+      await page.waitForURL(/\/style$/, { timeout: 5000 });
+      const pressed = look => page.waitForFunction(l => [...document.querySelectorAll('[data-stage="style"] button[aria-pressed="true"]')].some(b => b.textContent.startsWith(l)), look, { timeout: 10000 });
+      // (The Essay was written out in Neat notes: another look first, so the palette's is seen to take.)
+      await page.getByRole('button', { name: 'Journal', exact: true }).click();
+      await pressed('Journal');
+      await run('Neat notes');
+      await pressed('Neat notes');
+      await run('Water');
+      await page.waitForFunction(() => document.querySelector('input[aria-label="Document name"]')?.value === 'The Water Cycle', null, { timeout: 15000 });
+      // Opened from the Menu and closed: the focus is back on the Menu button.
+      await fromMenu(page, 'Search commands and documents');
+      await pal.waitFor({ timeout: 5000 });
+      await page.keyboard.press('Escape');
+      await pal.waitFor({ state: 'hidden', timeout: 5000 });
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Menu', null, { timeout: 5000 });
+      await page.getByRole('button', { name: 'Import', exact: true }).click();
+      const dialog = importDialog();
+      await dialog.waitFor({ timeout: 5000 });
+      await page.keyboard.press('Control+K');
+      await page.waitForTimeout(300);
+      if (await pal.count()) fail('the palette opened over the Import dialog');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await dialog.waitFor({ state: 'hidden', timeout: 5000 });
+    });
+
+    await step('Theme: Dark from the menu, kept with no flash, and followed by another tab', async () => {
+      const theme = async name => {
+        await page.getByRole('button', { name: 'Menu' }).click();
+        await page.getByRole('menuitemradio', { name, exact: true }).click();
+      };
+      await theme('Dark');
+      await page.waitForFunction(() => document.documentElement.classList.contains('dark'), null, { timeout: 5000 });
+      const now = await page.evaluate(() => [getComputedStyle(document.body).backgroundColor, document.querySelector('meta[name="theme-color"]')?.getAttribute('content')]);
+      if (now.join() !== 'rgb(14, 14, 17),#16161A') fail(`in Dark the body is ${now[0]} and the theme colour ${now[1]}`);
+      // A message in Dark: sonner's dark theme, on the Studio surface (app.css). (Adding a page says so; its Undo takes it away.)
+      await page.getByRole('button', { name: 'Add', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Page', exact: true }).click();
+      const said = page.locator('[data-sonner-toast]').filter({ hasText: 'Added a blank page.' });
+      await said.waitFor({ timeout: 5000 });
+      const toaster = await page.locator('[data-sonner-toaster]').getAttribute('data-sonner-theme');
+      const bg = await said.evaluate(t => getComputedStyle(t).backgroundColor);
+      if (toaster !== 'dark' || bg !== 'rgb(22, 22, 26)') fail(`a message in Dark has the theme ${toaster} and the background ${bg}`);
+      await said.getByRole('button', { name: 'Undo' }).click();
+      await said.waitFor({ state: 'hidden', timeout: 10000 });
+
+      // A second tab, with the app held back: the page is dark before anything of the app has run.
+      const page2 = watch(await ctx.newPage());
+      try {
+        await page2.route('**/assets/index-*.js', async r => { await new Promise(res => setTimeout(res, 1500)); await r.continue(); });
+        // (Not 'domcontentloaded': that waits for the module script, which is what is held back.)
+        await page2.goto(BASE, { waitUntil: 'commit' });
+        const first = await (await page2.waitForFunction(() => {
+          const root = document.getElementById('root');
+          const bg = document.body && getComputedStyle(document.body).backgroundColor;
+          if (!root || !bg || bg === 'rgba(0, 0, 0, 0)') return false; // (the stylesheet isn't in yet)
+          return { empty: root.childNodes.length === 0, dark: document.documentElement.classList.contains('dark'), bg };
+        }, null, { timeout: 10000, polling: 'raf' })).jsonValue();
+        if (!first.empty || !first.dark || first.bg !== 'rgb(14, 14, 17)') fail(`the second tab's first frame is ${JSON.stringify(first)}`);
+        await page2.getByRole('button', { name: 'Menu' }).waitFor({ timeout: 15000 });
+        await page.keyboard.press('Control+K');
+        await palette(page).waitFor({ timeout: 5000 });
+        await page.keyboard.type('Light theme');
+        await page.keyboard.press('Enter');
+        await page2.waitForFunction(() => !document.documentElement.classList.contains('dark'), null, { timeout: 2000 });
+        await theme('System');
+      } finally { await page2.close(); }
+    });
+
+    await step('Tips: shown the first time a document opens, without taking the focus', async () => {
+      const fresh = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
+      try {
+        const p = watch(await fresh.newPage());
+        await p.goto(BASE);
+        await p.getByText('The Water Cycle').click();
+        const tips = p.getByRole('complementary', { name: 'Tips' });
+        await tips.waitFor({ timeout: 15000 });
+        const items = await tips.getByRole('listitem').allTextContents();
+        if (items.join('|') !== TIPS.join('|')) fail(`the tips are ${items.join(' | ')}`);
+        if (await tips.evaluate(t => t.contains(document.activeElement))) fail('the tips took the focus');
+        await tips.getByRole('button', { name: 'Got it' }).click();
+        await tips.waitFor({ state: 'hidden', timeout: 5000 });
+        await p.reload();
+        await p.getByRole('link', { name: 'Home', exact: true }).click();
+        await p.getByRole('heading', { name: 'Start something new' }).waitFor({ timeout: 10000 });
+        await p.getByText('The Water Cycle').click();
+        await p.getByRole('textbox', { name: 'Main text, page 1' }).waitFor({ timeout: 15000 });
+        await p.waitForTimeout(1000);
+        if (await tips.count()) fail('the tips came back');
+      } finally { await fresh.close(); }
+    });
+
+    await step('Phone: every stage at 390 px, and nothing wider than 320 px', async () => {
+      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+      try {
+        const p = watch(await phone.newPage());
+        await p.goto(BASE);
+        await p.getByText('The Water Cycle').click();
+        const tips = p.getByRole('complementary', { name: 'Tips' });
+        await tips.waitFor({ timeout: 15000 });
+        if (!inside(await tips.boundingBox(), 390)) fail(`the tips are at ${JSON.stringify(await tips.boundingBox())}`);
+        const third = await tips.getByRole('listitem').nth(2).textContent();
+        if (third !== 'Swipe sideways on a page to turn to the next one.') fail(`the third tip on a phone is "${third}"`);
+        await tips.getByRole('button', { name: 'Got it' }).click();
+        await tips.waitFor({ state: 'hidden', timeout: 5000 });
+        /** The page is no wider than `w`, and the Menu button is on the screen. */
+        const fits = async (where, w, h) => {
+          const sw = await p.evaluate(() => document.documentElement.scrollWidth);
+          if (sw > w) fail(`${where} is ${sw} px wide on a ${w} px phone`);
+          if (!inside(await p.getByRole('button', { name: 'Menu' }).boundingBox(), w, h)) fail(`${where}: the Menu button is off the screen`);
+        };
+        const sheet = name => p.getByRole('dialog', { name });
+        const go = {
+          // (Write goes back to the view used last: Pages is asked for.)
+          Write: async () => {
+            await stageNav(p, 'Write').click();
+            await p.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Pages' }).click();
+            await p.getByText(/^Page 1 of \d+$/).waitFor({ timeout: 15000 });
+          },
+          Outline: async () => { await p.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Outline' }).click(); await sheet('Outline').waitFor({ timeout: 10000 }); },
+          Style: async () => { await stageNav(p, 'Style').click(); await sheet('Style').waitFor({ timeout: 10000 }); },
+          Export: async () => { await stageNav(p, 'Export').click(); await sheet('Export').waitFor({ timeout: 10000 }); },
+        };
+        await p.getByText(/^Page 1 of \d+$/).waitFor({ timeout: 15000 });
+        await fits('Write', 390, 844);
+        await go.Outline();
+        if (await sheet('Outline').getAttribute('aria-modal') !== 'false') fail('Outline’s sheet is modal');
+        await p.getByRole('button', { name: 'Drag to show more or less of Outline' }).waitFor();
+        await p.waitForTimeout(600); // (the sheet slides up)
+        const top = (await sheet('Outline').boundingBox()).y, first = await p.locator('[data-stage="outline"] .sheet').first().boundingBox();
+        if (!first || first.y >= top) fail('no handwritten page shows above Outline’s sheet');
+        await fits('Outline', 390, 844);
+        await go.Style();
+        await fits('Style', 390, 844);
+        await go.Export();
+        const download = p.getByRole('button', { name: /^Download / });
+        await download.waitFor({ timeout: 20000 });
+        await p.waitForTimeout(600);
+        if (!inside(await download.boundingBox(), 390, 844)) fail(`Download is at ${JSON.stringify(await download.boundingBox())}`);
+        await fits('Export', 390, 844);
+        for (const [item, dialog] of [['Search commands and documents', palette(p)], ['Keyboard shortcuts', shortcutSheet(p)]]) {
+          await fromMenu(p, item);
+          await dialog.waitFor({ timeout: 5000 });
+          await p.waitForTimeout(300); // (it zooms in)
+          if (!inside(await dialog.boundingBox(), 390)) fail(`${item} is at ${JSON.stringify(await dialog.boundingBox())}`);
+          await p.keyboard.press('Escape');
+          await dialog.waitFor({ state: 'hidden', timeout: 5000 });
+        }
+        await p.setViewportSize({ width: 320, height: 640 });
+        for (const stage of ['Write', 'Outline', 'Style', 'Export']) { await go[stage](); await p.waitForTimeout(400); await fits(stage, 320, 640); }
+        await p.getByRole('link', { name: 'Home', exact: true }).click();
+        await p.getByRole('heading', { name: 'Start something new' }).waitFor({ timeout: 10000 });
+        await fits('Home', 320, 640);
+      } finally { await phone.close(); }
+    });
+
+    // A profile of its own, in full Chromium (Chromium's own installability check answers only there), with the
+    // service worker running. Tab A is on Home and tab B in a document.
+    profile = mkdtempSync(join(tmpdir(), 'nib-smoke-'));
+    pwa = await chromium.launchPersistentContext(profile, { channel: 'chromium', viewport: { width: 1280, height: 860 } });
+    await pwa.addInitScript(() => { try { localStorage.setItem('nib.tips', 'seen'); } catch {} }); // (the steps click near the card's corner)
+    let offline = false;
+    const GOOGLE = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
+    // With the network off, Google's copies of the hands that were never fetched online fail to load (every hand still
+    // draws from its own precached file): those errors, and only those, are let by.
+    const a = watch(pwa.pages()[0] ?? await pwa.newPage(), url => offline && GOOGLE.test(url));
+    a.on('requestfailed', r => { if (r.url().startsWith(BASE)) errors.push(`${r.url()} failed: ${r.failure()?.errorText}`); });
+    const NEW_VERSION = 'A new version is ready.';
+
+    await step('Update: a new deploy is offered in every tab, and Reload reloads only the tab that asked, even while another tab fetches', async () => {
+      await a.goto(BASE);
+      await a.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 60000 });
+      await a.getByText('Nib works offline now.').waitFor({ timeout: 30000 });
+      // The empty page Reload may load unseen to wake a waiting version (src/app/updates.ts) is that file, never the app:
+      // nothing of Nib starts in it.
+      const kick = await a.evaluate(() => new Promise(res => {
+        const f = document.createElement('iframe');
+        f.hidden = true; f.src = './sw-kick.html';
+        f.onload = () => { const d = f.contentDocument; res({ scripts: d.scripts.length, root: !!d.getElementById('root'), text: d.body?.textContent.trim() }); f.remove(); };
+        document.body.append(f);
+      }));
+      if (kick.scripts || kick.root || kick.text) fail(`the page Reload loads unseen is not empty: ${JSON.stringify(kick)}`);
+      const b = watch(await pwa.newPage());
+      try {
+        await b.goto(BASE);
+        await b.getByText('The Water Cycle').click();
+        const main = b.getByRole('textbox', { name: 'Main text, page 1' });
+        await main.waitFor({ timeout: 15000 });
+        await main.click();
+        await b.keyboard.press('Control+End');
+        await b.keyboard.type(' (still typing)');
+        for (const p of [a, b]) await p.evaluate(() => { window.__stay = 1; });
+        appendFileSync(join(root, 'dist/sw.js'), `\n// redeploy ${Date.now()}`);
+        for (const p of [a, b]) await p.evaluate(async () => { await (await navigator.serviceWorker.getRegistration()).update(); });
+        for (const p of [a, b]) await p.getByText(NEW_VERSION).waitFor({ timeout: 20000 });
+        // B presses Reload with a change typed a moment ago, not yet written, while Home in A fetches hands through the
+        // old version (as it does drawing a thumbnail). Chromium can then leave the new version waiting, and a page that
+        // reloaded itself to wake it would never load: B must be on the new version well before its 10 s give-back.
+        await main.click();
+        await b.keyboard.press('Control+End');
+        await b.keyboard.type(' and more');
+        const burst = a.evaluate(ms => new Promise(res => {
+          const end = performance.now() + ms, hands = ['labelle', 'caveat', 'kalam', 'zeyada'];
+          let n = 0;
+          const go = () => { if (performance.now() > end) return res(n); fetch(`./fonts/${hands[n++ % 4]}.woff`).finally(() => setTimeout(go, 2)); };
+          go();
+        }), 400);
+        const t0 = Date.now();
+        await Promise.all([
+          b.waitForEvent('load', { timeout: 8000 }).catch(() => fail(`tab B had not reloaded ${Date.now() - t0} ms after Reload, with tab A fetching`)),
+          b.getByRole('button', { name: 'Reload' }).click(),
+        ]);
+        if (!(await burst)) fail('tab A fetched nothing while Reload was pressed');
+        if (await b.evaluate(() => window.__stay) !== undefined) fail('tab B did not reload');
+        // (Reload wrote the last change first.)
+        await b.getByRole('textbox', { name: 'Main text, page 1' }).filter({ hasText: '(still typing) and more' }).waitFor({ timeout: 15000 });
+        if (await b.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting)) fail('the new version still waits');
+        await a.waitForTimeout(1000);
+        if (await a.evaluate(() => window.__stay) !== 1) fail('tab A reloaded by itself');
+        if (!(await a.getByText(NEW_VERSION).count())) fail(`tab A no longer says “${NEW_VERSION}”`);
+        // A's Reload: the new version is in charge already, so A just reloads.
+        await Promise.all([a.waitForEvent('load', { timeout: 15000 }), a.getByRole('button', { name: 'Reload' }).click()]);
+        await a.getByText('The Water Cycle').waitFor({ timeout: 15000 });
+        await a.waitForTimeout(1000);
+        if (await a.getByText(NEW_VERSION).count()) fail(`tab A still says “${NEW_VERSION}” after reloading`);
+      } finally { await b.close(); }
+    });
+
+    await step('Install and offline: installable under /nib-engine/, and with the network off it still opens, draws an unused hand and imports', async () => {
+      const cdp = await pwa.newCDPSession(a);
+      const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors');
+      if (installabilityErrors.length) fail(`Chromium says Nib can’t be installed: ${JSON.stringify(installabilityErrors)}`);
+      const manifest = await cdp.send('Page.getAppManifest');
+      if (manifest.url !== `${BASE}manifest.webmanifest` || manifest.errors.length) fail(`the manifest is ${manifest.url}, with ${JSON.stringify(manifest.errors)}`);
+      const data = JSON.parse(manifest.data);
+      if (data.name !== 'Nib' || data.start_url !== './') fail(`the manifest says name ${data.name} and start_url ${data.start_url}`);
+      await cdp.detach();
+      await a.reload(); // (online once more, under the service worker: Google's stylesheet for the hands is cached)
+      await a.getByText('The Water Cycle').waitFor({ timeout: 15000 });
+      await a.waitForTimeout(1000);
+
+      offline = true;
+      await pwa.setOffline(true);
+      if (serverUp()) { server.kill(); await once(server, 'exit'); }
+      await a.reload();
+      await a.getByText('The Water Cycle').waitFor({ timeout: 15000 });
+      await a.getByText('The Water Cycle').click();
+      await a.getByRole('textbox', { name: 'Main text, page 1' }).waitFor({ timeout: 15000 });
+      await pageOneInked(a);
+
+      // A hand never used on this device, from the precache: the pages are drawn again, in it.
+      await stageNav(a, 'Style').click();
+      await pageOneInked(a);
+      /** A fingerprint of the writing on Style's first page. */
+      const ink = () => a.evaluate(() => {
+        let h = 0;
+        for (const c of document.querySelector('[data-stage="style"] .sheet')?.querySelectorAll('.ink-layer canvas') ?? []) {
+          if (!c.width) continue;
+          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          for (let i = 3; i < d.length; i += 4) h = (h * 31 + d[i]) % 1000000007;
+        }
+        return h;
+      });
+      const was = await ink();
+      await a.getByRole('button', { name: 'Change handwriting' }).click();
+      const picker = a.getByRole('dialog', { name: 'Handwriting' });
+      await picker.getByRole('searchbox', { name: 'Search handwriting' }).fill('zeyada');
+      await picker.getByRole('button', { name: /^Zeyada · / }).click();
+      await a.waitForFunction(() => document.querySelector('[data-hand="zeyada"]')?.getAttribute('aria-pressed') === 'true', null, { timeout: 5000 });
+      await a.keyboard.press('Escape');
+      await picker.waitFor({ state: 'hidden', timeout: 5000 });
+      await a.getByText(/^Zeyada · /).first().waitFor({ timeout: 10000 });
+      for (let t = Date.now(); await ink() === was;) {
+        if (Date.now() - t > 20000) fail('page 1 was not drawn again in Zeyada');
+        await a.waitForTimeout(200);
+      }
+      await pageOneInked(a);
+
+      // Both readers, never loaded on this device, come from the precache.
+      await stageNav(a, 'Write').click();
+      await a.getByRole('button', { name: 'Import', exact: true }).click();
+      const dialog = a.getByRole('dialog', { name: 'Import a document' });
+      await dialog.locator('input[type=file]').setInputFiles(docxFile);
+      await dialog.getByText('Essay.docx: 24 words.').waitFor({ timeout: 20000 });
+      await dialog.locator('input[type=file]').setInputFiles({ name: 'Rivers.pdf', mimeType: 'application/pdf', buffer: Buffer.from(textPdf(RIVERS_PAGES)) });
+      await dialog.getByRole('status').filter({ hasText: /^Rivers\.pdf: \d+ words from 2 pages\.$/ }).waitFor({ timeout: 20000 });
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await dialog.waitFor({ state: 'hidden', timeout: 5000 });
+      await pwa.close();
+    });
+
     console.log('smoke ok');
   } finally {
     await browser?.close();
-    server.kill();
+    await pwa?.close().catch(() => {});
+    if (profile) rmSync(profile, { recursive: true, force: true });
+    if (serverUp()) server.kill();
   }
 }
 

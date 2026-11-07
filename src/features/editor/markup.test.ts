@@ -70,7 +70,7 @@ test('every mix of marks over three runs parses back', () => {   // 4 × 16³ ca
     expect(sameWords(got, widen(runs))).toBe(true);                       // or the one normalisation,
     expect(partialUnderline(runs) && hasBold(runs)).toBe(true);           // and only for a partial-word underline on a line with bold
   }
-});
+}, 20_000); // about 0.8 s alone, up to 6.3 s on a busy machine
 // A doc with one paragraph made of these runs.
 const paraOf = (runs: Run[]): JSONContent => ({ type: 'doc', content: [{ type: 'paragraph', content: runs.map(r => ({ type: 'text', text: r.text, ...(r.marks.length ? { marks: r.marks.map(type => ({ type })) } : {}) })) }] });
 test('what the serializer writes reads back to the same markup, whitespace marks and all', () => {
@@ -82,7 +82,7 @@ test('what the serializer writes reads back to the same markup, whitespace marks
       if (again !== md && unstable.length < 5) unstable.push(`${JSON.stringify(md)} -> ${JSON.stringify(again)}`);
     }
   expect(unstable).toEqual([]);
-});
+}, 30_000); // 8 × 16³ cases, each written, read back and written again: about 1.3 s alone, up to 8.5 s on a busy machine
 test.each<[string, Run[]]>([
   ['an underlined space before bold', [{ text: 'Read', marks: ['underline'] }, { text: ' ', marks: ['underline', 'bold'] }, { text: 'now', marks: ['bold'] }]],
   ['a bold space before bold strike', [{ text: 'ab', marks: [] }, { text: ' ', marks: ['bold'] }, { text: 'cd', marks: ['bold', 'strike'] }]],

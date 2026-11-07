@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vi
 import { cleanSettings } from '@/engine/doc.js';
 import { App } from '@/app/App';
 import type { Route } from '@/app/route';
+import type { EngineDoc } from '@/engine/types';
 import { addPageAt, deletePageAt } from '@/features/doc/actions';
 import { TopBar } from '@/shell/TopBar';
 import { createDoc } from '@/store/documents';
@@ -211,6 +212,62 @@ test('Move down in the page menu keeps the pager on the moved page', async () =>
   await userEvent.click(await screen.findByRole('menuitem', { name: 'Move down' }));
   expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: 'First, page 2' })).toBeInTheDocument();
+});
+
+/** Choose `name` in the page menu of the page on screen. */
+async function pageMenu(page: number, name: string): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: `Options for page ${page}` }));
+  await userEvent.click(await screen.findByRole('menuitem', { name }));
+}
+
+const EMPTY = 'Empty page. Use + Add, or drag a block here in Outline.';
+test('Add a page after this one turns to the new blank page, after the text that runs on', async () => {
+  await pageMenu(1, 'Add a page after this one'); // Main text runs onto page 2
+  expect(await screen.findByText('Page 3 of 3')).toBeInTheDocument();
+  expect(screen.getByText(EMPTY)).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Main text, page 2' })).toBeNull();
+  await openDoc(docOf(box({ id: 'm', name: 'Main text', text: lines(70) }))); // runs onto page 3
+  await pageMenu(1, 'Add a page after this one');
+  expect(await screen.findByText('Page 4 of 4')).toBeInTheDocument();
+  expect(screen.getByText(EMPTY)).toBeInTheDocument();
+  await openPages(3); // nothing runs on: the blank page is right after this one
+  await pageMenu(1, 'Add a page after this one');
+  expect(await screen.findByText('Page 2 of 4')).toBeInTheDocument();
+  expect(screen.getByText(EMPTY)).toBeInTheDocument();
+});
+
+/** Open `doc` in Write, on its first page. */
+async function openDoc(doc: EngineDoc): Promise<void> {
+  cleanup();
+  const id = (await createDoc({ title: 'M', settings: cleanSettings(null, false), doc })).id;
+  location.hash = `#/d/${id}/write`;
+  render(<App />);
+  await screen.findByText(/^Page 1 of \d+$/);
+}
+/** Open a document whose pages hold one short block each: First, Second, Third… */
+const openPages = (n: number): Promise<void> => {
+  const names = ['First', 'Second', 'Third'];
+  return openDoc({ ...docOf(...names.slice(0, n).map((name, page) => box({ id: name, name, text: name.toLowerCase(), page }))), pageCount: n });
+};
+
+test('Merge into previous page turns to the page it went to', async () => {
+  await openPages(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await pageMenu(2, 'Merge into previous page');
+  expect(await screen.findByText('Page 1 of 1')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Second, page 1' })).toBeInTheDocument();
+  // With a page after it, the pager doesn't stay on the merged page's old place (now the page after).
+  await openPages(3);
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await pageMenu(2, 'Merge into previous page');
+  expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Second, page 1' })).toBeInTheDocument();
+});
+
+test('a refused merge leaves the pager where it was', async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await pageMenu(2, 'Merge into previous page'); // page 2 shows only Main text part 2
+  expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
 });
 
 test('the top bar uses the 860 px breakpoint', () => {

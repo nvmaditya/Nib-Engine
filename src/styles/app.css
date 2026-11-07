@@ -109,6 +109,11 @@
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* Keys (the shortcut sheet, the palette, the menu, the tips) are in Figtree like every other word, not in the
+     monospace Tailwind's base gives <kbd>. */
+  kbd {
+    font-family: inherit;
+  }
   /* React mounts inside #root, which takes the place of <body> in the page layout. */
   #root {
     flex: 1;
@@ -197,14 +202,14 @@
   .paper.scanned .ink-layer {
     visibility: hidden;
   }
-  /* Camera tilt's stand-in until the exact tilted page is drawn: only the shot's slight zoom. Each page
-     turns its own way (±0.3–0.9°, either sign), so one fixed angle would turn half the pages the wrong
-     way first. Showing each page's own angle here needs the engine's angle as a value (Milestone 6). */
+  /* Camera tilt's stand-in until the exact tilted page is drawn: each page turned by its own angle
+     (--shot-turn, the engine's pageTilt: ±0.3–0.9°, either sign) and zoomed just enough that no corner
+     shows empty (--shot-zoom), as frameShot turns and zooms it. Only its uneven crop waits for the exact page. */
   [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art {
     overflow: hidden;
   }
   [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art > :is(.paper-bg, .ink-layer) {
-    transform: scale(1.02);
+    transform: rotate(var(--shot-turn, 0rad)) scale(var(--shot-zoom, 1.02));
   }
   [data-sheets][data-look='scan'] .paper:not(.scanned) {
     filter: brightness(1.08) contrast(1.12) saturate(0.85);
@@ -405,11 +410,23 @@
   }
 }
 
-/* On a phone, while the Style or Export sheet is open, its pinned footer (Download and Share) is at the
-   bottom of the screen, so messages (like "Saved …" after a download) are lifted above it. */
+/* While the first-visit tips show, messages rise above the card, so they never cover its Got it: along the bottom
+   below 860 px, and in the bottom left corner up to 1028 px, where a centred message still reaches it. Tips.tsx sets
+   --tips-room, the card's height and the gap below it. While a dialog covers the card (the palette, the shortcut
+   sheet, Import) they stay along the bottom, not mid-way down the dialog; :where() keeps that out of the rule's
+   weight. (Under a stage's sheet the card is put away, and the sheets' rule below places the messages.) */
+@media (width < 64.25rem) {
+  body:has([data-tips]):where(:not(:has([data-slot='dialog-overlay'], [data-slot='alert-dialog-overlay']))) [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: calc(var(--tips-room, 0px) + 0.75rem);
+  }
+}
+
+/* On a phone, while a stage's sheet (Style, Export, Outline) rests at its peek or about half, messages rise above it,
+   clear of its handle: StageSheet.tsx sets --sheet-room, the height it covers and a gap. At the top there is no room
+   above it but the top bar's, so they sit over its foot, lifted above Export's pinned footer (Download and Share). */
 @media (width < 53.75rem) {
   body:has([data-vaul-drawer]) [data-sonner-toaster][data-y-position='bottom'] {
-    bottom: calc(var(--offset, 24px) + 96px + env(safe-area-inset-bottom));
+    bottom: var(--sheet-room, calc(var(--offset, 24px) + 96px + env(safe-area-inset-bottom)));
   }
 }
 
@@ -418,5 +435,28 @@
 @media (width < 53.75rem) {
   body:has([data-hand-picker]) [data-sonner-toaster][data-y-position='bottom'] {
     bottom: calc(var(--offset, 24px) + 72px + env(safe-area-inset-bottom));
+  }
+}
+
+/* In dark, messages sit on the Studio surface, like dialogs and menus, instead of sonner's black. `html` outranks
+   sonner's own [data-sonner-theme='dark'] rule, which a build adds to <head> after this stylesheet. */
+html [data-sonner-toaster][data-sonner-theme='dark'] {
+  --normal-bg: var(--surface);
+  --normal-bg-hover: var(--surface-2);
+  --normal-border: var(--line);
+  --normal-border-hover: var(--line-strong);
+  --normal-text: var(--fg);
+}
+
+/* The first-visit tips (Tips.tsx). Below 860 px a stage's sheet (Style, Export, Outline) covers the card, so
+   while the stage on screen holds one the card is out of sight, out of the Tab order and out of the accessibility
+   tree; it comes back with a stage that has none. And while the card shows on a phone, Write's pages leave room
+   below for it (Tips.tsx sets --tips-room), so the foot of the last page can be scrolled clear of it. */
+body:has([data-stage]:not([hidden]) [data-vaul-drawer]) [data-tips] {
+  display: none;
+}
+@media (width < 53.75rem) {
+  [data-stage='write'] main[data-pages] {
+    padding-bottom: var(--tips-room, 0px);
   }
 }

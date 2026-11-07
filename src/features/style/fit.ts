@@ -5,7 +5,7 @@
 // hands' real metrics, so the pages it promises are the ones the person sees.
 import { LIMITS } from '@/engine/config.js';
 import { boxSettings, clearMeasureCache, fontReady, fontsInUse, use } from '@/engine/core.js';
-import type { EngineDoc, Settings } from '@/engine/types';
+import type { Box, EngineDoc, Settings } from '@/engine/types';
 import { scopeBox, step } from '@/features/doc/actions';
 import { layoutFor } from '@/features/doc/model';
 import { docAction, toast, update, useEditor, type EditorState } from '@/store/editor';
@@ -96,12 +96,21 @@ export function fitPlan(S: Settings, doc: EngineDoc, boxId: string | null, targe
 }
 
 /**
+ * The first block, in document order (page by page, top to bottom, then left to right), other than
+ * `scoped`, that has a letter size of its own: Fit back never changes it.
+ */
+function ownSizeBlock(doc: EngineDoc, scoped: string | null): Box | undefined {
+  return doc.boxes.filter(x => x.id !== scoped && x.style.size !== undefined)
+    .sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x)[0];
+}
+
+/**
  * Fit the open document back onto `target` pages, as one undo step, and say exactly what changed
  * (with an Undo that puts it back as a step of its own). In Only scope the selected block gets the
  * letter size, unless its letters can't change the page count; then it is the whole document's, and
- * the message says so. When nothing fits it says so and changes nothing. It waits for the document's
- * hands: until their files arrive, the pages can't be measured as they will be drawn, so it does
- * nothing (Fit back is disabled then).
+ * the message says so. When nothing fits it says so, and names a block whose own letter size it left
+ * alone, and changes nothing. It waits for the document's hands: until their files arrive, the pages
+ * can't be measured as they will be drawn, so it does nothing (Fit back is disabled then).
  */
 export function fitBack(target: number): boolean {
   const s = get(), b = scopeBox();
@@ -109,7 +118,9 @@ export function fitBack(target: number): boolean {
   if (!fontsInUse().every(fontReady)) return false;
   const plan = fitPlan(s.S, s.doc, b?.id ?? null, target);
   if (!plan) {
-    toast(`This doesn’t fit on ${pagesWord(target)}, even with the smallest letter size and line spacing.`);
+    const own = ownSizeBlock(s.doc, b?.id ?? null);
+    toast(`This doesn’t fit on ${pagesWord(target)}, even with the smallest letter size and line spacing.`
+      + (own ? ` “${own.name}” has its own letter size, which Fit back leaves alone.` : ''));
     return false;
   }
   // What it changes, to put back: the block's own size (or that it had none), or the document's; and the line spacing.

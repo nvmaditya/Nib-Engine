@@ -26,7 +26,7 @@ afterAll(() => {
   delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
   vi.unstubAllGlobals();
 });
-beforeEach(async () => { await flushSave(); localStorage.clear(); vi.mocked(sonner).mockClear(); });
+beforeEach(async () => { await flushSave(); localStorage.clear(); localStorage.setItem('nib.tips', 'seen'); vi.mocked(sonner).mockClear(); });
 afterEach(() => { window.matchMedia = wideMatchMedia; width(1200); });
 
 /** A phone: no media query for a wide window matches, and every element is 390 px wide. */

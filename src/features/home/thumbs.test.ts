@@ -128,3 +128,67 @@ test('a hung fetch gives up after 10 s, and doesn’t hold up the next thumbnail
     expect(await a).toBeNull(); expect(await b).not.toBeNull(); expect(composePage).toHaveBeenCalledTimes(1);
   } finally { vi.useRealTimers(); }
 });
+test('a thumbnail is drawn in idle time, never while the page scrolls', async () => {
+  vi.useFakeTimers();
+  // No idle time until the test says so, then idle time at once.
+  const idle: IdleRequestCallback[] = [];
+  let idleNow = false;
+  const deadline: IdleDeadline = { didTimeout: false, timeRemaining: () => 40 };
+  const ric = vi.fn((cb: IdleRequestCallback, _o?: IdleRequestOptions) => (idleNow ? queueMicrotask(() => cb(deadline)) : idle.push(cb)));
+  vi.stubGlobal('requestIdleCallback', ric);
+  const list = document.body.appendChild(document.createElement('div')); // Home's list scrolls in a box of its own
+  try {
+    const p = thumbFor('doc:idle', S, two(), 156);
+    await vi.advanceTimersByTimeAsync(1000); expect(composePage).not.toHaveBeenCalled(); // no idle time yet
+    expect(ric).toHaveBeenCalledWith(expect.any(Function), { timeout: 500 });
+    // A scroll every 100 ms for 1 s, with idle time between them.
+    for (let t = 0; t < 1000; t += 100) {
+      (t % 200 ? window : list).dispatchEvent(new Event('scroll')); // (a box's scroll doesn't bubble: it is heard on the way down)
+      if (t === 100) { idleNow = true; idle.splice(0).forEach(cb => cb(deadline)); }
+      await vi.advanceTimersByTimeAsync(100);
+      expect(composePage).not.toHaveBeenCalled();
+    }
+    // The last scroll was at 900 ms: nothing until 150 ms after it.
+    await vi.advanceTimersByTimeAsync(49); expect(composePage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1); expect(composePage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(100); expect(await p).not.toBeNull(); // (storage's own timers)
+  } finally { vi.useRealTimers(); list.remove(); }
+});
+test('a thumbnail whose hand arrives while the page scrolls is drawn only once the scroll has stopped', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => queueMicrotask(() => cb({ didTimeout: false, timeRemaining: () => 40 })));
+  let release!: () => void;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(r => { release = () => r({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }); })));
+  try {
+    const p = thumbFor('doc:late', { ...S, font: 'cedarville' }, two(), 156);
+    await vi.advanceTimersByTimeAsync(10); expect(fetch).toHaveBeenCalled(); // its turn came, and its hand is on the way
+    for (let t = 0; t < 500; t += 100) {
+      window.dispatchEvent(new Event('scroll'));
+      if (t === 200) release();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(composePage).not.toHaveBeenCalled();
+    }
+    // The last scroll was at 400 ms.
+    await vi.advanceTimersByTimeAsync(49); expect(composePage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1); expect(composePage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(100); expect(await p).not.toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+test('a tile already scrolled past gives up its turn at once, without waiting for idle time', async () => {
+  const idle: IdleRequestCallback[] = [];
+  const ric = vi.fn((cb: IdleRequestCallback, _o?: IdleRequestOptions) => idle.push(cb)); // idle time never comes
+  vi.stubGlobal('requestIdleCallback', ric);
+  const gone = thumbFor('doc:gone', S, two(), 156, () => false);
+  const next = thumbFor('doc:next-in-view', S, two(), 156);
+  try {
+    expect(await Promise.race([gone, new Promise(r => setTimeout(() => r('still waiting'), 50))])).toBeNull();
+    await vi.waitFor(() => expect(ric).toHaveBeenCalledTimes(1)); // the next tile is waiting for its own idle time
+    expect(composePage).not.toHaveBeenCalled();
+  } finally {
+    // Idle time at last, until the next tile is drawn (so the queue is free for the tests after this one).
+    let done = false;
+    void next.finally(() => { done = true; });
+    while (!done) { idle.splice(0).forEach(cb => cb({ didTimeout: false, timeRemaining: () => 40 })); await new Promise(r => setTimeout(r, 5)); }
+  }
+  expect(await next).not.toBeNull();
+});

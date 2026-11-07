@@ -67,6 +67,18 @@ function focusPages(): () => void {
   return stop;
 }
 
+// Focus `el` if it can take the focus (still in the page, not the page itself, and not in a part that is hidden or
+// inert, where focus() does nothing); whether it took it.
+function focusOn(el: Element | null): boolean {
+  if (!(el instanceof HTMLElement) || el === document.body || !el.isConnected || el.closest('[inert], [hidden]')) return false;
+  el.focus({ preventScroll: true });
+  return document.activeElement === el;
+}
+// Where the focus goes on closing when what opened it is gone (the palette's field) or nothing had it (a file
+// dropped on the page): in a document the stage on screen's step, on Home its Import, else New document.
+const INSTEAD = ['nav[aria-label="Stages"] [aria-current="step"]', 'main button', 'header button'];
+const focusInstead = (): boolean => INSTEAD.some(sel => [...document.querySelectorAll(sel)].some(focusOn));
+
 export function ImportDialog({ open, file, target, onClose }: { open: boolean; file: File | null; target: ImportTarget; onClose(): void }) {
   // The focus on its way to the pages outlives the panel (closing is part of Write it out) but not the editor around
   // it. (From Home the page itself goes with the navigation, which is the point: the route check handles that.)
@@ -91,8 +103,9 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
   const reading = useRef(0); // only the last file read wins
   const toPages = useRef(false); // written out into the open document on a phone: the focus goes to the pages
   // What had the focus when it opened (the Write bar's Import, say): it gets it back on closing. The dialog is
-  // opened from the store, not by a Radix trigger, so Radix itself has nothing to give it back to.
-  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  // opened from the store, not by a Radix trigger, so Radix itself has nothing to give it back to. Opened from the
+  // palette, it is what had the focus before the palette, whose field is gone by then.
+  const [opener] = useState(() => get().importOpener ?? document.activeElement as HTMLElement | null);
 
   // An earlier import's message would sit over the footer (on phones, over Write it out): put away each one
   // showing, by its own id (dismissing them all at once can swallow a new message that reuses an id).
@@ -178,7 +191,7 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
   const drop = (e: DragEvent) => {
     e.preventDefault(); e.stopPropagation(); setOver(false); // (the document behind doesn't open it as well)
     const f = e.dataTransfer.files[0];
-    if (f) void readFile(f);
+    if (f && !busy) void readFile(f); // (while it waits to write out, what was pressed is what is written)
   };
   // While the dialog is open, Ctrl+Z is the dialog's (the preview's own undo): it never undoes the document behind.
   const keepUndo = (e: KeyboardEvent) => {
@@ -200,10 +213,10 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
         e.preventDefault();
         if (toPages.current) return; // written out on a phone: focusPages has it, not the opener
         if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[contenteditable="true"]')) return;
-        if (opener?.isConnected) opener.focus();
+        if (!focusOn(opener)) focusInstead();
       }}
       onKeyDown={keepUndo}
-      onDragOver={e => { e.preventDefault(); setOver(true); }}
+      onDragOver={e => { e.preventDefault(); if (!busy) setOver(true); }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
       onDrop={drop}
       className={cn(
@@ -216,7 +229,9 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
         <DialogDescription className="sr-only">Choose a file, check its text, then write it out on the pages.</DialogDescription>
       </DialogHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto wide:grid wide:grid-cols-[minmax(0,1fr)_340px] wide:overflow-hidden">
+      {/* While Write it out waits (for the look's hand, or to make the new document), the request was read at the press:
+          the preview and the choices are inert until then, so nothing changed under the spinner is silently left out. */}
+      <div inert={busy} className="min-h-0 flex-1 overflow-y-auto wide:grid wide:grid-cols-[minmax(0,1fr)_340px] wide:overflow-hidden">
         {/* (The preview scrolls on its own in this column on wide screens; on phones the whole body scrolls.) */}
         <div className={cn('flex min-h-0 flex-col', !ready && 'min-h-full wide:col-span-2')}>
           <div className="flex flex-none items-center gap-3 px-4 pt-3">

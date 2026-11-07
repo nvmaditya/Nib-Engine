@@ -260,6 +260,8 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     if (!editor.view.composing && !editor.state.doc.eq(editor.schema.nodeFromJSON(fromMarkup(sh.slice)))) load(editor, t, live.current.range);
     selectAt(editor, caret.offset);
     editor.view.focus();
+    // (ProseMirror scrolls to the caret only once the page's selection is in the editor: after the focus.)
+    editor.view.dispatch(editor.state.tr.scrollIntoView());
   }, [editor, caret, acceptCaret, boxId, text, range?.first, range?.end]);
 
   useEffect(() => { if (editor.options.editorProps !== editorProps && !editor.isDestroyed) editor.setOptions({ editorProps }); }, [editor, editorProps]);

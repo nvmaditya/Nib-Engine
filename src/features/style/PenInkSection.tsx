@@ -4,7 +4,7 @@ import { INKS, PENS } from '@/engine/config.js';
 import type { Settings } from '@/engine/types';
 import { applyStyle, setV } from '@/features/doc/actions';
 import { cn } from '@/lib/utils';
-import { gesture } from '@/store/editor';
+import { gesture, type Gesture } from '@/store/editor';
 import { Group, Hint } from './parts';
 import { Range } from './Range';
 
@@ -14,8 +14,9 @@ const PEN_CHOICES = PENS.filter(p => p.id !== 'font');
 export function PenInkSection({ V }: { V: Settings }) {
   const pen = PEN_CHOICES.find(p => p.id === V.tip);
   const inkLabel = V.ink === 'custom' ? 'Your colour' : (INKS.find(i => i.id === V.ink) || INKS[0]).name;
-  // One session in the colour picker (its first input until it loses focus) is one undo step.
-  const session = useRef<ReturnType<typeof gesture> | null>(null);
+  // One session in the colour picker (its first input until it loses focus) is one undo step, and none if it
+  // ends on the colour it began with.
+  const session = useRef<Gesture | null>(null);
   const pick = (c: string) => { (session.current ??= gesture('ink-colour'))(applyStyle({ customInk: c, ink: 'custom' })); };
   return (
     <>
@@ -46,7 +47,7 @@ export function PenInkSection({ V }: { V: Settings }) {
             style={{ background: V.ink === 'custom' ? V.customInk : 'conic-gradient(#e33,#e9c43b,#3b9e5b,#2d6fd8,#8a4fd6,#e33)' }}
             className="relative size-9 cursor-pointer overflow-hidden rounded-full ring-1 ring-line-strong ring-offset-2 ring-offset-surface focus-within:ring-2 focus-within:ring-ring/50 aria-pressed:ring-2 aria-pressed:ring-primary">
             <input type="color" value={V.customInk} aria-label="Pick any ink colour" className="absolute inset-0 size-full cursor-pointer opacity-0"
-              onChange={e => pick(e.target.value)} onBlur={() => { session.current = null; }} />
+              onChange={e => pick(e.target.value)} onBlur={() => { session.current?.end(); session.current = null; }} />
           </label>
         </div>
       </Group>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
+import { installFocusMemory } from '@/lib/focus';
+import { useDarkTheme } from '@/lib/theme';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
 import { loadUploadedFonts } from '@/features/style/fonts';
 import { bootStyle, refreshStylePrefsOnShow } from '@/features/style/prefs';
@@ -7,6 +9,7 @@ import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
 import { NOT_ON_DEVICE, closeDocument, installDocFollow, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
+import { Overlays } from '@/shell/Overlays';
 import { HomePage } from '@/features/home/HomePage';
 import { DocumentView } from '@/features/doc/DocumentView';
 import { MEMORY_ID, navigate, useRoute } from './route';
@@ -15,6 +18,7 @@ export function App() {
   const route = useRoute();
   const [boot, setBoot] = useState<'pending' | 'ok' | 'memory'>('pending');
   const openId = useEditor(s => s.docId);
+  const dark = useDarkTheme();
 
   useEffect(() => {
     let live = true;
@@ -35,6 +39,7 @@ export function App() {
   }, []);
 
   useEffect(() => installFlushOnHide(), []);
+  useEffect(() => installFocusMemory(), []); // a message's action gives the focus back to what had it
   useEffect(() => installDocFollow(), []); // another tab's saves, renames and deletes of the open document
   useEffect(() => refreshStylePrefsOnShow(), []);
 
@@ -58,6 +63,7 @@ export function App() {
 
   return (
     <>
+      <Overlays />
       {boot === 'memory' && (
         <div role="status" className="flex-none bg-primary-soft px-4 py-2 text-center text-sm">
           Nib can't save on this device right now. Your work stays until you close this tab.
@@ -65,7 +71,7 @@ export function App() {
       )}
       <TopBar route={route} ready={route.name === 'doc' && openId === route.id} />
       {route.name === 'home' ? <HomePage /> : openId === route.id ? <DocumentView stage={route.stage} /> : null}
-      <Toaster position="bottom-center" expand visibleToasts={3} />
+      <Toaster theme={dark ? 'dark' : 'light'} position="bottom-center" expand visibleToasts={3} />
     </>
   );
 }

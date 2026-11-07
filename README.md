@@ -19,6 +19,11 @@ The repository was renamed from `longhand` to `nib-engine`, so the old address (
 - **Blocks** (Text, Header and Margin note) can be placed anywhere. A long block flows onto the next pages, and each page's part can be moved, resized, edited, deleted or split off. Any block can have its own style. See Write, below.
 - **Downloads** are a PDF, PNGs or JPGs (in one ZIP if you like), of every page or only the ones you choose, at Standard or Print quality, as written, scanned, scanned in greyscale, or black and white, with an optional slight camera tilt. Share… sends them on where the browser can. The files carry no metadata.
 - **Simple markup** in the editor: `# Title`, `## Heading`, `**bold**`, `*underline*`, `==highlight==`, `~~cross out~~`, `- lists`, `> notes`, `\newpage`.
+- **Install and offline**: Nib installs as an app and, once it has loaded, works with no connection, every hand and both file readers included. A new version is offered with **Reload**, and no tab ever reloads by itself. See Install and offline, below.
+- **Light and dark**: System, Light or Dark from the Menu, remembered on the device and followed by every open tab, with no flash of the other one as a page opens.
+- **Keyboard**: `?` (or Ctrl+/) shows every shortcut on one sheet, and Ctrl+K opens a palette that opens a document, goes to a stage, puts a look on the whole document, exports or changes the theme. See Keyboard, below.
+- **Tips**: three short tips the first time a document opens on a device, out of the way and never taking the focus.
+- **Phones**: Outline, Style and Export are bottom sheets over the handwritten pages, and Write's Pages view shows one page at a time.
 
 Everything happens in the browser. Nothing is uploaded.
 
@@ -55,7 +60,7 @@ The preview is the same rich editor as Write: fix anything before it is written 
 - **Look**: Keep this document's look (open documents only), one of the built-in looks or one you saved, each drawn in its own hand.
 - **Header**: **Add a header block** with Name, Class and Date, at the top right of page 1.
 
-**Write it out** makes one main block that flows page by page. In an open document it is one undo step. From Home it makes a new document. On phones the dialog is full screen. The file is read on the device: nothing is uploaded.
+**Write it out** makes one main block that flows page by page. In an open document it is one undo step. From Home it makes a new document. If it has to wait (for the hand of the look you chose, say), the preview and the choices are locked until it is done, so what is written is what you saw when you pressed it. On phones the dialog is full screen. The file is read on the device: nothing is uploaded.
 
 ## Write
 
@@ -85,7 +90,9 @@ All of these can be undone, from the message's **Undo** or with Ctrl+Z.
 
 ### On phones
 
-Below 860 px the Pages view shows one page at a time, with Previous page and Next page buttons, a swipe to turn the page, and a flip between the typed and handwritten copy. Outline shows the page list above the editor and leaves out the handwritten pages; bottom sheets for it come later.
+Below 860 px the Pages view shows one page at a time, with Previous page and Next page buttons, a swipe to turn the page, and a flip between the typed and handwritten copy.
+
+Outline is the handwritten pages with a sheet over them, as in Style and Export. The sheet holds the page list (it scrolls on its own, so a long text never pushes it out of reach) and, under it, the selected block's text. It rests at three heights: its top only (148 px), about half, and up to just below the Write bar. On a short phone about half is lowered so at least 200 px of the pages still show. Tapping a word on a page selects its block and puts the caret there in the sheet's editor. Drag the handle, or press it, to change the height.
 
 ## Style
 
@@ -120,6 +127,38 @@ Export shows the pages exactly as they will download, camera tilt and scan look 
 
 Everything is made on the device. Nothing is uploaded.
 
+## Keyboard
+
+Press `?` anywhere outside a text field, or Ctrl+/ anywhere, to see every shortcut. On a Mac, iPhone or iPad keyboard, Ctrl is ⌘ (and the sheet shows ⌘, ⌥ and ⇧).
+
+| Where | Keys |
+|---|---|
+| Anywhere | Ctrl+K searches commands and documents · `?` or Ctrl+/ shows the shortcuts · Esc closes a dialog or menu |
+| In a document | Ctrl+Z undo · Ctrl+Shift+Z, or Ctrl+Y (not on Apple), redo · Esc leaves the selected block |
+| A block on a handwritten page (Tab to it, or click it) | ↑ ↓ move it a ruled line · ← → move it a little · Enter writes in it (Write) · Delete or Backspace deletes it, or only this page's part (Write) · Esc cancels a move |
+| In the text | Ctrl+B bold · Ctrl+U underline · Ctrl+Shift+S cross out · Ctrl+Shift+H highlight · Ctrl+Alt+0, 1, 2 Normal, Title, Heading · Ctrl+Shift+B note · Ctrl+Shift+8, 7 bulleted and numbered lists · Tab, Shift+Tab indent a list item or take it back out · Ctrl+Enter page break · `/` text styles, lists and a page break |
+| As you type | `# ` title, `## ` heading, `- ` and `1. ` lists, `> ` note, at the start of a line · `**bold**`, `*underline*`, `~~cross out~~`, `==highlight==` around words |
+
+The keys never open anything over another dialog or menu, and `?` in a text field is just typed. The Menu at the end of the top bar has the palette, the shortcuts and the theme too.
+
+**The palette** (Ctrl+K) finds, as you type:
+
+- **Go to**: Write, Outline, Style, Export or Home (in a document; the stage on screen is left out).
+- **Documents**: every other document on the device, with when it was last edited.
+- **Create**: New document, Import a file…
+- **Export** (in a document): Export as PDF, PNG or JPG, which opens Export with that format chosen.
+- **Looks for the whole document** (in a document): the six looks, then the ones you saved. One undo step, whatever Style's scope is.
+- **Theme**: System theme, Light theme, Dark theme, with `Current` beside the one in use.
+- **Help**: Keyboard shortcuts.
+
+## Install and offline
+
+Nib is a web app that installs: the browser's **Install** button (Chrome, Edge) or **Add to Home Screen** (Safari on iPhone and iPad). Installed or not, it works with no connection once it has loaded once.
+
+- **What is kept on the device.** On the first visit Nib keeps the whole app, about 4 MB: the interface and the drawing engine, all 33 hands' font files, the paper photo, the icons, and the PDF and Word readers (PDF.js and mammoth). So a hand never chosen before draws, and a first import reads, with no connection. Google's web copies of the older hands (for letters, such as Devanagari, that their own files don't cover) are kept the first time they are used. Your documents, saved looks, uploaded fonts and settings are in the browser's storage as before. When it is ready Nib says `Nib works offline now.`
+- **New versions are offered, never forced.** Nib looks for a new version when it opens, every hour while it is shown, and when you come back to it after an hour or more. When there is one, every open tab says `A new version is ready.` with **Reload**, and the message stays (through opening and closing documents) until you press it or swipe it away. **Reload** writes your last change, then reloads that tab only, in the new version. No tab ever reloads by itself: the others keep their text and caret, and their message.
+- **Two tabs on two versions.** After Reload in one tab, another can go on running the old version beside it until you reload it too. Both read and write the same documents (the storage format is unchanged), under the usual rules for two tabs (see Working in more than one tab). An import started in the old tab may say `The document reader couldn’t be loaded. Check your connection and try again.`, because the old version's files are gone: press Reload there. If a later version ever saves a document an older one can't read, the older tab says `This document was saved by a newer version of Nib. Reload the page to keep editing.` with **Reload**, which applies the waiting version first, so the reload doesn't come back to the old one.
+
 ## Run it locally
 
 ```bash
@@ -138,9 +177,20 @@ npm run build        # type check, then build the site into dist/
 npm run smoke        # browser smoke test
 ```
 
-`npm run smoke` drives the built app in a real browser, so it needs Chromium and Playwright available on the machine.
+`npm run smoke` drives the built app in a real browser, so it needs Chromium and Playwright available on the machine. It serves the build at `/nib-engine/`, as GitHub Pages does, and also checks the palette, the shortcut sheet, the theme, the tips, every stage at 390 and 320 px wide, a new version in two tabs, Chromium's own installability check, and a reload, a hand never used before and both imports with the network off and the server stopped.
 
 The built site uses relative paths, so it works from any folder or web address.
+
+The PWA audit of Lighthouse 11.7.1 (Lighthouse 12 dropped it) is run by hand, against the build served at `/nib-engine/`:
+
+```bash
+npm run build
+node node_modules/vite/bin/vite.js preview --base /nib-engine/ --port 4321 --strictPort
+# in another terminal, in a scratch folder:
+CHROME_PATH=$(ls -d /opt/pw-browsers/chromium-*/chrome-linux64/chrome | head -1) npx -y lighthouse@11.7.1 http://localhost:4321/nib-engine/ --only-categories=pwa --chrome-flags="--headless=new --no-sandbox" --output=json --output-path=lh.json --quiet
+```
+
+Its `installable-manifest`, `splash-screen`, `themed-omnibox` and `maskable-icon` audits should each score 1. (`CHROME_PATH` is any Chromium; the one above is Playwright's.)
 
 ## Deploying to GitHub Pages
 
@@ -155,29 +205,41 @@ The workflow in `.github/workflows/deploy.yml` installs, runs the tests, builds 
   - `config.js`: hands, pens, inks, papers and defaults.
   - `engine.test.ts`: tests for the engine.
 - `src/store/` holds the app state (Zustand) and storage: `documents.ts` (the saved documents), `editor.ts` (the open document), `history.ts` (undo and redo), `db.ts` (IndexedDB through idb) and `bootstrap.ts` (start-up, including moving data over from Longhand's old storage).
-- `src/app/` holds the root component and the route between Home and the document stages.
-- `src/main.tsx` starts the app: it applies the saved theme, adds a `@font-face` for each hand (the browser downloads a file only when something on screen uses it) and renders `App`.
-- `src/shell/` holds the top bar, the stage navigation and the undo shortcuts.
+- `src/app/` holds the root component and the route between Home and the document stages, and the installed app:
+  - `pwaManifest.ts`: the web app manifest and the Workbox settings (what is precached, and Google's copies of the hands cached when used) that `vite.config.ts` gives vite-plugin-pwa.
+  - `pwa.ts`: registers the service worker, in a production build only (development and tests have none).
+  - `updates.ts`: `Nib works offline now.`, and each new version offered with Reload, which writes the last change and reloads only the tab that asked.
+- `index.html` sets light or dark before anything is drawn (its `data-theme-boot` script). `src/main.tsx` starts the app: it takes the theme over, adds a `@font-face` for each hand (the browser downloads a file only when something on screen uses it), renders `App` and starts the service worker.
+- `src/shell/` holds the top bar (`TopBar.tsx`), the stage navigation (`StageNav.tsx`), the undo shortcuts (`useUndoShortcuts.ts`) and the Menu (`AppMenu.tsx`: the palette, the shortcuts and the theme). The app's own overlays, mounted once outside the stages:
+  - `overlayStore.ts`: which overlay is open (one at a time), where the focus goes back when it closes, and whether another dialog or menu is open, so the app's keys open nothing over it.
+  - `Overlays.tsx`: mounts the palette and the shortcut sheet, and runs `useAppShortcuts.ts` (Ctrl+K, Ctrl+/ and `?`).
+  - `shortcuts.ts`: every shortcut in Nib, as `ShortcutSheet.tsx` shows them.
+  - `commands.ts`: what the palette offers, in its groups and order; `CommandPalette.tsx` shows it (cmdk, through `src/components/ui/command.tsx`).
 - `src/features/home/` is Home: `HomePage.tsx`, `TemplateGrid.tsx` and `templates.ts` (the six templates), `RecentList.tsx` and `recent.ts`, `PageThumb.tsx` and `thumbs.ts` (page 1 drawn by the engine and kept in `prefs`), and `actions.ts`.
 - `src/features/import/` is the Import dialog: `ImportDialog.tsx`, `ImportPreview.tsx` and `preview.ts`, `ImportOptions.tsx` and `options.ts`, and `apply.ts` (writing it out).
 - `src/features/doc/build.ts` builds new and imported documents.
 - `src/features/` holds one folder per part of the app: `home`, `import`, `write`, `style`, `export`, `doc`, `editor` (the rich-text block editor and its toolbar) and `pages` (the handwritten page views, block frames and dragging). `write` holds the Pages and Outline views, menus and page dragging, and `doc` holds the actions that change blocks and pages.
   - `style` holds the Style panel: `StylePanel.tsx` with its sections (`ScopeBar`, `LooksSection`, `HandSection` and `HandPicker`, `PenInkSection`, `PaperSection`, `NaturalSection`, `SizeSection`), `looks.ts`, `hands.ts` (the picker's search and filters), `fonts.ts` (uploaded fonts: reading, registering and storing them), `prefs.ts` (saved looks, favourites and preview text, kept on the device), and `fit.ts` (the page count and Fit back, which tries sizes on copies laid out by the engine). `HandSample.tsx` draws a sample of any hand, look or paper through the engine's `drawSample`.
-  - `doc/StageSheet.tsx` is the phone sheet that Style and Export share: it rests at three heights and keeps the pages above it live.
+  - `doc/StageSheet.tsx` is the phone sheet that Style, Export and Outline share: it rests at three heights, keeps the pages above it live, and has messages rise above it.
+  - `doc/Tips.tsx` is the first-visit tips card, and `doc/tipsSeen.ts` remembers on the device (`nib.tips`) that they have shown.
   - `export` holds the Export panel (`ExportPanel.tsx`, `ExportStage.tsx`) and the pipeline behind it:
     - `plan.ts`: what a download is (format, ZIP, quality, chosen pages), its file names, button label and size text.
     - `state.ts`: the device preferences and the page choice.
     - `render.ts`: draws one page with the engine's `composePage`, `frameShot` and `applyLook`, and encodes it.
     - `png.ts` and `jpeg.ts`: the scrubbers that keep only the picture; `pdf.ts`, `zip.ts` and `crc32.ts`: the writers.
     - `build.ts`: renders the pages and wraps them into the file. `run.ts`: Download and Share. `estimate.ts`: the size estimate.
-- `src/components/ui/` holds the shared interface components (Radix primitives styled in the shadcn way). `drawer.tsx` is the bottom sheet (vaul) that Style and Export use on phones.
-- `src/brand/` holds the Nib logo; `src/lib/` holds small helpers such as the theme and `media.ts` (the 860 px `wide:` breakpoint as a `useWide()` hook, which switches Write between its wide and phone layouts); `src/styles/app.css` holds the Tailwind setup and design tokens.
-- `scripts/smoke.mjs` is the browser smoke test. It picks a free port, so two runs can go side by side. `scripts/fixtures.mjs` makes the `.docx` and PDF that the tests and the smoke run import.
-- `public/fonts/` holds the handwriting fonts, which load only when used. Their licences are in `public/fonts/licenses/`, and [FONTS.md](FONTS.md) lists them all.
+- `src/components/ui/` holds the shared interface components (Radix primitives styled in the shadcn way). `drawer.tsx` is the bottom sheet (vaul) that Style, Export and Outline use on phones.
+- `src/brand/` holds the Nib logo; `src/styles/app.css` holds the Tailwind setup and design tokens. `src/lib/` holds small helpers:
+  - `theme.ts`: System, Light or Dark, kept in `nib.theme`, applied to the page and its `theme-color`, and followed when another tab changes it.
+  - `keys.ts`: Ctrl or ⌘, and how a shortcut is written (`Ctrl+Shift+Z`, or `⇧⌘Z` on Apple keyboards).
+  - `focus.ts`: a message's button (its Undo, say) gives the focus back to what had it.
+  - `media.ts`: the 860 px `wide:` breakpoint as a `useWide()` hook, which switches the stages between their wide and phone layouts.
+- `scripts/smoke.mjs` is the browser smoke test. It picks a free port, so two runs can go side by side. `scripts/fixtures.mjs` makes the `.docx` and PDF that the tests and the smoke run import. `scripts/icons.mjs` draws the app icons and the social image in `public/icons/` from `public/favicon.svg`: it is run by hand (`node scripts/icons.mjs`), needs the machine's Playwright, and its PNGs are committed, because CI has no Playwright.
+- `public/fonts/` holds the handwriting fonts, which a page loads only when it uses them (the service worker keeps them all for offline use). Their licences are in `public/fonts/licenses/`, and [FONTS.md](FONTS.md) lists them all.
 - `public/paper/photo.webp` is the photographed sheet used by the Photo paper.
 
 ## Credits
 
 The handwriting fonts are open-licensed fonts from Google Fonts, via Fontsource; see [FONTS.md](FONTS.md). Nib also uses [opentype.js](https://github.com/opentypejs/opentype.js), [PDF.js](https://github.com/mozilla/pdf.js) and [mammoth](https://github.com/mwilliamson/mammoth.js). Nib writes its own PDF and ZIP files.
 
-The interface is built with [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com), [Radix](https://www.radix-ui.com) components in the style of [shadcn/ui](https://ui.shadcn.com), [Zustand](https://github.com/pmndrs/zustand) and [idb](https://github.com/jakearchibald/idb).
+The interface is built with [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com), [Radix](https://www.radix-ui.com) components in the style of [shadcn/ui](https://ui.shadcn.com), [Zustand](https://github.com/pmndrs/zustand) and [idb](https://github.com/jakearchibald/idb). The palette uses [cmdk](https://cmdk.paco.me), and the offline copy is made by [vite-plugin-pwa](https://vite-pwa-org.netlify.app) with [Workbox](https://developer.chrome.com/docs/workbox).

@@ -103,12 +103,17 @@ export async function addSavedLook(name: string, v: Partial<Settings>): Promise<
   return look;
 }
 
-export async function removeSavedLook(id: string): Promise<{ look: SavedLook; index: number } | null> {
+/**
+ * Take a saved look off, and say where it was. `kept` is false when the device couldn't store that: the
+ * look is off this page's list all the same, but it is still stored, so it may come back.
+ */
+export async function removeSavedLook(id: string): Promise<{ look: SavedLook; index: number; kept: boolean } | null> {
   const before = useStylePrefs.getState().looks, index = before.findIndex(l => l.id === id);
   if (index < 0) return null;
   useStylePrefs.setState(s => ({ looks: s.looks.filter(l => l.id !== id) }));
-  try { await changeStored('looks', ls => ls.filter(l => !hasId(l, id))); } catch { /* shown as removed for now */ }
-  return { look: before[index], index };
+  let kept = true;
+  try { await changeStored('looks', ls => ls.filter(l => !hasId(l, id))); } catch { kept = false; }
+  return { look: before[index], index, kept };
 }
 
 /** Put a removed look back where it was (in the list as it is now). */

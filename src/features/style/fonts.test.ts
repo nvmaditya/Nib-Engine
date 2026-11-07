@@ -4,7 +4,8 @@ import { engineFor, fontReady } from '@/engine/core.js';
 import { getDb } from '@/store/db';
 import { setPref } from '@/store/documents';
 import { fontFile } from '@/test/fonts';
-import { addFontFile, FONT_KEY_PREFIX, fontId, loadUploadedFonts, storedFontIds } from './fonts';
+import { addFontFile, FONT_KEY_PREFIX, fontId, handReadable, loadUploadedFonts, storedFontIds } from './fonts';
+import { handNote, shapesNote } from './hands';
 
 vi.mock('@/store/documents', async importOriginal => {
   const actual = await importOriginal<typeof import('@/store/documents')>();
@@ -79,3 +80,27 @@ test('a font another tab stored after this page started is registered the next t
   expect(await loadUploadedFonts()).toBe(0);
 });
 test('a broken stored record is skipped', async () => { await (await getDb()).put('prefs', { id: 'up-x', name: 'X', buf: new ArrayBuffer(8), forms: 1, addedAt: 1 }, 'font:up-x'); expect(await loadUploadedFonts()).toBe(0); expect(FONTS.some(f => f.id === 'up-x')).toBe(false); });
+test('a stored font that is signed but can’t be read is marked', async () => {
+  const buf = new Uint8Array(256);
+  buf.set([0x77, 0x4f, 0x46, 0x46]); // `wOFF`, then nothing a font has
+  for (let i = 4; i < buf.length; i++) buf[i] = (i * 37) % 251;
+  const id = fontId(buf.buffer);
+  await (await getDb()).put('prefs', { id, name: 'Broken', buf: buf.buffer, forms: 1, addedAt: 1 }, FONT_KEY_PREFIX + id);
+  expect(await loadUploadedFonts()).toBe(1);
+  const cfg = FONTS.find(f => f.id === id)!;
+  parsed.n = 0;
+  expect(handReadable(cfg)).toBe(false);
+  expect(handReadable(cfg)).toBe(false);
+  expect(parsed.n).toBe(1); // read once, then remembered
+  expect(handNote(cfg)).toBe('your font, which can’t be read on this device');
+  expect(shapesNote(cfg)).toBeNull();
+});
+test('a stored font that can be read, and every built-in hand, are not', async () => {
+  const r = await addFontFile(fontFile('caveat', 'Mine.woff')) as { id: string };
+  const cfg = FONTS.find(f => f.id === r.id)!;
+  expect(handReadable(cfg)).toBe(true);
+  expect([handNote(cfg), shapesNote(cfg)]).toEqual(['your font', '3 shapes per letter']);
+  parsed.n = 0;
+  expect(FONTS.filter(f => f.group !== 'mine').every(handReadable)).toBe(true);
+  expect(parsed.n).toBe(0); // a built-in hand's file isn't read for this
+});

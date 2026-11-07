@@ -5,12 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nib</title>
 <meta name="description" content="Turn typed text into realistic handwritten pages, then download them as a PDF or images.">
-<meta name="theme-color" content="#1E2B7C">
+<meta name="theme-color" content="#FFFFFF">
+<script data-theme-boot>
+(function () { var p; try { p = localStorage.getItem('nib.theme'); } catch (e) {}
+  var dark = p === 'dark' || (p !== 'light' && !!window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  if (dark) { document.documentElement.classList.add('dark'); var m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', '#16161A'); } })();
+</script>
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Web copies of the older hands for letters (like Devanagari) their files don't cover. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@400&family=Gloria+Hallelujah&family=Homemade+Apple&family=Indie+Flower&family=Kalam:wght@300;700&family=Mynerve&family=Nanum+Pen+Script&family=Patrick+Hand&family=Playpen+Sans:wght@400&family=Reenie+Beanie&family=Shadows+Into+Light&display=swap">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta property="og:title" content="Nib">
+<meta property="og:description" content="Turn typed text into realistic handwritten pages, then download them as a PDF or images.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://nvmaditya.github.io/nib-engine/icons/social.png">
+<meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
 <div id="root"></div>
