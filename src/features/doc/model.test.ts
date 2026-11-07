@@ -2,7 +2,7 @@
 import { expect, test } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
 import type { Box } from '@/engine/types';
-import { box, docOf, lines } from '@/test/docs';
+import { box, docOf, lines, words } from '@/test/docs';
 import {
   appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock,
   removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, today,
@@ -139,4 +139,49 @@ test('header fields', () => {
   expect(h.fields!.roll).toBe('12');
   showHeaderField(h, 'subject', false);
   expect(h.text).toBe(`Name: Riya \nClass: 8 B\nRoll no.: 12\nDate: ${today()}`);
+});
+
+// Join back is the inverse of split (final review A, item 1).
+const SHAPES: Record<string, string> = {
+  'a \\newpage boundary': lines(5) + '\n\\newpage\n' + lines(5, 'b') + '\n\\newpage\n' + lines(3, 'c'),
+  'blank lines around \\newpage': lines(5) + '\n\n\\newpage\n\n' + lines(5, 'b') + '\n\n\n\\newpage\n' + lines(3, 'c'),
+  'a blank row at a page bottom': lines(27) + '\n\n' + lines(3, 'x'),
+  'a plain overflow boundary': lines(70),
+};
+for (const [name, text] of Object.entries(SHAPES)) {
+  test(`split then join back restores ${name}, byte for byte`, () => {
+    const pages = layoutFor(S, docOf(box({ id: 'm', text }))).pages;
+    expect(pages).toBeGreaterThan(1);
+    for (let idx = 1; idx < pages; idx++) {
+      const d = docOf(box({ id: 'm', name: 'Main text', text }));
+      const nb = splitBlock(S, d, 'm', idx)!;
+      joinBack(S, d, nb.id);
+      expect(d.boxes).toHaveLength(1);
+      expect(d.boxes[0].text).toBe(text);
+      expect(layoutFor(S, d).pages).toBe(pages);
+    }
+  });
+}
+test('a mid-paragraph split stays two paragraphs when joined back', () => {
+  const text = words(1500);
+  const d = docOf(box({ id: 'm', text }));
+  const nb = splitBlock(S, d, 'm', 1)!;
+  expect(nb.fromSep).toBeUndefined();
+  joinBack(S, d, nb.id);
+  expect(d.boxes[0].text.split('\n')).toHaveLength(2);
+});
+test('add to the end of a different block still uses one line break', () => {
+  const d = docOf(m(), box({ id: 'n', page: 1, y: 600, text: 'extra' }));
+  const nb = splitBlock(S, d, 'm', 1)!;
+  expect(nb.fromSep).toBe('\n');
+  appendToBlock(S, d, nb.id, 'n');
+  expect(d.boxes.find(b => b.id === 'n')!.text).toBe('extra\n' + lines(40).split('\n').slice(28).join('\n'));
+});
+test('the separator goes when the block it belongs to goes or is joined elsewhere', () => {
+  const o = docOf(box({ id: 'm', text: SHAPES['a \\newpage boundary'] }));
+  const n2 = splitBlock(S, o, 'm', 1)!;
+  expect(n2.fromSep).toBe('\n\\newpage\n');
+  const n3 = splitBlock(S, o, n2.id, 1)!;
+  appendToBlock(S, o, n2.id, 'm'); // n2 gone: n3 now comes from m, with a separator that was for n2
+  expect(o.boxes.find(b => b.id === n3.id)!.fromSep).toBeUndefined();
 });

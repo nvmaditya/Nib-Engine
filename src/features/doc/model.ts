@@ -30,6 +30,7 @@ function drop(doc: EngineDoc, gone: Set<Box>, into?: Box): void {
     if (b.from === undefined || !ids.has(b.from)) continue;
     if (into && into !== b) b.from = into.id;
     else delete b.from;
+    delete b.fromSep; // it was for the block that went
   }
 }
 
@@ -40,7 +41,10 @@ export function splitBlock(S: Settings, doc: EngineDoc, boxId: string, idx: numb
   const sg = partOf(layoutFor(S, doc), box, idx);
   if (!sg) return null;
   const color = nextColor(doc);
+  const orig = box.text, [start] = frameRange(box, idx);
   const nb: Box = { ...splitAtFrame(box, sg, uid()), kind: box.kind, name: continuedName(box.name), color, from: box.id };
+  // At a line start, remember what the split took out between the halves (blank lines, \newpage lines), so Join back can put it back.
+  if ((start === 0 || orig[start - 1] === '\n') && orig.startsWith(box.text) && orig.endsWith(nb.text)) nb.fromSep = orig.slice(box.text.length, orig.length - nb.text.length);
   doc.boxes.splice(doc.boxes.indexOf(box) + 1, 0, nb);
   return nb;
 }
@@ -49,7 +53,8 @@ export function splitBlock(S: Settings, doc: EngineDoc, boxId: string, idx: numb
 export function appendToBlock(_S: Settings, doc: EngineDoc, boxId: string, targetId: string): Box | null {
   const box = find(doc, boxId), target = find(doc, targetId);
   if (!joinable(box) || !joinable(target) || box === target) return null;
-  target.text = target.text ? target.text + '\n' + box.text : box.text;
+  const sep = box.from === target.id && box.fromSep != null ? box.fromSep : '\n';
+  target.text = target.text ? target.text + sep + box.text : box.text;
   drop(doc, new Set([box]), target);
   return target;
 }

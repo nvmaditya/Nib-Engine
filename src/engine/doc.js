@@ -79,10 +79,10 @@ export function cleanDoc(d) {
       kind, name:name || DEFAULT_NAMES[kind], color:typeof b.color === 'number' && Number.isInteger(c) ? ((c % 6) + 6) % 6 : i % 6,
     };
     if (kind === 'header') { o.fields = cleanFields(b.fields); o.text = headerText(o.fields); }
-    if (typeof b.from === 'string') o.from = b.from;
+    if (typeof b.from === 'string') { o.from = b.from; if (typeof b.fromSep === 'string' && /^(\s*\\newpage[ \t]*\n|\s)*$/.test(b.fromSep)) o.fromSep = b.fromSep; }
     return o;
   });
-  for (const b of boxes) if (b.from !== undefined && (b.from === b.id || !boxes.some(o => o.id === b.from))) delete b.from;
+  for (const b of boxes) if (b.from !== undefined && (b.from === b.id || !boxes.some(o => o.id === b.from))) { delete b.from; delete b.fromSep; }
   const fileName = typeof d.fileName === 'string' ? d.fileName.slice(0, 120) : '';
   return { pageCount:Math.max(1, Math.floor(num(d.pageCount, 1))), boxes, fileName };
 }

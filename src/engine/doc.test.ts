@@ -27,3 +27,11 @@ test('migration keeps position, style and frames', () => {
   ]);
 });
 test('colour must be a number', () => { const d = cleanDoc({ boxes: [{ text: 'a', color: '' }, { text: 'b', color: true }, { text: 'c', color: '3' }] })!; expect(d.boxes.map(b => b.color)).toEqual([0, 1, 2]); });
+
+test('fromSep is kept only with a from, and only as blank space and \\newpage lines', () => {
+  const d = cleanDoc({ boxes: [
+    { id: 'a', text: 'a' }, { id: 'b', text: 'b', from: 'a', fromSep: '\n\\newpage\n\n' }, { id: 'c', text: 'c', from: 'a', fromSep: 'x' },
+    { id: 'd', text: 'd', fromSep: '\n' }, { id: 'e', text: 'e', from: 'gone', fromSep: '\n' }, { id: 'f', text: 'f', from: 'a', fromSep: 5 },
+  ] })!;
+  expect(d.boxes.map(b => b.fromSep)).toEqual([undefined, '\n\\newpage\n\n', undefined, undefined, undefined, undefined]);
+});
