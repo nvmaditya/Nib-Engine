@@ -55,6 +55,19 @@ test('the sheet lists every shortcut, by where it works', () => {
   expect(within(d).getByRole('button', { name: 'Close' })).toBeInTheDocument();
 });
 
+test('the two columns share the rows: a row never splits, and a group’s title and note stay with its first row', () => {
+  useOverlays.setState({ open: 'shortcuts' });
+  render(<Overlays />);
+  const d = sheet(), titles = within(d).getAllByRole('heading', { level: 3 });
+  for (const h of titles) {
+    expect(h).toHaveClass('break-after-avoid');
+    expect(h.parentElement).not.toHaveClass('break-inside-avoid'); // a group may go on in the next column
+  }
+  for (const note of ['Tab to a block, or click it.', 'At the start of a line, then a space; marks around words.']) expect(within(d).getByText(note)).toHaveClass('break-after-avoid');
+  for (const dt of within(d).getAllByRole('term')) expect(dt.parentElement).toHaveClass('break-inside-avoid');
+  for (const el of within(d).getAllByText('In Write')) expect(el).toHaveClass('whitespace-nowrap'); // ` In Write` is never split over two lines
+});
+
 test('Ctrl+Y is listed only off Apple', () => {
   useOverlays.setState({ open: 'shortcuts' });
   const { unmount } = render(<Overlays />);

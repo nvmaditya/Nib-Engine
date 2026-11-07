@@ -32,13 +32,13 @@ export function ShortcutSheet({ open, onOpenChange }: { open: boolean; onOpenCha
         </DialogHeader>
         <div className="wide:columns-2 wide:gap-8">
           {SHORTCUTS.map(g => (
-            <div key={g.title} className="break-inside-avoid pb-5 last:pb-0">
-              <h3 className="text-sm font-semibold">{g.title}</h3>
-              {g.note && <p className="mt-0.5 text-[13px] text-muted">{g.note}</p>}
+            <div key={g.title} className="pb-5 last:pb-0">
+              <h3 className="text-sm font-semibold break-after-avoid">{g.title}</h3>
+              {g.note && <p className="mt-0.5 text-[13px] text-muted break-after-avoid">{g.note}</p>}
               <dl className="mt-2 flex flex-col gap-1.5 text-sm">
                 {g.rows.map(r => (
-                  <div key={r.what} className="flex items-baseline justify-between gap-3">
-                    <dt>{r.what}{r.only && <span className="text-muted"> In {r.only}</span>}</dt>
+                  <div key={r.what} className="flex items-baseline justify-between gap-3 break-inside-avoid">
+                    <dt>{r.what}{r.only && <>{' '}<span className="whitespace-nowrap text-muted">In {r.only}</span></>}</dt>
                     <Keys row={r} apple={apple} />
                   </div>
                 ))}
