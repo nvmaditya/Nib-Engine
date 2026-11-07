@@ -1,8 +1,10 @@
-// Write's Outline view: the page list, the handwritten pages and the selected block's editor.
+// Write's Outline view: the page list, the handwritten pages and the selected block's editor, side by
+// side, or on phones the pages with the list and the editor in a sheet over them.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Editor } from '@tiptap/core';
-import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
+import { EditorView } from '@tiptap/pm/view';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
 import { App } from '@/app/App';
 import type { Box, EngineDoc } from '@/engine/types';
@@ -11,6 +13,7 @@ import { offsetAt } from '@/features/editor/positions';
 import { createDoc } from '@/store/documents';
 import { flushSave, placeCaret, undo } from '@/store/editor';
 import { box, docOf, get, lastToast, lines, words } from '@/test/docs';
+import { OUTLINE_PEEK } from './OutlineView';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
 
@@ -72,10 +75,12 @@ test('the page list shows each page’s blocks', async () => {
   expect(within(list).getByRole('button', { name: 'Options for page 2' })).toBeInTheDocument();
 });
 
-test('an item is described by its snippet, so the name keeps the snippet', async () => {
+test('an outline item’s description is its first words', async () => {
   await outline(docOf(m(), n()));
-  const it = itemFor('Main text', 0);
-  expect(it).toHaveAccessibleDescription(/^line1 line2 line3/);
+  // its name stays short (name and part), and its first words describe it
+  expect(item('Main text, part 1 of 2')).toHaveAccessibleDescription(lines(28).replace(/\n/g, ' ').slice(0, 70));
+  expect(item('Main text, part 2 of 2')).toHaveAccessibleDescription(/^line29 line30/);
+  expect(item('Answers, own style')).toHaveAccessibleDescription('x');
 });
 
 test('the ⋯ on a handwritten tag is white on the colour, as on the typed tag', async () => {
@@ -317,4 +322,179 @@ test('a page break inside a paragraph is a chip in the text with both actions', 
   await userEvent.click(within(chip).getByRole('button', { name: 'Split here' }));
   expect(lastToast()).toBe('Split “Main text”: from page 2 on, it’s a block of its own.');
   expect(get().doc.boxes).toHaveLength(2);
+});
+
+test('on a wide screen nothing changes', async () => {
+  await outline(docOf(m()));
+  expect(screen.queryByRole('dialog', { name: 'Outline', hidden: true })).toBeNull();
+  // the page list, the handwritten pages and the inspector, side by side in that order
+  const list = ol(), pages = screen.getByRole('main', { name: 'Pages' }), inspector = insp();
+  expect(pages.parentElement).toBe(list.parentElement);
+  expect(inspector.parentElement).toBe(list.parentElement);
+  expect([...list.parentElement!.children]).toEqual([list, pages, inspector]);
+  expect(list.parentElement).toHaveClass('grid', 'grid-cols-[260px_minmax(0,1fr)_minmax(320px,380px)]');
+  expect(screen.queryByRole('button', { name: 'Drag to show more or less of Outline' })).toBeNull();
+});
+
+describe('on a phone', () => {
+  // A phone: no media query for a wide window matches, and every element is 390 px wide. (jsdom has no
+  // pointer capture either, which the sheet asks for when it is pressed.)
+  const wideMatchMedia = window.matchMedia;
+  const capture = ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture'];
+  const proto = Element.prototype as unknown as Record<string, unknown>;
+  beforeAll(() => {
+    window.matchMedia = (query: string) => ({
+      matches: false, media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    }) as MediaQueryList;
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 390 });
+    for (const k of capture) proto[k] = () => false;
+  });
+  afterAll(() => {
+    window.matchMedia = wideMatchMedia;
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+    for (const k of capture) delete proto[k];
+  });
+
+  const sheet = () => screen.getByRole('dialog', { name: 'Outline' });
+  const handle = () => screen.getByRole('button', { name: 'Drag to show more or less of Outline' });
+  const pages = () => screen.getByRole('main', { name: 'Pages' });
+  const room = () => pages().parentElement!.style.getPropertyValue('--sheet-shown');
+  const after = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  test('the handwritten pages come first, and Outline is a sheet over them', async () => {
+    await outline(docOf(m()));
+    const dialog = sheet();
+    expect(dialog).toHaveAttribute('aria-modal', 'false');
+    expect(within(dialog).getByRole('region', { name: 'Outline' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('region', { name: 'Selected block' })).toBeInTheDocument();
+    expect(after(pages(), dialog)).toBe(true);
+    await waitFor(() => expect(document.querySelectorAll('[data-stage="outline"] .sheet')).toHaveLength(2));
+    for (const page of document.querySelectorAll<HTMLElement>('[data-stage="outline"] .sheet')) expect(dialog).not.toContainElement(page);
+    expect(within(dialog).getByRole('button', { name: 'Drag to show more or less of Outline' })).toBeInTheDocument();
+    // it starts at about half, and the pages leave room after the last one for as much as it covers
+    expect(room()).toBe('55dvh');
+    expect(pages()).toHaveClass('after:h-[calc(var(--sheet-shown)+12px)]');
+  });
+
+  test('a long Main text never pushes the page list out of reach', async () => {
+    await outline(docOf(m()));
+    const list = within(sheet()).getByRole('region', { name: 'Outline' });
+    expect(list).toHaveClass('max-h-[40dvh]', 'overflow-y-auto');
+    expect(after(list, within(sheet()).getByRole('region', { name: 'Selected block' }))).toBe(true);
+  });
+
+  test('choosing a part in the list shows its block in the sheet', async () => {
+    await outline(docOf(m(), n()));
+    act(() => select(null));
+    expect(within(sheet()).queryByRole('textbox', { name: 'Main text, all pages' })).toBeNull();
+    await userEvent.click(within(sheet()).getByRole('button', { name: 'Main text, part 2 of 2' }));
+    expect(within(sheet()).getByRole('textbox', { name: 'Main text, all pages' })).toBeInTheDocument();
+    expect(within(sheet()).getByText('Page 2 starts here')).toBeInTheDocument();
+  });
+
+  test('a tapped word’s caret goes to the sheet’s editor, scrolled into view', async () => {
+    await outline(docOf(m(), n()));
+    act(() => select('n'));
+    // ProseMirror scrolls to the caret only while the page's selection is in the editor (jsdom can't lay
+    // it out, so note where that selection is each time it is asked to).
+    const scrolls: boolean[] = [];
+    vi.spyOn(EditorView.prototype as unknown as { scrollToSelection(): void }, 'scrollToSelection').mockImplementation(function (this: EditorView) {
+      const at = document.getSelection()?.focusNode ?? null;
+      scrolls.push(!!at && this.dom.contains(at));
+    });
+    act(() => placeCaret('m', 6)); // what a tap on “line2” on the handwritten page asks for
+    const ed = await within(sheet()).findByRole('textbox', { name: 'Main text, all pages' });
+    await waitFor(() => expect(ed).toHaveFocus());
+    const e = editorOf(ed);
+    expect(offsetAt(e.state.doc, get().doc.boxes[0].text, e.state.selection.head)).toBe(6);
+    expect(scrolls).toContain(true);
+  });
+
+  test('the sheet rests as low as 148 px, and opens up to just below the Write bar', async () => {
+    expect(OUTLINE_PEEK).toBe(148);
+    // The pages and the sheet start 137 px down, below the top bar, its stage switcher and the Write bar
+    // (jsdom's window is 768 px tall).
+    const rect = HTMLElement.prototype.getBoundingClientRect;
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.style.getPropertyValue('--sheet-shown') ? new DOMRect(0, 137, 390, 631) : rect.call(this);
+    });
+    try {
+      await outline(docOf(m()));
+      handle().focus();
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => expect(sheet().style.getPropertyValue('--snap-point-height')).toBe('137px'));
+      expect(room()).toBe('631px');
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => expect(room()).toBe('148px'));
+    } finally { spy.mockRestore(); }
+  });
+
+  test('dragging a page or a block in the sheet’s list leaves the sheet where it is', async () => {
+    // The stage starts 137 px down; the sheet is where vaul has moved it (the browser reports a matrix).
+    const rect = HTMLElement.prototype.getBoundingClientRect, css = window.getComputedStyle;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.style.getPropertyValue('--sheet-shown') ? new DOMRect(0, 137, 390, 631) : rect.call(this);
+    });
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, p) => {
+      const real = css.call(window, el, p);
+      if (!(el instanceof HTMLElement && el.dataset.slot === 'drawer-content')) return real;
+      return new Proxy(real, { get: (t, k) => {
+        const v = k === 'transform' ? 'matrix(1, 0, 0, 1, 0, 137)' : Reflect.get(t, k, t);
+        return typeof v === 'function' ? v.bind(t) : v;
+      } });
+    });
+    await outline({ ...docOf(m(), n()), pageCount: 3 });
+    handle().focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(room()).toBe('631px'));
+    // (vaul moves the sheet in an effect of its own, after the height the pages make room for has changed)
+    await waitFor(() => expect(sheet().style.transform).toBe('translate3d(0px, 137px, 0px)'));
+    const at = sheet().style.transform;
+    /**
+     * A mouse drag that starts on `el`, whose capture of the pointer takes it out of `el`, and drops on
+     * `over`. The sheet neither follows it nor moves when it ends.
+     */
+    const drag = async (el: HTMLElement, over: Element) => {
+      await act(() => new Promise(r => setTimeout(r, 600))); // (vaul holds off a drag for 500 ms after reaching a height)
+      const to = (y: number) => ({ ...mouse, buttons: 1, clientX: 10, clientY: y });
+      fireEvent.pointerDown(el, to(50));
+      fireEvent.pointerMove(el, to(62));
+      expect(sheet().style.transform).toBe(at);
+      fireEvent.pointerOut(el, to(62));
+      vi.spyOn(document, 'elementFromPoint').mockReturnValue(over);
+      fireEvent.pointerMove(document, to(70));
+      fireEvent.pointerUp(document, to(70));
+      await act(() => new Promise(r => setTimeout(r, 50)));
+      expect(sheet().style.transform).toBe(at);
+      expect(room()).toBe('631px');
+    };
+    await drag(item('Answers, own style'), within(section(2)).getByText('Drop a block here'));
+    expect(lastToast()).toBe('Moved “Answers” to page 3.');
+    await drag(within(sheet()).getByRole('img', { name: 'Drag to move page 1' }), within(section(1)).getByText('Page 2'));
+    expect(lastToast()).toMatch(/^Moved page 1 to position 2\./);
+  });
+
+  test('the sheet goes with the stage and the view, and Tab goes on out of it, both ways', async () => {
+    await outline(docOf(m()));
+    const controls = [...sheet().querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]')];
+    controls[controls.length - 1].focus();
+    await userEvent.tab();
+    expect(sheet()).not.toContainElement(document.activeElement as HTMLElement);
+    handle().focus();
+    await userEvent.tab({ shift: true });
+    expect(sheet()).not.toContainElement(document.activeElement as HTMLElement);
+    await userEvent.click(within(screen.getByRole('group', { name: 'Write view' })).getByRole('button', { name: 'Pages' }));
+    expect(screen.queryByRole('dialog', { name: 'Outline', hidden: true })).toBeNull();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Write view' })).getByRole('button', { name: 'Outline' }));
+    expect(await screen.findByRole('dialog', { name: 'Outline' })).toBeInTheDocument();
+    // another stage hides Outline's, and its sheet with it; Write comes back to Outline
+    const stageButton = (name: string) => within(screen.getByRole('navigation', { name: 'Stages' })).getByRole('button', { name: new RegExp(`${name}$`) });
+    await userEvent.click(stageButton('Style'));
+    expect(await screen.findByRole('dialog', { name: 'Style' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Outline', hidden: true })).toBeNull();
+    await userEvent.click(stageButton('Write'));
+    expect(await screen.findByRole('dialog', { name: 'Outline' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Style' })).toBeNull();
+  });
 });

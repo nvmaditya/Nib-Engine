@@ -1,6 +1,7 @@
 // Outline's page list: each page with the parts of blocks on it, in the order they are laid out. Pages
 // reorder by their grip and blocks move to another page by dragging their item (Design decision 4);
-// a block's later part can't move on its own (spec §4 rule 4).
+// a block's later part can't move on its own (spec §4 rule 4). In the phone sheet those drags are the
+// list's, not the sheet's (`data-vaul-no-drag`): the sheet doesn't follow them or move when they start.
 import { memo, useId, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { GripVertical, Plus } from 'lucide-react';
 import { HEADER_FIELDS } from '@/engine/doc.js';
@@ -73,7 +74,7 @@ const OutlineItem = memo(function OutlineItem({ boxId, idx, name, color, label, 
   const snippetId = useId();
   return (
     <li>
-      <button type="button" data-item={`${boxId}:${idx}`} data-box={boxId}
+      <button type="button" data-item={`${boxId}:${idx}`} data-box={boxId} data-vaul-no-drag=""
         aria-label={[label ? `${name}, part ${label}` : name, own && 'own style'].filter(Boolean).join(', ')}
         aria-current={selected ? 'true' : undefined} aria-describedby={snippet ? snippetId : undefined}
         onClick={() => select(boxId)} onPointerDown={onPointerDown}
@@ -106,7 +107,7 @@ function PageSection({ i, pages, segs, parts, selectedId }: { i: number; pages: 
   return (
     <div data-drop-page={i} className={cn('rounded-[10px] pt-0.5 pb-1.5', dropClass)}>
       <div className="flex items-center gap-1 py-1 pr-0.5">
-        <span role="img" aria-label={`Drag to move page ${i + 1}`} title="Drag to move this page" onPointerDown={onGrip}
+        <span role="img" aria-label={`Drag to move page ${i + 1}`} title="Drag to move this page" onPointerDown={onGrip} data-vaul-no-drag=""
           className={cn(gripClass, 'inline-grid size-[26px] flex-none place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-fg [&_svg]:size-4')}>
           <GripVertical aria-hidden />
         </span>
