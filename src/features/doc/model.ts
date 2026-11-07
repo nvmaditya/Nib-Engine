@@ -125,9 +125,19 @@ export function removeBlock(doc: EngineDoc, boxId: string): Box | null {
 
 /** A page with no block of its own can't move on its own: its first continuation always follows its start. */
 export function pageRefusal(L: Layout, doc: EngineDoc, page: number): Refused | null {
-  if (doc.boxes.some(b => b.page === page)) return null;
+  if (doc.boxes.some(b => b.page === page) || L.segs.some(s => s.page === page && s.idx === 0)) return null;
   const c = L.segs.find(s => s.page === page && s.idx > 0);
   return c ? { ok: false, part: c.idx + 1, name: c.box.name } : null;
+}
+
+/** Blocks whose first part is shown on `page`: stored there, or pushed onto it. Each is paired with where that part sits. */
+function startingOn(L: Layout, page: number): Seg[] {
+  return L.segs.filter(s => s.page === page && s.idx === 0);
+}
+
+/** Put these blocks on `page` at the place their first part is shown (a pushed block keeps what it looks like). */
+function placeOn(starts: Seg[], page: number): void {
+  for (const s of starts) { s.box.page = page; if (s.pushed) s.box.y = s.top; }
 }
 
 /** Where page `p` ends up when page `from` moves to position `to`. */
@@ -150,8 +160,9 @@ export function movePage(S: Settings, doc: EngineDoc, from: number, to: number):
   const no = pageRefusal(L, doc, from);
   if (no) return no;
   doc.pageCount = pages;
-  const going = doc.boxes.filter(b => b.page === from);
+  const starts = startingOn(L, from), going = starts.map(s => s.box);
   for (const b of doc.boxes) b.page = moved(b.page, from, to);
+  placeOn(starts, to);
   const after = layoutFor(S, doc);
   for (const b of going) {
     const next = partOf(after, b, 1);
@@ -174,7 +185,9 @@ export function mergeIntoPrevious(S: Settings, doc: EngineDoc, i: number): { ran
   const L = layoutFor(S, doc);
   if (i < 1 || i >= L.pages) return null;
   const ranOn = L.segs.some(s => s.page === i && s.idx > 0);
+  const starts = startingOn(L, i);
   for (const b of doc.boxes) if (b.page === i) b.page = i - 1;
+  placeOn(starts, i - 1);
   if (!layoutFor(S, doc).segs.some(s => s.page === i)) {
     for (const b of doc.boxes) if (b.page > i) b.page--;
     doc.pageCount = Math.max(1, L.pages - 1);

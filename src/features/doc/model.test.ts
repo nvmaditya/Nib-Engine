@@ -4,7 +4,7 @@ import { cleanSettings } from '@/engine/doc.js';
 import type { Box } from '@/engine/types';
 import { box, docOf, lines, words } from '@/test/docs';
 import {
-  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock,
+  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock, pageRefusal,
   removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, today,
 } from './model';
 
@@ -208,4 +208,20 @@ test('a split part pushed down by a block above keeps its own place, not the pus
   expect([part2.top, part2.storedTop]).toEqual([178, 110]);
   const nb = splitBlock(S, d, 'm', 1)!;
   expect(nb.y).toBe(110);
+});
+
+// A page that shows only a pushed block: that block starts there (item 3).
+const pushedN = () => docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })); // n is stored on page 1 but shows on page 2
+test('a page that shows only a pushed block can be moved, and takes that block', () => {
+  const d = pushedN();
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['n', 1]]);
+  expect(pageRefusal(layoutFor(S, d), d, 1)).toBeNull();
+  expect(movePage(S, d, 1, 0)).toEqual({ ok: true, followed: null });
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 1, 110], ['n', 0, 110]]);
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['n', 0]]);
+});
+test('merging a page that shows only a pushed block moves that block up', () => {
+  const d = pushedN();
+  expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false });
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 0, 110]]);
 });
