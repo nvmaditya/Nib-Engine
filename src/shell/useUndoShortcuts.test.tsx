@@ -5,7 +5,7 @@ import { BlockEditor } from '@/features/editor/BlockEditor';
 import { flushSave, openDocument, update } from '@/store/editor';
 import { get, rec } from '@/test/docs';
 import { Overlays } from './Overlays';
-import { openOverlay, useOverlays } from './overlays';
+import { openOverlay, useOverlays } from './overlayStore';
 import { useUndoShortcuts } from './useUndoShortcuts';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));

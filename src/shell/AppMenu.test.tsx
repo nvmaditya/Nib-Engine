@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { TopBar } from './TopBar';
 import { AppMenu } from './AppMenu';
 import { Overlays } from './Overlays';
-import { closeOverlay, focusBack, useOverlays } from './overlays';
+import { closeOverlay, focusBack, useOverlays } from './overlayStore';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
 

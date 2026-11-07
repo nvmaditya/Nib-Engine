@@ -5,7 +5,7 @@ import { useEffect, useId, useLayoutEffect, useRef, type FocusEvent } from 'reac
 import { Button } from '@/components/ui/button';
 import { chordLabel } from '@/lib/keys';
 import { matches } from '@/lib/media';
-import { dismissTips, tipLines, useTips } from './tips';
+import { dismissTips, tipLines, useTips } from './tipsSeen';
 
 const TOUCH = '(hover: none) and (pointer: coarse)';
 const KBD = 'rounded border border-line bg-surface-2 px-1.5 text-[12px] font-medium whitespace-nowrap';
@@ -34,7 +34,7 @@ export function Tips() {
   const from = useRef<Element | null>(null); // what had the focus before it came into the card
 
   // Leaving the document puts them away: they show once. This cleanup runs before DocumentView's own effects are
-  // torn down, and showTipsIfDue (tips.ts) marks the tips shown on this page before it opens them. So under
+  // torn down, and showTipsIfDue (tipsSeen.ts) marks the tips shown on this page before it opens them. So under
   // React's StrictMode, whose development run mounts, unmounts and mounts every effect again, the tips would
   // open, be put away by this cleanup, and not open again (they have shown on this page): they would never be
   // seen. The app doesn't use StrictMode; if it ever does, this needs another way to tell a real unmount.

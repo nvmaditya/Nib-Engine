@@ -2,7 +2,7 @@
 // They come last (the window, bubbling), so whatever the key went to has had it first.
 import { useEffect } from 'react';
 import { isModKey } from '@/lib/keys';
-import { openOverlay, otherModalOpen, toggleOverlay } from './overlays';
+import { openOverlay, otherModalOpen, toggleOverlay } from './overlayStore';
 import { typing } from './typing';
 
 export function useAppShortcuts(): void {

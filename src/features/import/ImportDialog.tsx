@@ -179,7 +179,7 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
   const drop = (e: DragEvent) => {
     e.preventDefault(); e.stopPropagation(); setOver(false); // (the document behind doesn't open it as well)
     const f = e.dataTransfer.files[0];
-    if (f) void readFile(f);
+    if (f && !busy) void readFile(f); // (while it waits to write out, what was pressed is what is written)
   };
   // While the dialog is open, Ctrl+Z is the dialog's (the preview's own undo): it never undoes the document behind.
   const keepUndo = (e: KeyboardEvent) => {
@@ -204,7 +204,7 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
         if (opener?.isConnected) opener.focus();
       }}
       onKeyDown={keepUndo}
-      onDragOver={e => { e.preventDefault(); setOver(true); }}
+      onDragOver={e => { e.preventDefault(); if (!busy) setOver(true); }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
       onDrop={drop}
       className={cn(
@@ -217,7 +217,9 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
         <DialogDescription className="sr-only">Choose a file, check its text, then write it out on the pages.</DialogDescription>
       </DialogHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto wide:grid wide:grid-cols-[minmax(0,1fr)_340px] wide:overflow-hidden">
+      {/* While Write it out waits (for the look's hand, or to make the new document), the request was read at the press:
+          the preview and the choices are inert until then, so nothing changed under the spinner is silently left out. */}
+      <div inert={busy} className="min-h-0 flex-1 overflow-y-auto wide:grid wide:grid-cols-[minmax(0,1fr)_340px] wide:overflow-hidden">
         {/* (The preview scrolls on its own in this column on wide screens; on phones the whole body scrolls.) */}
         <div className={cn('flex min-h-0 flex-col', !ready && 'min-h-full wide:col-span-2')}>
           <div className="flex flex-none items-center gap-3 px-4 pt-3">

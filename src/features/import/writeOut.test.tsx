@@ -1,7 +1,7 @@
 // Write it out with Add after the last page counts the pages with the hands it writes in: a hand still on its way
 // (the look just chosen, its sample still loading, or a slow connection) is waited for, so the text isn't placed by
 // stand-in widths and never lands on a page the document's own writing reaches.
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast as sonner } from 'sonner';
 import { afterAll, beforeEach, expect, test, vi } from 'vitest';
@@ -68,8 +68,16 @@ test('Write it out waits for the look’s hand, then carries on the text that en
   expect([get().S.font, get().scrollToPage]).toEqual(['caveat', 2]);
 });
 
-test('Cancel while the hand is on its way writes nothing', async () => {
+test('while the hand is on its way the preview and the choices can’t be changed, and Cancel still works and writes nothing', async () => {
   endsOnPage2InItsHand(); await addAfterIn('Neat notes');
+  // What was pressed is what is written: the preview, the choices and Choose another file are inert under the
+  // spinner (no focus, no clicks, no typing), and a file dropped on the dialog is not read. Cancel is not.
+  const inert = (el: HTMLElement) => el.closest('[inert]') !== null;
+  const preview = screen.getByRole('textbox', { name: 'Imported text' });
+  expect([preview, screen.getByRole('radio', { name: 'Letter' }), screen.getByRole('radio', { name: 'Replace what’s on the pages' }), screen.getByText('Choose another file')].map(inert)).toEqual([true, true, true, true]);
+  expect([screen.getByRole('button', { name: 'Cancel' }), writeIt()].map(inert)).toEqual([false, false]);
+  fireEvent.drop(screen.getByRole('dialog'), { dataTransfer: { files: [new File(['y'], 'Other.txt')] } });
+  expect(readDocument).toHaveBeenCalledTimes(1);
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   await arrive('patrick');
   expect([get().importOpen, get().doc.boxes.map(b => b.text), get().S.font, get().canUndo]).toEqual([false, [paragraphs(5)], 'labelle', false]);

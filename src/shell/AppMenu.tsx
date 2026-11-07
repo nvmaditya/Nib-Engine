@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { chordLabel, isApple } from '@/lib/keys';
 import { setThemePref, useThemePref, type ThemePref } from '@/lib/theme';
-import { openOverlay, type Overlay } from './overlays';
+import { openOverlay, type Overlay } from './overlayStore';
 
 const THEMES: [ThemePref, string][] = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
 const KBD = 'rounded border border-line bg-surface-2 px-1.5 text-[12px] font-medium tracking-normal text-fg';

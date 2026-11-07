@@ -14,7 +14,7 @@ import { loadFont } from '@/engine/core.js';
 import { fontsLoad, rec } from '@/test/docs';
 import { resizableWindow } from '@/test/media';
 import { CommandPalette } from './CommandPalette';
-import { focusBeforeOverlay, useOverlays } from './overlays';
+import { focusBeforeOverlay, useOverlays } from './overlayStore';
 
 const NAME = 'Search commands and documents';
 let essay: DocRecord, here: DocRecord;

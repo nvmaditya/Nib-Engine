@@ -10,7 +10,7 @@ import { useThemePref } from '@/lib/theme';
 import { listDocs } from '@/store/documents';
 import { useEditor } from '@/store/editor';
 import { paletteCommands, type CommandContext, type CommandGroupName, type PaletteCommand } from './commands';
-import { focusBack } from './overlays';
+import { focusBack } from './overlayStore';
 
 const NAME = 'Search commands and documents';
 

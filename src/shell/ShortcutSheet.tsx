@@ -2,7 +2,7 @@
 // focus back to what had it, unless the palette took its place.
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { chordLabel, isApple } from '@/lib/keys';
-import { focusBack } from './overlays';
+import { focusBack } from './overlayStore';
 import { SHORTCUTS, type ShortcutRow } from './shortcuts';
 
 const KBD = 'rounded border border-line bg-surface-2 px-1.5 text-[12px] font-medium whitespace-pre';

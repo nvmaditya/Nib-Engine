@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { undo, redo } from '@/store/editor';
-import { useOverlays } from './overlays';
+import { useOverlays } from './overlayStore';
 import { typing } from './typing';
 
 const NATIVE_UNDO = ['historyUndo', 'historyRedo'];
