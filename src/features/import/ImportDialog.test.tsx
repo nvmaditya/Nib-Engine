@@ -13,7 +13,7 @@ import { today } from '@/features/doc/model';
 import { BlockEditor } from '@/features/editor/BlockEditor';
 import { offsetAt } from '@/features/editor/positions';
 import { useUndoShortcuts } from '@/shell/useUndoShortcuts';
-import { createDoc, listDocs } from '@/store/documents';
+import { createDoc, listDocs, type DocRecord } from '@/store/documents';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
 import { box, docOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
 import { newDocument } from '@/features/doc/build';
@@ -27,9 +27,11 @@ vi.mock('@/features/doc/build', async orig => {
   real.newDocument = actual.newDocument;
   return { ...actual, newDocument: vi.fn(actual.newDocument) };
 });
+// The open documents here (`open`, `rec`) are not in storage. A real save of one, 400 ms after an edit, finds it
+// missing and closes it as deleted in another tab, history and all, so the open document's saves write nothing.
 vi.mock('@/store/documents', async orig => {
   const actual = await orig<typeof import('@/store/documents')>();
-  return { ...actual, createDoc: vi.fn(actual.createDoc) };
+  return { ...actual, createDoc: vi.fn(actual.createDoc), putDoc: vi.fn(async (r: DocRecord) => (r.rev ?? 0) + 1) };
 });
 
 fontsLoad();
