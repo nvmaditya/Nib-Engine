@@ -140,6 +140,11 @@ test('Share is offered only where the browser can share files', () => {
   vi.mocked(navigator.canShare).mockImplementation(() => { throw new TypeError('no'); }); expect(canShareFiles()).toBe(false);
   Reflect.deleteProperty(navigator, 'share'); vi.mocked(navigator.canShare).mockReturnValue(true); expect(canShareFiles()).toBe(false);
 });
+test('a browser that can’t make a File isn’t offered Share, and asking doesn’t throw', () => {
+  stubShare(); vi.stubGlobal('File', undefined);
+  try { expect(canShareFiles()).toBe(false); } finally { vi.unstubAllGlobals(); }
+  expect(canShareFiles()).toBe(true);
+});
 test('Share sends the PDF to the share sheet, and nothing else', async () => { stubShare(); await share(); expect(navigator.share).toHaveBeenCalledWith({ files: [expect.objectContaining({ name: 'Seeded.pdf', type: 'application/pdf' })] }); });
 test('the shared file is the file that was made', async () => {
   vi.mocked(HTMLCanvasElement.prototype.toBlob).mockRestore(); stubCanvasEncoder({ metadata: true }); stubShare();
@@ -167,10 +172,25 @@ test('a file Nib can’t make for sharing says so and shares nothing', async () 
   expect(navigator.share).not.toHaveBeenCalled(); expect(lastToast()).toBe('Nib couldn’t make the images. Try again.');
   expect(useExportRun.getState()).toEqual(IDLE_RUN);
 });
+test('the run ends as the share sheet opens, so Download works while it is open', async () => {
+  stubShare();
+  let close!: () => void;
+  vi.mocked(navigator.share).mockImplementationOnce(() => new Promise<void>(r => { close = r; }));
+  const states: ExportRun[] = [], stop = useExportRun.subscribe(s => { states.push({ ...s }); });
+  const p = share();
+  await vi.waitFor(() => expect(navigator.share).toHaveBeenCalled());
+  expect(states.at(-1)).toEqual(IDLE_RUN); // already idle when the sheet was asked for
+  expect(useExportRun.getState()).toEqual(IDLE_RUN);
+  const d = download(); expect(useExportRun.getState().kind).toBe('download');
+  close(); await p;
+  expect(useExportRun.getState().kind).toBe('download'); // the sheet closing doesn't end the download’s run
+  await d; stop();
+  expect(saved).toEqual(['Seeded.pdf']); expect(useExportRun.getState()).toEqual(IDLE_RUN);
+});
 test('closing the share sheet says nothing', async () => { stubShare(new DOMException('', 'AbortError')); await share(); expect(lastToast()).toBeUndefined(); expect(useExportRun.getState()).toEqual(IDLE_RUN); });
 test('when the browser wants a fresh tap, the message offers Share with the same files', async () => {
   stubShare(new DOMException('', 'NotAllowedError')); await share(); expect(lastToast()).toBe('Ready to share.');
-  expect(vi.mocked(sonner).mock.calls.at(-1)![1]!.action).toMatchObject({ label: 'Share' });
+  expect(vi.mocked(sonner).mock.calls.at(-1)![1]).toMatchObject({ action: { label: 'Share' }, duration: 15_000 }); // long enough to tap on a phone, which can't pause it
   expect(useExportRun.getState()).toEqual(IDLE_RUN);
   const made = vi.mocked(HTMLCanvasElement.prototype.toBlob).mock.calls.length;
   lastToastAction()!(); // the tap: the sheet is asked for at once, inside it
@@ -192,6 +212,18 @@ test('the fresh tap’s share is handled the same way', async () => {
   lastToastAction()!(); await settle();
   expect(lastToast()).toBe('Nib couldn’t share that. Use Download instead.');
   expect(vi.mocked(navigator.share).mock.calls.every(c => c[0] === vi.mocked(navigator.share).mock.calls[0][0])).toBe(true);
+});
+test('the fresh tap’s share runs outside any run: idle while its sheet is open, and a download’s run left alone', async () => {
+  stubShare(new DOMException('', 'NotAllowedError')); await share();
+  let close!: () => void;
+  vi.mocked(navigator.share).mockImplementationOnce(() => new Promise<void>(r => { close = r; }));
+  lastToastAction()!();
+  expect(navigator.share).toHaveBeenCalledTimes(2); expect(useExportRun.getState()).toEqual(IDLE_RUN);
+  close(); await settle();
+  const d = download(); lastToastAction()!(); // a tap on the message while a download is being made
+  expect(navigator.share).toHaveBeenCalledTimes(3); expect(useExportRun.getState().kind).toBe('download');
+  await settle(); expect(useExportRun.getState().kind).toBe('download');
+  await d; expect(useExportRun.getState()).toEqual(IDLE_RUN);
 });
 test('files this browser can’t share are said so', async () => { stubShare(undefined, false); await share(); expect(lastToast()).toBe('This browser can’t share these files. Use Download instead.'); expect(navigator.share).not.toHaveBeenCalled(); });
 test('another share failure says so', async () => { stubShare(new Error('x')); await share(); expect(lastToast()).toBe('Nib couldn’t share that. Use Download instead.'); expect(useExportRun.getState()).toEqual(IDLE_RUN); });

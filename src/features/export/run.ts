@@ -41,20 +41,29 @@ function canShare(data: ShareData): boolean {
 }
 
 /** Whether Share… is offered: the browser can share a PDF file. */
-export const canShareFiles = (): boolean =>
-  canShare({ files: [new File([new Uint8Array(1)], 'page.pdf', { type: 'application/pdf' })] });
+export function canShareFiles(): boolean {
+  try {
+    return canShare({ files: [new File([new Uint8Array(1)], 'page.pdf', { type: 'application/pdf' })] });
+  } catch {
+    return false; // no File constructor, or one that refuses
+  }
+}
+
+/** How long `Ready to share.` stays up: long enough to tap on a phone, where a message can't be paused. */
+export const READY_MS = 15_000;
 
 const named = (e: unknown, name: string): boolean => typeof e === 'object' && e !== null && 'name' in e && e.name === name;
 
 /**
  * Opens the share sheet with `data`. It asks at once, with nothing awaited first, so a call made in a
  * tap stays inside it. A closed sheet says nothing. When the browser wants a fresh tap (the first one
- * expired while the files were made), the message's Share is that tap, with the same files.
+ * expired while the files were made), the message's Share is that tap, with the same files. It is not
+ * a run: it leaves the run as it finds it, whether idle or a download being made.
  */
 function openSheet(data: ShareData): Promise<void> {
   return new Promise<void>(resolve => resolve(navigator.share(data))).catch((e: unknown) => {
     if (named(e, 'AbortError')) return;
-    if (named(e, 'NotAllowedError')) toast('Ready to share.', { label: 'Share', fn: () => { void openSheet(data); } });
+    if (named(e, 'NotAllowedError')) toast('Ready to share.', { label: 'Share', fn: () => { void openSheet(data); } }, { duration: READY_MS });
     else toast('Nib couldn’t share that. Use Download instead.');
   });
 }
@@ -79,23 +88,26 @@ export async function download(): Promise<void> {
   }
 }
 
-/** Makes the chosen files, images never in a ZIP, and opens the share sheet with them. */
+/**
+ * Makes the chosen files, images never in a ZIP, and opens the share sheet with them. The run ends
+ * once the files are made, before the sheet opens: the sheet is the browser's, and Download and Share
+ * are free again while it is open.
+ */
 export async function share(): Promise<void> {
   if (useExportRun.getState().kind) return;
   const f = freeze(), plan: ExportPlan = { ...currentPlan(f), zip: false };
   if (!plan.pages.length) return;
   useExportRun.setState({ kind: 'share', done: 0, total: plan.pages.length });
+  let files: File[];
   try {
-    let data: ShareData;
-    try {
-      data = { files: (await buildExport(plan, f, progress)).map(x => new File([x.bytes], x.name, { type: x.type })) };
-    } catch {
-      toast(failMessage(plan));
-      return;
-    }
-    if (!canShare(data)) { toast('This browser can’t share these files. Use Download instead.'); return; }
-    await openSheet(data);
+    files = (await buildExport(plan, f, progress)).map(x => new File([x.bytes], x.name, { type: x.type }));
+  } catch {
+    toast(failMessage(plan));
+    return;
   } finally {
     useExportRun.setState({ ...IDLE_RUN });
   }
+  const data: ShareData = { files };
+  if (!canShare(data)) { toast('This browser can’t share these files. Use Download instead.'); return; }
+  await openSheet(data);
 }
