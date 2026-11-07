@@ -110,20 +110,22 @@
   border-radius: 2px;
 }
 
-/* Where the next page's handwriting starts: a line between lines, or a chip inside a paragraph. */
+/* Where the next page's handwriting starts: a line between lines, or a chip inside a paragraph. In a
+   narrow editor its parts wrap onto more lines; the label and each button stay whole. */
 .nib-editor .nib-break {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   margin: 0.7em 0;
   font-size: 12px;
   line-height: 1.4;
   color: var(--muted);
   user-select: none;
-  white-space: nowrap;
 }
 .nib-editor .nib-break-label {
   font-weight: 600;
+  white-space: nowrap;
 }
 .nib-editor .nib-break-rule {
   flex: 1;
@@ -132,6 +134,7 @@
 }
 .nib-editor .nib-break-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 .nib-editor .nib-break-actions button {
@@ -142,6 +145,7 @@
   padding: 2px 8px;
   font: inherit;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
 .nib-editor .nib-break-actions button:hover {
@@ -153,11 +157,12 @@
 }
 .nib-editor .nib-break-inline {
   display: inline-flex;
+  max-width: calc(100% - 0.5em);
   vertical-align: baseline;
   margin: 0 0.25em;
-  padding: 0 6px;
+  padding: 1px 6px;
   border: 1px dashed var(--line-strong);
-  border-radius: 999px;
+  border-radius: 12px;
 }
 
 /* Placeholder */

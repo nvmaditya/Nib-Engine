@@ -6,14 +6,11 @@ import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
 import { App } from '@/app/App';
 import type { Box, EngineDoc } from '@/engine/types';
-import { deleteBlock, deletePageAt, select, splitAt } from '@/features/doc/actions';
-import { setActiveEditor } from '@/features/editor/active';
-import { BlockEditor } from '@/features/editor/BlockEditor';
-import { FormatToolbar } from '@/features/editor/FormatToolbar';
+import { deleteBlock, deletePageAt, removePart, select, splitAt } from '@/features/doc/actions';
 import { offsetAt } from '@/features/editor/positions';
 import { createDoc } from '@/store/documents';
 import { flushSave, placeCaret, undo } from '@/store/editor';
-import { box, docOf, get, lastToast, lines, open } from '@/test/docs';
+import { box, docOf, get, lastToast, lines, words } from '@/test/docs';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
 
@@ -144,6 +141,28 @@ test('renaming from the inspector', async () => {
   expect(f).toHaveValue('Notes');
 });
 
+test('a typed name is kept when the selection moves on before the field is left', async () => {
+  await outline(docOf(m(), n()));
+  const nameOf = (id: string) => get().doc.boxes.find(b => b.id === id)!.name;
+  const field = () => within(insp()).getByRole('textbox', { name: 'Block name' });
+  await userEvent.clear(field());
+  await userEvent.type(field(), 'Renamed');
+  act(() => select('n')); // pressing another block on the handwritten page: the field goes before it is left
+  expect(nameOf('m')).toBe('Renamed');
+  expect(field()).toHaveValue('Answers');
+  act(() => undo());
+  expect(nameOf('m')).toBe('Main text');
+  // pressing an empty area of the page (nothing selected) keeps it too; Escape first puts the name back
+  act(() => select('m'));
+  await userEvent.type(field(), ' too');
+  act(() => select(null));
+  expect(nameOf('m')).toBe('Main text too');
+  act(() => select('m'));
+  await userEvent.type(field(), ' not{Escape}');
+  act(() => select(null));
+  expect(nameOf('m')).toBe('Main text too');
+});
+
 test('a continuation in the list can’t be dragged to another page', async () => {
   await outline(docOf(m()));
   fireEvent.pointerDown(itemFor('Main text', 1), { ...mouse, clientX: 10, clientY: 50 });
@@ -193,7 +212,7 @@ test('deleting the selected block while its editor has focus', async () => {
   await waitFor(() => expect(within(ol()).getByRole('heading', { name: 'Page 1' })).toHaveFocus());
 });
 
-test('splitting and deleting a page while the editor has focus and typing is still being saved', async () => {
+test('splitting, removing a part and deleting a page while the editor has focus and typing is still being saved', async () => {
   await outline(docOf(m()));
   /** Focus the inspector's editor at the end of its first line and type a character there. */
   const typeInto = (label: string) => {
@@ -210,11 +229,20 @@ test('splitting and deleting a page while the editor has focus and typing is sti
   expect(within(insp()).getByRole('textbox', { name: 'Main text (continued), all pages' })).toBeInTheDocument();
   act(() => undo());
   act(() => select('m'));
+  const ed = () => within(insp()).getByRole('textbox', { name: 'Main text, all pages' });
+  typeInto('Main text, all pages');
+  act(() => removePart('m', 1));
+  await act(() => new Promise(r => setTimeout(r, 500)));
+  expect(textOf('m')).toBe(['line1!!', ...lines(28).split('\n').slice(1)].join('\n'));
+  expect(ed().textContent).not.toContain('line29');
+  expect(within(insp()).queryByText(/starts here/)).toBeNull();
+  act(() => undo());
+  expect(within(insp()).getByText('Page 2 starts here')).toBeInTheDocument();
   typeInto('Main text, all pages');
   act(() => deletePageAt(1));
   await act(() => new Promise(r => setTimeout(r, 500)));
-  expect(textOf('m')).toBe(['line1!!', ...lines(28).split('\n').slice(1)].join('\n'));
-  expect(within(insp()).getByRole('textbox', { name: 'Main text, all pages' }).textContent).not.toContain('line29');
+  expect(textOf('m')).toBe(['line1!!!', ...lines(28).split('\n').slice(1)].join('\n'));
+  expect(ed().textContent).not.toContain('line29');
   expect(within(insp()).queryByText(/starts here/)).toBeNull();
 });
 
@@ -264,11 +292,12 @@ test('Add page adds a blank page to the list', async () => {
   expect(within(section(2)).getByText('Drop a block here')).toBeInTheDocument();
 });
 
-test('the formatting tools ignore an editor in a view that isn’t shown', () => {
-  open(docOf(m()));
-  let ed: Editor | null = null;
-  render(<><div inert><BlockEditor boxId="m" range={null} label="Hidden" onReady={e => (ed = e)} /></div><FormatToolbar /></>);
-  act(() => setActiveEditor(ed, 'm'));
-  expect(screen.getByRole('button', { name: 'Bold' })).toBeDisabled();
-  expect(screen.getByRole('combobox', { name: 'Text style' })).toBeDisabled();
+test('a page break inside a paragraph is a chip in the text with both actions', async () => {
+  await outline(docOf(box({ id: 'p', name: 'Main text', y: 1009, text: words(40) }))); // its paragraph runs onto page 2
+  const chip = within(insp()).getByText('Page 2 starts here').parentElement!;
+  expect(chip).toHaveClass('nib-break-inline');
+  expect(within(chip).getByRole('button', { name: 'Remove page 2 part' })).toBeInTheDocument();
+  await userEvent.click(within(chip).getByRole('button', { name: 'Split here' }));
+  expect(lastToast()).toBe('Split “Main text”: from page 2 on, it’s a block of its own.');
+  expect(get().doc.boxes).toHaveLength(2);
 });

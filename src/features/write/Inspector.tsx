@@ -1,6 +1,6 @@
 // Outline's inspector: the selected block's name, where it is, its ⋯ menu, and its whole text in one
 // editor, with a line where each later page's part starts (Design decision 3). A header shows its fields.
-import { memo, useMemo, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { frameRange } from '@/engine/core.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,11 +15,21 @@ import { useEditor } from '@/store/editor';
 import { BlockMenu } from './BlockMenu';
 import { HeaderFields } from './HeaderFields';
 
-/** The block name field: saved on Enter or on leaving it; Escape puts the saved name back. */
+/**
+ * The block name field: saved on Enter or on leaving it; Escape puts the saved name back. Pressing another
+ * block or an empty area on the page changes the selection before the field is left, so it goes without a
+ * blur: what was typed is saved as it goes.
+ */
 function NameField({ boxId, name }: { boxId: string; name: string }) {
   const [draft, setDraft] = useState(name);
   const [shown, setShown] = useState(name);
   if (shown !== name) { setShown(name); setDraft(name); } // renamed elsewhere, or undone
+  const latest = useRef({ draft, name });
+  latest.current = { draft, name };
+  useEffect(() => () => {
+    const { draft: d, name: was } = latest.current, next = d.trim();
+    if (next && next !== was) renameBlock(boxId, next); // (a block that is gone, or the same name, changes nothing)
+  }, [boxId]);
   const save = () => {
     const next = draft.trim();
     if (next) renameBlock(boxId, next);
