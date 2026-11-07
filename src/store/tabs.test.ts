@@ -253,3 +253,25 @@ test('a page brought back from the back-forward cache reads the document again t
   await vi.waitFor(() => expect(state(b).title).toBe('Renamed while away'));
   void a;
 });
+
+test('after a deploy, a tab of the earlier Nib saving a record it wrote (no revision) isn’t overwritten by a new tab', async () => {
+  const a = await openTab(), b = await openTab();
+  const id = await seed(a);
+  const db = await (await import('./db')).getDb();
+  const { rev: _r, savedBy: _s, ...asLeft } = await db.get('documents', id);
+  await db.put('documents', { ...asLeft, schema: 2, updatedAt: 1000 }); // as the earlier Nib left it
+  await openIn(b, id); // the new Nib, in a tab opened after the deploy
+  // The old tab saves (it doesn't keep a revision, and says nothing to the new tabs).
+  await db.put('documents', { ...asLeft, schema: 2, updatedAt: 2000, doc: { ...asLeft.doc, boxes: [{ ...asLeft.doc.boxes[0], text: 'The water cycle, old tab' }] } });
+
+  type(b, ' new tab');
+  await b.ed.flushSave();
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, old tab');
+  await vi.waitFor(() => expect(text(b)).toBe('The water cycle, old tab'));
+  expect(messages(b)).toEqual([NOT_KEPT]);
+  type(b, ' and then');
+  await b.ed.flushSave();
+  expect(await db.get('documents', id)).toMatchObject({ rev: 1, schema: 3 });
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, old tab and then');
+  expect(messages(b)).toEqual([NOT_KEPT]);
+});

@@ -133,6 +133,23 @@ test('a copy read with getDoc or listDocs can’t pass for the tab that saved it
   expect(listed).not.toHaveProperty('savedBy');
 });
 
+test('a record an earlier Nib wrote (no revision) isn’t overwritten by a copy read before that Nib saved it again', async () => {
+  const a = await createDoc({ title: 'Notes' });
+  const db = await getDb();
+  const { rev: _r, savedBy: _s, ...asLeft } = await db.get('documents', a.id);
+  await db.put('documents', { ...asLeft, schema: 2, updatedAt: 1000 }); // as the earlier Nib left it, before a deploy
+  const read = (await getDoc(a.id))!;
+  expect([read.rev, read.updatedAt]).toEqual([0, 1000]);
+  await db.put('documents', { ...asLeft, schema: 2, title: 'Typed in the old tab', updatedAt: 2000 }); // its tab saves again
+  await expect(putDoc({ ...read, title: 'Written back' })).rejects.toBeInstanceOf(StaleDocumentError);
+  await expect(putDoc({ ...read, title: 'Typed in the new tab', updatedAt: 3000 }, { readAt: 1000, session: 'tab-n' })).rejects.toBeInstanceOf(StaleDocumentError);
+  expect((await getDoc(a.id))!.title).toBe('Typed in the old tab');
+  // Read again, it can be written: from then on it has a revision, and the earlier Nib can't overwrite it.
+  const now = (await getDoc(a.id))!;
+  await putDoc({ ...now, title: 'Typed in the new tab', updatedAt: 3000 }, { readAt: now.updatedAt, session: 'tab-n' });
+  expect(await db.get('documents', a.id)).toMatchObject({ title: 'Typed in the new tab', rev: 1, schema: DOC_SCHEMA });
+});
+
 test('each write bumps the revision a read gives', async () => {
   const a = await createDoc();
   expect((await getDoc(a.id))!.rev).toBe(1);

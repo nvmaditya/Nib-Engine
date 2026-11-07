@@ -102,6 +102,7 @@ let failing: string | null = null; // the document whose saves are failing; one 
 // What storage holds of the open document. A save is written only if storage hasn't moved on since: its revision
 // is still `base` (the one this tab read), or the last write was this session's own (putDoc).
 let base = 0;
+let baseAt = 0; // its updatedAt: a record an earlier Nib wrote has no revision (0), and only its time tells it moved on
 let session = '';
 let written = -1; // the revision of this session's latest write: storage still holding it means this tab has it
 /** Each block's text as last written (or read): what a refused save loses is what differs from it. */
@@ -115,6 +116,7 @@ const textsOf = (doc: EngineDoc) => new Map(doc.boxes.map(b => [b.id, b.text]));
 function adopt(rec: DocRecord, doc: EngineDoc): void {
   createdAt = rec.createdAt;
   base = rec.rev ?? 0;
+  baseAt = rec.updatedAt;
   session = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   written = -1;
   savedText = textsOf(doc);
@@ -133,15 +135,15 @@ async function saveNow(): Promise<void> {
   const s = get();
   if (!stored(s.docId)) return;
   const id = s.docId;
-  const seq = ++saveSeq, at = opened, by = session;
+  const seq = ++saveSeq, at = opened, by = session, readAt = baseAt;
   const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc, rev: base };
   const texts = textsOf(s.doc);
   try {
     let rev: number;
-    try { rev = await putDoc(rec, { session: by }); } catch (e) {
+    try { rev = await putDoc(rec, { session: by, readAt }); } catch (e) {
       if (refused(e) || seq !== saveSeq) throw e; // or a newer save has started and carries newer content: no retry
       forgetDb(); // the connection may have been closed under us: open a fresh one and try once more
-      rev = await putDoc(rec, { session: by });
+      rev = await putDoc(rec, { session: by, readAt });
     }
     if (opened === at) written = rev;
     if (failing === id) failing = null;
@@ -173,7 +175,8 @@ async function follow(id: string, lost: boolean): Promise<void> {
   }
   if (n !== followSeq || get().docId !== id) return; // a later look is on its way, or the document was closed
   if (!rec) { leaveDeleted(); return; }
-  if (rec.rev === written || (rec.rev ?? 0) === base) { // this tab has it already: its own write, or the copy it read
+  const read = (rec.rev ?? 0) === base && (base > 0 || rec.updatedAt === baseAt); // still the copy this tab read
+  if (rec.rev === written || read) { // this tab has it already
     if (followLost) { followLost = false; saveSoon(); }
     return;
   }

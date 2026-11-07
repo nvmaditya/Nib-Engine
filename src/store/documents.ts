@@ -142,13 +142,17 @@ async function rewrite(id: string, change: (stored: StoredDoc) => StoredDoc): Pr
  *
  * `session`: the editing session saving (only the editor's save gives one). It is given apart from the record, so a
  * copy that was read and written back never counts as that session's own write.
+ * `readAt`: the `updatedAt` of the copy `rec` was made from (by default `rec`'s own). A record an earlier Nib wrote
+ * last has no revision (0) however often that Nib saves it, as in a tab left open across a deploy: the stored
+ * record being newer than the copy is what tells.
  */
-export async function putDoc(rec: DocRecord, o: { session?: string } = {}): Promise<number> {
+export async function putDoc(rec: DocRecord, o: { session?: string; readAt?: number } = {}): Promise<number> {
   const { savedBy: _, ...copy } = structuredClone(rec as StoredDoc);
-  const { session } = o;
+  const { session, readAt = rec.updatedAt } = o;
   const rev = await rewrite(rec.id, stored => {
     const own = session !== undefined && stored.savedBy === session;
-    if (!own && revOf(stored) !== revOf(rec)) throw new StaleDocumentError();
+    const moved = revOf(stored) !== revOf(rec) || (revOf(stored) === 0 && stored.updatedAt > readAt);
+    if (!own && moved) throw new StaleDocumentError();
     return { ...copy, schema: DOC_SCHEMA, savedBy: session };
   });
   announce({ type: 'saved', id: rec.id, rev, ...(session !== undefined && { by: session }) });
