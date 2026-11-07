@@ -29,15 +29,16 @@ export function HandSample({ settings, text, height, className }: { settings: Se
   const font = settings.font;
   const ready = fontReady(font);
 
-  // A hand that is still arriving is fetched, and drawn again once it has.
+  // A hand that is still arriving is fetched once the sample is near the view (the gate that draws it), and drawn again once
+  // it has arrived. A failed fetch is tried again the next time the sample comes near.
   useEffect(() => {
-    if (ready || !markup) return;
+    if (ready || !markup || !near) return;
     let live = true;
     const cfg = FONTS.find(f => f.id === font);
     void loadFont(font).then(ok => { if (live && ok) setArrived(n => n + 1); });
     if (cfg) void document.fonts?.load(fontStr(cfg, 40)).catch(() => {});
     return () => { live = false; };
-  }, [font, ready, markup]);
+  }, [font, ready, markup, near]);
 
   const key = [...KEYS.map(k => String(settings[k])), markup, height, ready].join('|');
   useLayoutEffect(() => {

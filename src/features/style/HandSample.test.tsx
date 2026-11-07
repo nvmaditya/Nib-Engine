@@ -1,5 +1,5 @@
 // A sample of handwriting drawn by the engine itself.
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
 import { dprNow } from '@/features/pages/Sheet';
@@ -39,6 +39,40 @@ test('a hand whose file hasn’t arrived is drawn again once it has', async () =
   render(<HandSample settings={{ ...S, font: 'zeyada' }} text="Homework" height={30} />);
   await waitFor(() => expect(drawSample).toHaveBeenCalledTimes(2));
   expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/fonts\/zeyada\.woff$/));
+});
+
+/** An IntersectionObserver that reports only when the test says so. */
+const observers: FakeIO[] = [];
+class FakeIO {
+  els: Element[] = [];
+  constructor(readonly cb: IntersectionObserverCallback) { observers.push(this); }
+  observe(el: Element) { this.els.push(el); }
+  unobserve() {}
+  disconnect() { observers.splice(observers.indexOf(this), 1); }
+  takeRecords() { return []; }
+}
+const report = (near: boolean) => act(() => {
+  for (const io of [...observers]) io.cb(io.els.map(target => ({ isIntersecting: near, target }) as unknown as IntersectionObserverEntry), io as unknown as IntersectionObserver);
+});
+
+test('a sample far from view fetches no font file, and does once it comes near', async () => {
+  vi.stubGlobal('IntersectionObserver', FakeIO);
+  fontsLoad();
+  render(<HandSample settings={{ ...S, font: 'kalam' }} text="Homework" height={30} />);
+  report(false);
+  expect(fetch).not.toHaveBeenCalled();
+  report(true);
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/fonts\/kalam\.woff$/)));
+});
+
+test('a font file that failed to load is tried again the next time the sample comes near', async () => {
+  vi.stubGlobal('IntersectionObserver', FakeIO);
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, arrayBuffer: async () => new ArrayBuffer(0) })));
+  render(<HandSample settings={{ ...S, font: 'patrick' }} text="Homework" height={30} />);
+  report(true);
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  report(false); report(true);
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
 });
 
 test('nothing to write draws nothing', () => {
