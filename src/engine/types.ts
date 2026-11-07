@@ -20,6 +20,8 @@ export interface Box {
   id: string; page: number; x: number; y: number; w: number; text: string;
   style: Partial<Settings>; shuffle: number; frames: Record<number, FrameRect>;
   kind: BlockKind; name: string; color: number; fields?: HeaderFields; from?: string;
+  /** What Split took out between this block and the one it came from (blank lines, `\\newpage` lines); Join back puts it back. */
+  fromSep?: string;
 }
 
 export interface EngineDoc { pageCount: number; boxes: Box[]; fileName: string }

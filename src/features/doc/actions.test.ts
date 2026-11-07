@@ -252,14 +252,30 @@ test('repeating an action, or one with nothing to act on, records nothing and sa
   expect(get().canUndo).toBe(false); // only the two real changes were steps
   open(docOf()); // one empty page
   deletePageAt(0); deletePageAt(0); mergeIntoPreviousPage(1); movePageTo(0, 1);
-  // A page that only shows a block pushed onto it from page 1: merging it changes nothing.
-  open(docOf(box({ id: 'a', text: lines(28) }), box({ id: 'b', y: 900, w: 300, text: 'b' })));
-  expect(layoutFor(get().S, get().doc).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['b', 1]]);
-  const pushed = json();
-  mergeIntoPreviousPage(1); setField('a', 'name', 'x'); showField('a', 'roll', true);
-  expect(json()).toBe(pushed);
+  open(long());
+  const text = json();
+  setField('m', 'name', 'x'); showField('m', 'roll', true); // not a header
+  expect(json()).toBe(text);
   expect(get().canUndo).toBe(false);
   expect(toasts()).toBe(0);
+});
+
+// A page that only shows a block pushed onto it from the page before: that block starts there.
+const pushedPage = () => docOf(box({ id: 'a', text: lines(28) }), box({ id: 'b', y: 900, w: 300, text: 'b' }));
+const where = () => get().doc.boxes.map(b => [b.id, b.page, b.y]);
+test('moving a page that shows only a pushed block moves that block', () => {
+  open(pushedPage());
+  expect(layoutFor(get().S, get().doc).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['b', 1]]);
+  movePageTo(1, 0);
+  expect(lastToast()).toBe('Moved page 2 to position 1.');
+  expect(where()).toEqual([['a', 1, 110], ['b', 0, 110]]);
+  expect(get().canUndo).toBe(true);
+});
+test('merging a page that shows only a pushed block moves that block up', () => {
+  open(pushedPage());
+  mergeIntoPreviousPage(1);
+  expect(lastToast()).toBe('Merged page 2 into page 1.');
+  expect(where()).toEqual([['a', 0, 110], ['b', 0, 110]]);
 });
 
 test('a page that only holds a continuation can’t be merged either', () => {

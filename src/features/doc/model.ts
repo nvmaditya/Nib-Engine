@@ -30,6 +30,7 @@ function drop(doc: EngineDoc, gone: Set<Box>, into?: Box): void {
     if (b.from === undefined || !ids.has(b.from)) continue;
     if (into && into !== b) b.from = into.id;
     else delete b.from;
+    delete b.fromSep; // it was for the block that went
   }
 }
 
@@ -37,19 +38,47 @@ function drop(doc: EngineDoc, gone: Set<Box>, into?: Box): void {
 export function splitBlock(S: Settings, doc: EngineDoc, boxId: string, idx: number): Box | null {
   const box = find(doc, boxId);
   if (!box || idx < 1 || box.kind === 'header') return null;
-  const sg = partOf(layoutFor(S, doc), box, idx);
+  const L = layoutFor(S, doc), sg = partOf(L, box, idx), before = partOf(L, box, idx - 1);
   if (!sg) return null;
   const color = nextColor(doc);
+  const orig = box.text, [start] = frameRange(box, idx);
   const nb: Box = { ...splitAtFrame(box, sg, uid()), kind: box.kind, name: continuedName(box.name), color, from: box.id };
+  // On the page right after the part before, a block above only pushed it down: the new block keeps its own place.
+  if (before && sg.page === before.page + 1) nb.y = sg.storedTop;
+  // At a line start, remember what the split took out between the halves (blank lines, \newpage lines), so Join back can put it back.
+  if ((start === 0 || orig[start - 1] === '\n') && orig.startsWith(box.text) && orig.endsWith(nb.text)) nb.fromSep = orig.slice(box.text.length, orig.length - nb.text.length);
   doc.boxes.splice(doc.boxes.indexOf(box) + 1, 0, nb);
   return nb;
 }
 
+/**
+ * After `box` was joined back into `target` (its text now starts at offset `at`): the parts after
+ * `box`'s first keep their own places, and its first part's own place goes to the part it starts, if it starts one.
+ */
+function keepPlaces(S: Settings, doc: EngineDoc, target: Box, box: Box, at: number): void {
+  layoutFor(S, doc);
+  let p = 0;
+  while (frameRange(target, p + 1)[0] > 0 && frameRange(target, p + 1)[0] <= at) p++;
+  const frames = { ...target.frames };
+  for (const [j, f] of Object.entries(box.frames)) frames[p + +j] = f;
+  if (p > 0 && frameRange(target, p)[0] === at) {
+    const own: FrameRect = {};
+    if (box.x !== target.x) own.x = box.x;
+    if (box.y !== geom().top) own.y = box.y;
+    if (box.w !== target.w) own.w = box.w;
+    if (Object.keys(own).length) frames[p] = { ...frames[p], ...own };
+  }
+  target.frames = frames;
+}
+
 /** The block's text goes on a new line at the end of the target's, and the block goes. */
-export function appendToBlock(_S: Settings, doc: EngineDoc, boxId: string, targetId: string): Box | null {
+export function appendToBlock(S: Settings, doc: EngineDoc, boxId: string, targetId: string): Box | null {
   const box = find(doc, boxId), target = find(doc, targetId);
   if (!joinable(box) || !joinable(target) || box === target) return null;
-  target.text = target.text ? target.text + '\n' + box.text : box.text;
+  const sep = box.from === target.id && box.fromSep != null ? box.fromSep : '\n';
+  const at = target.text.length + sep.length, rejoin = !!target.text && box.from === target.id;
+  target.text = target.text ? target.text + sep + box.text : box.text;
+  if (rejoin) keepPlaces(S, doc, target, box, at);
   drop(doc, new Set([box]), target);
   return target;
 }
@@ -96,9 +125,19 @@ export function removeBlock(doc: EngineDoc, boxId: string): Box | null {
 
 /** A page with no block of its own can't move on its own: its first continuation always follows its start. */
 export function pageRefusal(L: Layout, doc: EngineDoc, page: number): Refused | null {
-  if (doc.boxes.some(b => b.page === page)) return null;
+  if (doc.boxes.some(b => b.page === page) || L.segs.some(s => s.page === page && s.idx === 0)) return null;
   const c = L.segs.find(s => s.page === page && s.idx > 0);
   return c ? { ok: false, part: c.idx + 1, name: c.box.name } : null;
+}
+
+/** Blocks whose first part is shown on `page`: stored there, or pushed onto it. Each is paired with where that part sits. */
+function startingOn(L: Layout, page: number): Seg[] {
+  return L.segs.filter(s => s.page === page && s.idx === 0);
+}
+
+/** Put these blocks on `page` at the place their first part is shown (a pushed block keeps what it looks like). */
+function placeOn(starts: Seg[], page: number): void {
+  for (const s of starts) { s.box.page = page; if (s.pushed) s.box.y = s.top; }
 }
 
 /** Where page `p` ends up when page `from` moves to position `to`. */
@@ -121,8 +160,9 @@ export function movePage(S: Settings, doc: EngineDoc, from: number, to: number):
   const no = pageRefusal(L, doc, from);
   if (no) return no;
   doc.pageCount = pages;
-  const going = doc.boxes.filter(b => b.page === from);
+  const starts = startingOn(L, from), going = starts.map(s => s.box);
   for (const b of doc.boxes) b.page = moved(b.page, from, to);
+  placeOn(starts, to);
   const after = layoutFor(S, doc);
   for (const b of going) {
     const next = partOf(after, b, 1);
@@ -145,7 +185,9 @@ export function mergeIntoPrevious(S: Settings, doc: EngineDoc, i: number): { ran
   const L = layoutFor(S, doc);
   if (i < 1 || i >= L.pages) return null;
   const ranOn = L.segs.some(s => s.page === i && s.idx > 0);
+  const starts = startingOn(L, i);
   for (const b of doc.boxes) if (b.page === i) b.page = i - 1;
+  placeOn(starts, i - 1);
   if (!layoutFor(S, doc).segs.some(s => s.page === i)) {
     for (const b of doc.boxes) if (b.page > i) b.page--;
     doc.pageCount = Math.max(1, L.pages - 1);

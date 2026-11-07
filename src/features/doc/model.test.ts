@@ -2,9 +2,9 @@
 import { expect, test } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
 import type { Box } from '@/engine/types';
-import { box, docOf, lines } from '@/test/docs';
+import { box, docOf, lines, words } from '@/test/docs';
 import {
-  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock,
+  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock, pageRefusal,
   removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, today,
 } from './model';
 
@@ -139,4 +139,89 @@ test('header fields', () => {
   expect(h.fields!.roll).toBe('12');
   showHeaderField(h, 'subject', false);
   expect(h.text).toBe(`Name: Riya \nClass: 8 B\nRoll no.: 12\nDate: ${today()}`);
+});
+
+// Join back is the inverse of split (final review A, item 1).
+const SHAPES: Record<string, string> = {
+  'a \\newpage boundary': lines(5) + '\n\\newpage\n' + lines(5, 'b') + '\n\\newpage\n' + lines(3, 'c'),
+  'blank lines around \\newpage': lines(5) + '\n\n\\newpage\n\n' + lines(5, 'b') + '\n\n\n\\newpage\n' + lines(3, 'c'),
+  'a blank row at a page bottom': lines(27) + '\n\n' + lines(3, 'x'),
+  'a plain overflow boundary': lines(70),
+};
+for (const [name, text] of Object.entries(SHAPES)) {
+  test(`split then join back restores ${name}, byte for byte`, () => {
+    const pages = layoutFor(S, docOf(box({ id: 'm', text }))).pages;
+    expect(pages).toBeGreaterThan(1);
+    for (let idx = 1; idx < pages; idx++) {
+      const d = docOf(box({ id: 'm', name: 'Main text', text }));
+      const nb = splitBlock(S, d, 'm', idx)!;
+      joinBack(S, d, nb.id);
+      expect(d.boxes).toHaveLength(1);
+      expect(d.boxes[0].text).toBe(text);
+      expect(layoutFor(S, d).pages).toBe(pages);
+    }
+  });
+}
+test('a mid-paragraph split stays two paragraphs when joined back', () => {
+  const text = words(1500);
+  const d = docOf(box({ id: 'm', text }));
+  const nb = splitBlock(S, d, 'm', 1)!;
+  expect(nb.fromSep).toBeUndefined();
+  joinBack(S, d, nb.id);
+  expect(d.boxes[0].text.split('\n')).toHaveLength(2);
+});
+test('add to the end of a different block still uses one line break', () => {
+  const d = docOf(m(), box({ id: 'n', page: 1, y: 600, text: 'extra' }));
+  const nb = splitBlock(S, d, 'm', 1)!;
+  expect(nb.fromSep).toBe('\n');
+  appendToBlock(S, d, nb.id, 'n');
+  expect(d.boxes.find(b => b.id === 'n')!.text).toBe('extra\n' + lines(40).split('\n').slice(28).join('\n'));
+});
+test('the separator goes when the block it belongs to goes or is joined elsewhere', () => {
+  const o = docOf(box({ id: 'm', text: SHAPES['a \\newpage boundary'] }));
+  const n2 = splitBlock(S, o, 'm', 1)!;
+  expect(n2.fromSep).toBe('\n\\newpage\n');
+  const n3 = splitBlock(S, o, n2.id, 1)!;
+  appendToBlock(S, o, n2.id, 'm'); // n2 gone: n3 now comes from m, with a separator that was for n2
+  expect(o.boxes.find(b => b.id === n3.id)!.fromSep).toBeUndefined();
+});
+
+// Join back keeps the later parts' own places (item 2).
+test('join back keeps the later parts’ own width, and the joined block’s own place', () => {
+  const e = docOf(box({ id: 'm', text: lines(70), frames: { 2: { w: 300 } } }));
+  const n2 = splitBlock(S, e, 'm', 1)!;
+  expect(n2.frames).toEqual({ 1: { w: 300 } });
+  joinBack(S, e, n2.id);
+  expect(layoutFor(S, e).segs.map(s => s.w)).toEqual([630, 630, 300]);
+  const f = docOf(m());
+  const n3 = splitBlock(S, f, 'm', 1)!;
+  Object.assign(n3, { x: 200, w: 400, y: 300 });
+  joinBack(S, f, n3.id);
+  expect(f.boxes[0].frames).toEqual({ 1: { x: 200, y: 300, w: 400 } });
+  expect(layoutFor(S, f).segs.map(s => [s.x, s.w, s.top])).toEqual([[112, 630, 110], [200, 400, 300]]);
+});
+
+test('a split part pushed down by a block above keeps its own place, not the pushed one', () => {
+  const h = box({ id: 'h', kind: 'header', name: 'Header', page: 1, x: 446, y: 76, w: 320, fields: { name: 'A', class: 'B', date: 'C' }, text: 'Name: A\nClass: B\nDate: C' });
+  const d = docOf(m(), h);
+  const part2 = layoutFor(S, d).segs.find(s => s.box.id === 'm' && s.idx === 1)!;
+  expect([part2.top, part2.storedTop]).toEqual([178, 110]);
+  const nb = splitBlock(S, d, 'm', 1)!;
+  expect(nb.y).toBe(110);
+});
+
+// A page that shows only a pushed block: that block starts there (item 3).
+const pushedN = () => docOf(box({ id: 'a', text: lines(28) }), box({ id: 'n', y: 900, w: 300, text: 'n' })); // n is stored on page 1 but shows on page 2
+test('a page that shows only a pushed block can be moved, and takes that block', () => {
+  const d = pushedN();
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 0], ['n', 1]]);
+  expect(pageRefusal(layoutFor(S, d), d, 1)).toBeNull();
+  expect(movePage(S, d, 1, 0)).toEqual({ ok: true, followed: null });
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 1, 110], ['n', 0, 110]]);
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['n', 0]]);
+});
+test('merging a page that shows only a pushed block moves that block up', () => {
+  const d = pushedN();
+  expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false });
+  expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 0, 110]]);
 });
