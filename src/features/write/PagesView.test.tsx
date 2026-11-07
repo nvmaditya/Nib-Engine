@@ -345,6 +345,25 @@ test('an import’s first page scrolls into view', async () => {
   expect(get().scrollToPage).toBeNull();
 });
 
+test('while the stage is hidden (width 0) the pages and editors stay mounted', async () => {
+  let width = 1200, resize: (() => void) | null = null;
+  vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { resize = cb; } observe() {} disconnect() {} });
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => width });
+  try {
+    await openWrite();
+    const before = document.querySelectorAll('[data-drop-page]').length;
+    expect(textbox('Main text, page 1')).toBeInTheDocument();
+    width = 0; // display: none
+    act(() => resize?.());
+    expect(textbox('Main text, page 1')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-drop-page]').length).toBe(before);
+    expect(screen.queryByText('Loading handwriting…')).toBeNull();
+  } finally {
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1200 });
+    vi.unstubAllGlobals();
+  }
+});
+
 test('deleting a block from its ⋯ menu moves the focus to the next block’s menu, else to the page', async () => {
   await openWrite(); // the header, then Main text, on page 1
   await userEvent.click(within(typed(0)).getByRole('button', { name: 'Options for Header' }));
