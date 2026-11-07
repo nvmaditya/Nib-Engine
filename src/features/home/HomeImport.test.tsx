@@ -88,3 +88,11 @@ test.each([['Rename', 'dialog'], ['Delete', 'alertdialog']] as const)('a file dr
   expect(ev.defaultPrevented).toBe(true); // (and the browser doesn't open the file instead)
   expect(useEditor.getState().importOpen).toBe(false); expect(screen.getAllByRole(role)).toHaveLength(1);
 });
+
+test('Home is laid out as the plan has it: up to 1080 px wide, a tall hero with a 32 px icon (Design decision 7)', async () => {
+  render(<HomePage />); await screen.findByText('A');
+  const hero = screen.getByRole('button', { name: /^Import a PDF/ });
+  expect(hero.parentElement).toHaveClass('mx-auto', 'max-w-[1080px]', 'flex-col', 'gap-8', 'px-4', 'py-6', 'wide:px-8', 'wide:py-10');
+  expect(hero).toHaveClass('rounded-2xl', 'border-2', 'border-dashed', 'border-line-strong', 'bg-surface', 'py-12', 'wide:py-16');
+  expect(hero.querySelector('svg')).toHaveClass('size-8', 'text-primary');
+});

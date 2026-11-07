@@ -90,14 +90,14 @@ export function HomePage() {
 
   return (
     <main className="min-h-0 flex-1 overflow-auto bg-bg">
-      <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8">
+      <div className="mx-auto flex max-w-[1080px] flex-col gap-8 px-4 py-6 wide:px-8 wide:py-10">
         <button
           type="button"
           onClick={openImportPicker}
-          className={cn('flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors',
+          className={cn('flex flex-col items-center gap-1 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors wide:py-16',
             over ? 'border-primary bg-primary-soft' : 'border-line-strong bg-surface hover:bg-surface-2')}
         >
-          <FileUp className="mb-1 size-6 text-primary" aria-hidden />
+          <FileUp className="mb-1 size-8 text-primary" aria-hidden />
           <span className="text-lg font-semibold">Import a PDF, Word or text file</span>
           <span className="text-muted">or drop it anywhere</span>
           <span className="text-[13px] text-muted">Headings, lists, bold, underline and crossed-out words come across.</span>
