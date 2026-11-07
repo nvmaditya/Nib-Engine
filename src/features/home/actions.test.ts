@@ -21,3 +21,9 @@ test('once it has opened, New document makes another', async () => {
   await createAndOpen();
   expect(await listDocs()).toHaveLength(2);
 });
+
+test('two different New document requests close together each make their document (a press of each, twice)', async () => {
+  const essay = { title: 'Essay' }, letter = { title: 'Letter' }; // two templates, say
+  await Promise.all([createAndOpen(essay), createAndOpen(letter), createAndOpen(essay), createAndOpen({ title: 'Letter' })]);
+  expect((await listDocs()).map(d => d.title).sort()).toEqual(['Essay', 'Letter']);
+});
