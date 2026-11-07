@@ -1,16 +1,41 @@
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { createElement } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
+import { installFocusMemory } from '@/lib/focus';
 import { MEMORY_ID } from '@/app/route';
 import { cleanSettings } from '@/engine/doc.js';
 import { resetBoxStyle } from '@/features/doc/actions';
 import { MissingDocumentError, NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { box, docOf, rec as mkRec, open } from '@/test/docs';
-import { SAVE_FAILED, closeDocument, flushLayout, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, toast, undo, undoTo, update, useEditor } from './editor';
+import { SAVE_FAILED, SAVE_NEWER, closeDocument, flushLayout, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, setReloader, snapshot, toast, undo, undoTo, update, useEditor } from './editor';
 
 const get = useEditor.getState;
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
-vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
+// sonner's toast is a mock; a test that needs the real message list passes it through (realMessages).
+vi.mock('sonner', async orig => ({ ...(await orig<typeof import('sonner')>()), toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
+
+/** The real sonner behind the mock, and its message list on screen. */
+async function realMessages() {
+  const real = await vi.importActual<typeof import('sonner')>('sonner');
+  vi.mocked(sonner).mockImplementation(real.toast);
+  vi.mocked(sonner.dismiss).mockImplementation(real.toast.dismiss);
+  render(createElement(real.Toaster, { expand: true, visibleToasts: 3 }));
+  return real;
+}
+/** Let `ms` go by a frame at a time, with React drawing between frames as a browser does. */
+const tick = (ms: number) => { for (let t = 0; t < ms; t += 16) act(() => { vi.advanceTimersByTime(Math.min(16, ms - t)); }); };
+/** `msg` is on screen, and not on its way out. */
+const showing = (msg: string): boolean => {
+  const el = screen.queryByText(msg)?.closest('[data-sonner-toast]');
+  return !!el && el.getAttribute('data-removed') !== 'true';
+};
+type SonnerOpts = { id: string; action?: { label: string; onClick: () => void }; duration?: number };
+const said = () => vi.mocked(sonner).mock.calls.map(([msg, o]) => {
+  const { id, action, duration } = o as SonnerOpts;
+  return { msg, id, action: action?.label, duration };
+});
 
 const rec = (title: string, text: string): DocRecord => ({
   id: 'd' + title, title, createdAt: 1, updatedAt: 1, settings: cleanSettings(null, false),
@@ -20,7 +45,7 @@ const rec = (title: string, text: string): DocRecord => ({
 beforeEach(async () => {
   await flushSave();
   vi.mocked(putDoc).mockReset().mockResolvedValue(1);
-  vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear();
+  vi.mocked(sonner).mockReset(); vi.mocked(sonner.dismiss).mockReset();
 });
 afterEach(() => { vi.useRealTimers(); });
 
@@ -95,11 +120,11 @@ test('opening and closing a document take down its messages, one by one', async 
   vi.mocked(sonner.dismiss).mockClear();
   openDocument(rec('B', 'b'));
   // Never all at once: sonner merges a message said again right after a dismiss-all into the one going away.
-  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['One'], ['Two']]);
+  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['One#0'], ['Two#0']]);
   toast('Three');
   vi.mocked(sonner.dismiss).mockClear();
   await closeDocument();
-  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['Three']]);
+  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['Three#0']]);
 });
 
 test('a message’s Undo does nothing once another document is open', () => {
@@ -150,7 +175,7 @@ test('saves that keep failing show one message for the run, and Not saved', asyn
     expect(useEditor.getState().saving).toBe('unsaved');
   }
   expect(sonner).toHaveBeenCalledTimes(1);
-  expect(sonner).toHaveBeenCalledWith(SAVE_FAILED, { id: SAVE_FAILED });
+  expect(said()).toEqual([{ msg: SAVE_FAILED, id: `${SAVE_FAILED}#0`, action: undefined, duration: undefined }]);
 
   vi.mocked(putDoc).mockResolvedValue(1); // the run ends with a save that works
   update(s => { s.doc.boxes[0].text = 'ok'; });
@@ -297,32 +322,39 @@ test('updates without a key are separate steps', () => {
   expect(get().doc.boxes[0].x).toBe(1);
 });
 
-test('a save refused because a newer Nib wrote the document says so', async () => {
+test('a save refused because a newer Nib wrote the document says so, with Reload', async () => {
   vi.mocked(putDoc).mockRejectedValue(new NewerDocumentError());
   openDocument(rec('A', 'a'));
   update(s => { s.doc.boxes[0].text = 'x'; });
   await flushSave();
   update(s => { s.doc.boxes[0].text = 'y'; });
   await flushSave();
-  expect(sonner).toHaveBeenCalledTimes(1);
-  expect(sonner).toHaveBeenCalledWith('This document was saved by a newer version of Nib. Reload the page to keep editing.', { id: 'This document was saved by a newer version of Nib. Reload the page to keep editing.' });
+  expect(said()).toEqual([{ msg: 'This document was saved by a newer version of Nib. Reload the page to keep editing.', id: `${SAVE_NEWER}#0`, action: 'Reload', duration: undefined }]);
   expect(putDoc).toHaveBeenCalledTimes(2); // no retry for a newer-version refusal
+  const reloader = vi.fn();
+  setReloader(reloader); // (src/app/updates.ts puts its own in place, which applies a waiting new version first)
+  (vi.mocked(sonner).mock.calls[0][1] as SonnerOpts).action!.onClick();
+  expect(reloader).toHaveBeenCalledTimes(1);
+  setReloader(() => location.reload());
 });
 
 test('a message can stay up longer than the default, with or without an action', () => {
   const fn = vi.fn();
   toast('Plain'); toast('With Undo', { label: 'Undo', fn }); toast('Longer', undefined, { duration: 15_000 }); toast('Both', { label: 'Share', fn }, { duration: 15_000 });
-  expect(vi.mocked(sonner).mock.calls).toEqual([
-    ['Plain', { id: 'Plain' }],
-    ['With Undo', { id: 'With Undo', action: { label: 'Undo', onClick: fn } }],
-    ['Longer', { id: 'Longer', duration: 15_000 }],
-    ['Both', { id: 'Both', action: { label: 'Share', onClick: fn }, duration: 15_000 }],
+  expect(said()).toEqual([
+    { msg: 'Plain', id: 'Plain#0', action: undefined, duration: undefined },
+    { msg: 'With Undo', id: 'With Undo#0', action: 'Undo', duration: undefined },
+    { msg: 'Longer', id: 'Longer#0', action: undefined, duration: 15_000 },
+    { msg: 'Both', id: 'Both#0', action: 'Share', duration: 15_000 },
   ]);
+  (vi.mocked(sonner).mock.calls[1][1] as SonnerOpts).action!.onClick();
+  (vi.mocked(sonner).mock.calls[3][1] as SonnerOpts).action!.onClick();
+  expect(fn).toHaveBeenCalledTimes(2);
 });
 
 test('a message said again replaces the one showing, whatever its action', () => {
   toast('Same'); toast('Same'); toast('Other');
-  expect(vi.mocked(sonner).mock.calls.map(c => (c[1] as { id: string }).id)).toEqual(['Same', 'Same', 'Other']);
+  expect(said().map(c => c.id)).toEqual(['Same#0', 'Same#0', 'Other#0']);
 });
 
 test('undoing or redoing dismisses the messages that offer Undo, and only those', () => {
@@ -332,11 +364,11 @@ test('undoing or redoing dismisses the messages that offer Undo, and only those'
   toast('Did it', { label: 'Undo', fn: () => {} }); toast('Ready.', { label: 'Share', fn: () => {} }); toast('Plain');
   undo();
   const down = () => vi.mocked(sonner.dismiss).mock.calls.flat();
-  expect(down()).toContain('Did it'); expect(down()).not.toContain('Ready.'); expect(down()).not.toContain('Plain');
+  expect(down()).toContain('Did it#0'); expect(down()).not.toContain('Ready.#0'); expect(down()).not.toContain('Plain#0');
   vi.mocked(sonner.dismiss).mockClear();
   toast('Did it', { label: 'Undo', fn: () => {} });
   redo();
-  expect(down()).toEqual(['Did it']);
+  expect(down()).toEqual(['Did it#0']); // said again before it went: the same message
 });
 
 test('an undo that changes nothing leaves the messages alone', () => {
@@ -344,4 +376,46 @@ test('an undo that changes nothing leaves the messages alone', () => {
   vi.mocked(sonner.dismiss).mockClear();
   undo();
   expect(sonner.dismiss).not.toHaveBeenCalled();
+});
+
+test('a message said again while the first one is leaving still shows', async () => {
+  vi.useFakeTimers();
+  const real = await realMessages();
+  openDocument(rec('A', 'a'));
+  // Taken down with its document, then said again: before, during and after sonner's frame and its 200 ms exit.
+  for (const wait of [0, 10, 20, 30, 50, 100]) {
+    const msg = `Said again ${wait} ms on.`;
+    toast(msg); tick(100);
+    expect(showing(msg)).toBe(true);
+    openDocument(rec('A', 'a'));
+    tick(wait); toast(msg); tick(1000);
+    expect(showing(msg), msg).toBe(true);
+  }
+  toast('Gone by itself.', undefined, { duration: 1000 }); tick(1050); // on its way out
+  toast('Gone by itself.'); tick(1000);
+  expect(showing('Gone by itself.')).toBe(true);
+  toast('Pressed.', { label: 'Copy', fn: () => {} }); tick(100);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy' })); tick(50);
+  toast('Pressed.'); tick(1000);
+  expect(showing('Pressed.')).toBe(true);
+  act(() => { for (const t of real.toast.getToasts()) real.toast.dismiss(t.id); vi.runOnlyPendingTimers(); });
+});
+
+test('a message’s action gives the focus back to what had it', async () => {
+  vi.useFakeTimers();
+  const off = installFocusMemory();
+  const real = await realMessages();
+  const bold = document.createElement('button'); bold.textContent = 'Bold'; document.body.append(bold);
+  bold.focus();
+  const fn = vi.fn();
+  toast('Another message.', undefined, { duration: 10_000 }); // still showing after (sonner gives the focus back only once none is)
+  toast('Y', { label: 'Undo', fn }); tick(100);
+  const undoButton = screen.getByRole('button', { name: 'Undo' });
+  undoButton.focus(); fireEvent.click(undoButton); // a click, as Chromium does it: the button takes the focus
+  tick(1000);
+  expect(fn).toHaveBeenCalledTimes(1);
+  expect(showing('Y')).toBe(false); expect(showing('Another message.')).toBe(true);
+  expect(bold).toHaveFocus();
+  act(() => { for (const t of real.toast.getToasts()) real.toast.dismiss(t.id); vi.runOnlyPendingTimers(); });
+  off(); bold.remove();
 });

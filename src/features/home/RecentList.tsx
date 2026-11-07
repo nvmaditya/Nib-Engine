@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { loadUploadedFonts } from '@/features/style/fonts';
 import { useStylePrefs } from '@/features/style/prefs';
 import { MissingDocumentError, NewerDocumentError, deleteDoc, duplicateDoc, renameDoc, type DocRecord } from '@/store/documents';
-import { NOT_ON_DEVICE, SAVE_NEWER, toast } from '@/store/editor';
+import { NOT_ON_DEVICE, SAVE_NEWER, reloadAction, toast } from '@/store/editor';
 import { PageThumb } from './PageThumb';
 import { lookNameOf, recentMeta } from './recent';
 import { RECENT_PX, forgetThumb } from './thumbs';
@@ -62,7 +62,10 @@ export function RecentList({ docs, readOnly, heading, onChange }: {
     (back.current === null ? heading?.current : moreButtons.current.get(back.current))?.focus();
   };
   const change = useCallback(async (fn: () => Promise<unknown>) => {
-    try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : e instanceof MissingDocumentError ? NOT_ON_DEVICE : FAILED); }
+    try { await fn(); } catch (e) {
+      if (e instanceof NewerDocumentError) toast(SAVE_NEWER, reloadAction()); // (Reload goes to the new version first)
+      else toast(e instanceof MissingDocumentError ? NOT_ON_DEVICE : FAILED);
+    }
     await onChange();
   }, [onChange]);
   const startRename = useCallback((d: DocRecord) => { back.current = d.id; setName(d.title); setRenaming(d); }, []);

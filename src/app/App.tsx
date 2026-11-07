@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
+import { installFocusMemory } from '@/lib/focus';
 import { useDarkTheme } from '@/lib/theme';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
 import { loadUploadedFonts } from '@/features/style/fonts';
@@ -37,6 +38,7 @@ export function App() {
   }, []);
 
   useEffect(() => installFlushOnHide(), []);
+  useEffect(() => installFocusMemory(), []); // a message's action gives the focus back to what had it
   useEffect(() => installDocFollow(), []); // another tab's saves, renames and deletes of the open document
   useEffect(() => refreshStylePrefsOnShow(), []);
 

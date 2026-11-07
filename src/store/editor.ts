@@ -6,6 +6,7 @@ import { cleanDoc, cleanSettings, loadSaved } from '@/engine/doc.js';
 import { clearMeasureCache, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Settings } from '@/engine/types';
 import { MEMORY_ID, beforeRouteChange, navigate } from '@/app/route';
+import { giveFocusBack, rememberedFocus } from '@/lib/focus';
 import { loadUploadedFonts } from '@/features/style/fonts';
 import { MissingDocumentError, NewerDocumentError, StaleDocumentError, getDoc, onDocsChanged, putDoc, type DocRecord } from '@/store/documents';
 import { forgetDb } from './db';
@@ -165,7 +166,7 @@ async function saveNow(): Promise<void> {
     if (e instanceof MissingDocumentError) { leaveDeleted(); return; } // never written back
     if (e instanceof StaleDocumentError) { void follow(id, true); return; } // the other tab's version wins
     useEditor.setState({ saving: 'unsaved' });
-    if (failing !== id) { failing = id; toast(e instanceof NewerDocumentError ? SAVE_NEWER : SAVE_FAILED); }
+    if (failing !== id) { failing = id; if (e instanceof NewerDocumentError) toast(SAVE_NEWER, reloadAction()); else toast(SAVE_FAILED); }
   }
 }
 
@@ -418,34 +419,80 @@ export function renameDocument(title: string): void {
   update(s => { s.title = t; }, { history: 'rename', layout: false });
 }
 
-const messages = new Set<string>(); // the messages said since they were last taken down (some may have gone already)
-const undoMessages = new Set<string>(); // the messages showing an Undo, so undoing or redoing can take them down
+// A message's id is its text and a generation, `${msg}#${gen}`. Said again while it shows, it is the same message,
+// updated in place (its new action too) rather than a copy stacked under it. Once it is going (taken down, gone by
+// itself, swiped away, its action pressed), the generation moves on, so the same text said again is a new message:
+// sonner would merge it into the one on its way out (its exit takes 200 ms), and it would never show.
+const gens = new Map<string, number>();
+const idOf = (msg: string): string => `${msg}#${gens.get(msg) ?? 0}`;
+const textOf = (id: string): string => id.slice(0, id.lastIndexOf('#'));
+
+const messages = new Set<string>(); // the ids said since they were last taken down (some may have gone already), but no `keep` one
+const undoMessages = new Set<string>(); // the ids showing an Undo, so undoing or redoing can take them down
+const takingDown = new Map<string, number>(); // ids taken down whose dismissal sonner can still cancel (its frame)
+
+/** The message with this id is going: the next time its text is said, it shows again as a new message. */
+function going(id: string): void {
+  const msg = textOf(id);
+  if (idOf(msg) !== id) return; // (that generation is over already)
+  gens.set(msg, (gens.get(msg) ?? 0) + 1);
+  messages.delete(id); undoMessages.delete(id);
+}
 
 /**
- * Take down every message, one by one. Never with sonner's dismiss-all: a message said again right after that (its
- * id is its text) is merged into the one going away, and doesn't show. A dismissal by id is cancelled by saying the
- * same thing again, so that message stays up, with its new action.
+ * Take a message down. sonner holds a dismissal for a frame, and saying the same id in that frame cancels it, so the
+ * message stays up, with its new action. After that frame it is going. (This frame comes after sonner's.)
  */
+function takeDown(id: string): void {
+  sonnerToast.dismiss(id);
+  const held = takingDown.get(id);
+  if (held !== undefined) cancelAnimationFrame(held);
+  takingDown.set(id, requestAnimationFrame(() => { takingDown.delete(id); going(id); }));
+}
+
+/** Take down every message but the `keep` ones, one by one. Never with sonner's dismiss-all, which takes the `keep` ones too. */
 function dismissMessages(): void {
-  for (const id of messages) sonnerToast.dismiss(id);
+  for (const id of messages) takeDown(id);
   messages.clear(); undoMessages.clear();
 }
 
-const takeDownUndoMessages = (): void => { for (const id of undoMessages) sonnerToast.dismiss(id); undoMessages.clear(); };
+const takeDownUndoMessages = (): void => { for (const id of undoMessages) takeDown(id); undoMessages.clear(); };
 
 /**
- * A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. The text
- * is its id, so saying the same thing again replaces the message showing instead of stacking a copy.
+ * A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. A `keep` message
+ * (a new version is ready) stays up when a document opens or closes. Its text names it (see `idOf`), so saying the
+ * same thing again replaces the message showing instead of stacking a copy. Pressing the action gives the focus back
+ * to what had it before the message's button took it.
  */
-export function toast(msg: string, action?: ToastAction, o: { duration?: number } = {}): void {
-  messages.add(msg);
-  if (action?.label === 'Undo') undoMessages.add(msg); else undoMessages.delete(msg);
-  sonnerToast(msg, { // (both always given: said again while it shows, the message is updated in place)
-    id: msg,
-    action: action && { label: action.label, onClick: action.fn },
+export function toast(msg: string, action?: ToastAction, o: { duration?: number; keep?: boolean } = {}): void {
+  const id = idOf(msg);
+  const held = takingDown.get(id);
+  if (held !== undefined) { cancelAnimationFrame(held); takingDown.delete(id); } // sonner cancels its dismissal too
+  if (o.keep) messages.delete(id); else messages.add(id);
+  if (action?.label === 'Undo') undoMessages.add(id); else undoMessages.delete(id);
+  const gone = () => going(id);
+  sonnerToast(msg, { // (all always given: said again while it shows, the message is updated in place)
+    id,
+    action: action && {
+      label: action.label,
+      onClick: () => {
+        gone(); // sonner takes it down after this, without onDismiss
+        const back = rememberedFocus();
+        action.fn();
+        setTimeout(() => giveFocusBack(back), 0);
+      },
+    },
     duration: o.duration,
+    onDismiss: gone,
+    onAutoClose: gone,
   });
 }
+
+let reloader: () => void = () => location.reload();
+/** What a message's Reload does. src/app/updates.ts puts its own in place (a waiting new version first), so the store never imports it. */
+export function setReloader(fn: () => void): void { reloader = fn; }
+/** Reload, for a message (a document a newer Nib saved, a new version ready). */
+export const reloadAction = (): ToastAction => ({ label: 'Reload', fn: () => reloader() });
 
 /** A message's action that only runs while the document it was made in is still open. */
 export function docAction(label: string, fn: () => void): ToastAction {
