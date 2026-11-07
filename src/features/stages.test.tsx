@@ -37,7 +37,7 @@ test('Style shows the scope switch and hides the removed options', async () => {
   location.hash = `#/d/${id}/style`;
   render(<App />);
   expect(await screen.findByRole('button', { name: 'Whole document' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Only this block' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Only “/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /New variation/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /^Gel pen/ })).toBeInTheDocument();
   expect(screen.queryByText('As drawn')).toBeNull();

@@ -275,7 +275,8 @@
   }
   .block-frame:hover .tag,
   .block-frame:focus-within .tag,
-  .block-frame.selected .tag {
+  .block-frame.selected .tag,
+  .block-frame.own .tag {
     opacity: 1;
     pointer-events: auto;
   }
@@ -304,6 +305,15 @@
   .block-frame .tag-part {
     font-weight: 500;
     opacity: 0.85;
+  }
+  .block-frame .tag-own {
+    margin-left: 2px;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
   }
   .block-frame .tag-menu {
     display: contents;

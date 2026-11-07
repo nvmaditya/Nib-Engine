@@ -1,16 +1,15 @@
 // The Style panel: what the handwriting looks like, for the whole document or only the selected block.
 import { useState, type ChangeEvent, type ReactNode } from 'react';
-import { Shuffle } from 'lucide-react';
 import { FONTS, FONT_GROUPS, INKS, LIMITS, PAPERS, PENS, PRESETS } from '@/engine/config.js';
-import { PHOTO_URL, engineFor, familyCss, hasOwnStyle } from '@/engine/core.js';
+import { PHOTO_URL, engineFor, familyCss } from '@/engine/core.js';
 import type { FontCfg, Settings } from '@/engine/types';
-import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { newVariation, resetBoxStyle, setS, setV, view } from '@/features/doc/actions';
+import { setS, setV, view } from '@/features/doc/actions';
 import { useStageActive } from '@/features/doc/StageHost';
 import { cn } from '@/lib/utils';
-import { selectedBox, toast, update, useEditor } from '@/store/editor';
+import { toast, useEditor } from '@/store/editor';
+import { ScopeBar } from './ScopeBar';
 
 type SliderKey = keyof typeof LIMITS;
 const fmt: Partial<Record<SliderKey, (v: number) => string>> = {
@@ -116,45 +115,6 @@ function FontPicker({ V }: { V: Settings }) {
         </div>
       </div>
     </Group>
-  );
-}
-
-function ScopeBar() {
-  const scopeState = useEditor(s => s.scope);
-  const boxes = useEditor(s => s.doc.boxes);
-  const b = selectedBox();
-  const scope = scopeState === 'box' && b ? 'box' : 'all';
-  const own = boxes.filter(hasOwnStyle).length;
-  let hint: string;
-  if (scope === 'box' && b) {
-    const n = boxes.filter(x => x.page === b.page).indexOf(b) + 1;
-    hint = `Changes go to block ${n} on page ${b.page + 1} only. Paper and line spacing are shared by every page.`;
-  } else {
-    hint = (b ? 'Changes go to every block' : 'Changes go to every block. Select a block on the page to style it on its own')
-      + (own ? ` (${own === 1 ? 'one block keeps its' : own + ' blocks keep their'} own style).` : '.');
-  }
-  const setScope = (sc: 'all' | 'box') => update(s => { s.scope = sc; }, { save: false, layout: false });
-  const seg = 'h-8 rounded-md text-sm font-medium text-muted transition-colors hover:text-fg disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-surface aria-pressed:text-fg aria-pressed:shadow-sm';
-  return (
-    <div className="sticky top-0 z-10 border-b border-line bg-surface px-5 pt-3 pb-3">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Style</h2>
-        <Button variant="outline" size="sm" onClick={newVariation}
-          title={scope === 'box' ? 'Draw this block with new random shapes' : 'Draw the whole document with new random shapes'}>
-          <Shuffle />New variation
-        </Button>
-      </div>
-      <div role="group" aria-label="Which blocks these settings change" className="grid grid-cols-2 gap-1 rounded-lg bg-surface-2 p-1">
-        <button type="button" className={seg} aria-pressed={scope === 'all'} onClick={() => setScope('all')}>Whole document</button>
-        <button type="button" className={seg} aria-pressed={scope === 'box'} disabled={!b} onClick={() => setScope('box')}>Only this block</button>
-      </div>
-      <p className="mt-2 text-[13px] text-muted">{hint}</p>
-      {scope === 'box' && b && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <Button variant="outline" size="sm" disabled={!hasOwnStyle(b)} onClick={resetBoxStyle}>Match document</Button>
-        </div>
-      )}
-    </div>
   );
 }
 

@@ -1,7 +1,7 @@
 // Things people do to the document, ported from the handlers in Nib's earlier version, Longhand. The engine's boxes are called blocks in the interface.
 import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS, uid } from '@/engine/doc.js';
-import { boxSettings, clearMeasureCache, frameRange, geom, snapY } from '@/engine/core.js';
+import { boxSettings, clearMeasureCache, frameRange, geom, hasOwnStyle, snapY } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, HeaderKey, Seg, Settings } from '@/engine/types';
 import { newBlockName, nextColor } from '@/features/doc/blocks';
 import {
@@ -266,7 +266,7 @@ export function setS<K extends keyof Settings>(k: K, v: Settings[K], opts: { lay
 
 export function resetBoxStyle(): void {
   const b = selectedBox();
-  if (!b) return;
+  if (!b || !hasOwnStyle(b)) return;
   const id = b.id, before = { style: b.style, shuffle: b.shuffle };
   update(() => { b.style = {}; b.shuffle = 0; clearMeasureCache(); }, { history: step('match') });
   const undoMatch = docAction('Undo', () => update(s => {
