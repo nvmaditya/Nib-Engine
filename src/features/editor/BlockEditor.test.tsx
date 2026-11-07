@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { SAMPLE_BODY } from '@/engine/config.js';
 import { srcOffset } from '@/engine/core.js';
 import { flushSave, openDocument, placeCaret, undo, update } from '@/store/editor';
-import { get, rec } from '@/test/docs';
+import { box, docOf, get, rec } from '@/test/docs';
 import { setActiveEditor } from './active';
 import { BlockEditor, type BlockEditorProps } from './BlockEditor';
 import { FormatToolbar } from './FormatToolbar';
@@ -89,6 +89,22 @@ test('a paste and each formatting change are undo steps of their own, between bu
   const steps = [text()];
   while (get().canUndo) { act(() => undo()); steps.push(text()); }
   expect(steps).toEqual(['## **_one_** two three', '1. **_one_** two three', '**_one_** two three', '**one** two three', 'one two three', 'one two', 'one', '']);
+});
+
+test('Ctrl+Z puts the caret where the change it undoes was, in whichever block that is', () => {
+  openDocument(rec('A', docOf(box({ id: 'b1', text: 'one' }), box({ id: 'b2', text: 'two' }))));
+  let other!: Editor;
+  render(<><BlockEditor boxId="b1" range={null} label="First" acceptCaret onReady={e => (ed = e)} />
+    <BlockEditor boxId="b2" range={null} label="Second" acceptCaret onReady={e => (other = e)} /></>);
+  act(() => { other.commands.insertContentAt(3, '!'); });
+  expect(get().doc.boxes[1].text).toBe('tw!o');
+  act(() => { ed.view.focus(); });
+  fireEvent.keyDown(ed.view.dom, { key: 'z', ctrlKey: true });
+  expect(get().doc.boxes.map(b => b.text)).toEqual(['one', 'two']);
+  expect(other.isFocused).toBe(true);
+  expect(offsetAt(other.state.doc, 'two', other.state.selection.from)).toBe(2);
+  fireEvent.keyDown(other.view.dom, { key: 'y', ctrlKey: true });
+  expect([get().doc.boxes[1].text, offsetAt(other.state.doc, 'tw!o', other.state.selection.from)]).toEqual(['tw!o', 2]);
 });
 
 test('undo from the browser menu goes through the app history too', () => {

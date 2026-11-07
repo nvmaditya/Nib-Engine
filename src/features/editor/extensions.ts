@@ -13,14 +13,16 @@ import { fromMarkup, listMarkers, toMarkup } from './markup';
 import { BLOCK_EXTENSIONS } from './schema';
 import { firstDiff } from './slices';
 
-const textOf = (boxId: string) => useEditor.getState().doc.boxes.find(b => b.id === boxId)?.text ?? null;
-
-/** Undo or redo in the app's one history, then ask for the caret where the block's text changed. */
+/**
+ * Undo or redo in the app's one history, then ask for the caret where the text changed: in this editor's
+ * block, else in the first other block whose text changed (a header's fields take no caret).
+ */
 function historyStep(boxId: string, again: boolean): boolean {
-  const before = textOf(boxId);
+  const before = new Map(useEditor.getState().doc.boxes.map(b => [b.id, b.text]));
   (again ? redo : undo)();
-  const after = textOf(boxId);
-  if (before !== null && after !== null && before !== after) placeCaret(boxId, firstDiff(before, after));
+  const changed = useEditor.getState().doc.boxes.filter(b => b.kind !== 'header' && before.has(b.id) && before.get(b.id) !== b.text);
+  const b = changed.find(x => x.id === boxId) ?? changed[0];
+  if (b) placeCaret(b.id, firstDiff(before.get(b.id)!, b.text));
   return true; // never the browser's own undo
 }
 
