@@ -29,3 +29,12 @@ test('a card makes that template’s document, and meanwhile the cards wait', as
   expect(openTemplate).toHaveBeenCalledTimes(1); expect(openTemplate).toHaveBeenCalledWith('letter'); expect(letter).toBeDisabled();
   await act(async () => done(true)); expect(letter).toBeEnabled();
 });
+
+test('when a template can’t be made, focus goes back to the card that was pressed', async () => {
+  let done!: (v: boolean) => void; vi.mocked(openTemplate).mockReturnValue(new Promise(r => { done = r; }));
+  render(<TemplateGrid />); const card = screen.getByRole('button', { name: /^Journal page/ });
+  card.focus(); await userEvent.keyboard('{Enter}');
+  card.blur(); expect(card).toBeDisabled(); // a browser drops focus from a disabled button
+  await act(async () => done(false));
+  expect(card).toBeEnabled(); expect(card).toHaveFocus();
+});
