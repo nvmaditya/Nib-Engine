@@ -8,8 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { setS, setV, view } from '@/features/doc/actions';
 import { useStageActive } from '@/features/doc/StageHost';
 import { cn } from '@/lib/utils';
-import { ScopeBar } from './ScopeBar';
 import { toast, useEditor } from '@/store/editor';
+import { ScopeBar } from './ScopeBar';
 
 type SliderKey = keyof typeof LIMITS;
 const fmt: Partial<Record<SliderKey, (v: number) => string>> = {

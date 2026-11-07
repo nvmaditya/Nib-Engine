@@ -4,7 +4,7 @@ import { Shuffle } from 'lucide-react';
 import { hasOwnStyle } from '@/engine/core.js';
 import { Button } from '@/components/ui/button';
 import { newVariation, resetBoxStyle } from '@/features/doc/actions';
-import { BLOCK_COLORS } from '@/features/doc/blocks';
+import { blockColor } from '@/features/doc/blocks';
 import { selectedBox, update, useEditor } from '@/store/editor';
 
 /** The Whole document line for blocks that keep their own style ('' for none). */
@@ -46,7 +46,7 @@ export function ScopeBar({ children }: { children?: ReactNode }) {
         <div role="group" aria-label="Apply changes to" className="grid grid-cols-2 gap-1 rounded-lg bg-surface-2 p-1">
           <button type="button" className={seg} aria-pressed={scope === 'all'} onClick={() => setScope('all')}>Whole document</button>
           <button type="button" className={seg} aria-pressed={scope === 'box'} onClick={() => setScope('box')}
-            style={{ '--bc': BLOCK_COLORS[b[2]] ?? BLOCK_COLORS[0] } as CSSProperties}>
+            style={{ '--bc': blockColor({ color: b[2] }) } as CSSProperties}>
             <span aria-hidden className="size-2 flex-none rounded-full bg-[var(--bc)]" />
             <span className="truncate">Only “{b[1]}”</span>
           </button>

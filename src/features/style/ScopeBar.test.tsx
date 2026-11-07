@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
-import { select } from '@/features/doc/actions';
+import { resetBoxStyle, select } from '@/features/doc/actions';
 import { flushSave, undo, update } from '@/store/editor';
 import { box, docOf, get, lastToast, open } from '@/test/docs';
 import { ScopeBar, ownStyleLine } from './ScopeBar';
@@ -78,4 +78,22 @@ test('New variation re-rolls the document, or only the block', async () => {
   expect(screen.getByRole('button', { name: /New variation/ })).toHaveAttribute('title', 'Draw this block with new random shapes');
   act(() => undo());
   expect(get().doc.boxes[0].shuffle).toBe(0);
+});
+
+test('Match document on a block with no own style records nothing', () => {
+  open(docOf(box({ id: 'n' })));
+  styleBox('n');
+  act(() => resetBoxStyle());
+  expect(get().canUndo).toBe(false);
+  expect(lastToast()).toBeUndefined();
+});
+
+test('New variation for the whole document is one step; Undo restores the seed', async () => {
+  open(docOf(box({ id: 'n' })));
+  render(<ScopeBar />);
+  const seed = get().S.seed;
+  await userEvent.click(screen.getByRole('button', { name: /New variation/ }));
+  expect(get().S.seed).not.toBe(seed);
+  act(() => undo());
+  expect(get().S.seed).toBe(seed);
 });
