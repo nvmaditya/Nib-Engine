@@ -1,0 +1,175 @@
+/* The block editor: rich text that reads like the handwriting's markup (Title, Heading, lists, Note, marks). */
+
+.nib-editor .nib-prose {
+  outline: none;
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 1.6em;
+  overflow-wrap: anywhere;
+  caret-color: var(--accent);
+  color: var(--fg);
+}
+.nib-editor .nib-prose > * + * {
+  margin-top: 0;
+}
+.nib-editor .nib-prose p {
+  margin: 0;
+  min-height: 1.6em;
+}
+
+/* Title and Heading */
+.nib-editor .nib-prose h1 {
+  font-size: 1.35em;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  margin: 0.15em 0 0.2em;
+}
+.nib-editor .nib-prose h2,
+.nib-editor .nib-prose h3 {
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0.45em 0 0.1em;
+}
+
+/* Marks */
+.nib-editor .nib-prose strong {
+  font-weight: 700;
+}
+.nib-editor .nib-prose mark {
+  background: var(--marker);
+  color: #121212;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* Lists: one flat list per run of items, nested by data-indent (0–3); numbers come from data-marker. */
+.nib-editor .nib-prose ul,
+.nib-editor .nib-prose ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.nib-editor .nib-prose li {
+  --indent: 0;
+  position: relative;
+  padding-left: calc(1.6em + var(--indent) * 1.5em);
+}
+.nib-editor .nib-prose li[data-indent='1'] { --indent: 1; }
+.nib-editor .nib-prose li[data-indent='2'] { --indent: 2; }
+.nib-editor .nib-prose li[data-indent='3'] { --indent: 3; }
+.nib-editor .nib-prose li::before {
+  position: absolute;
+  left: calc(var(--indent) * 1.5em);
+  width: 1.4em;
+  text-align: right;
+  padding-right: 0.3em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.nib-editor .nib-prose ul > li::before { content: '•'; }
+.nib-editor .nib-prose ul > li[data-indent='1']::before { content: '◦'; }
+.nib-editor .nib-prose ul > li[data-indent='2']::before { content: '▪'; }
+.nib-editor .nib-prose ol > li::before { content: attr(data-marker); }
+
+/* Note */
+.nib-editor .nib-prose blockquote {
+  margin: 0.2em 0;
+  padding-left: 0.7em;
+  border-left: 3px solid var(--line-strong);
+  color: var(--muted);
+}
+
+/* Rule and the writer's own page break (\newpage) */
+.nib-editor .nib-prose hr {
+  border: 0;
+  border-top: 1px solid var(--line-strong);
+  margin: 0.75em 0;
+}
+.nib-editor .nib-prose div[data-page-break] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0.6em 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.nib-editor .nib-prose div[data-page-break]::before {
+  content: 'Page break';
+}
+.nib-editor .nib-prose div[data-page-break]::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dashed var(--line-strong);
+}
+.nib-editor .nib-prose .ProseMirror-selectednode {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Where the next page's handwriting starts: a line between lines, or a chip inside a paragraph. In a
+   narrow editor its parts wrap onto more lines; the label and each button stay whole. */
+.nib-editor .nib-break {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0.7em 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  user-select: none;
+}
+.nib-editor .nib-break-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nib-editor .nib-break-rule {
+  flex: 1;
+  min-width: 12px;
+  border-top: 1px dashed var(--line-strong);
+}
+.nib-editor .nib-break-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.nib-editor .nib-break-actions button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nib-editor .nib-break-actions button:hover {
+  background: var(--surface-2);
+}
+.nib-editor .nib-break-actions button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.nib-editor .nib-break-inline {
+  display: inline-flex;
+  max-width: calc(100% - 0.5em);
+  vertical-align: baseline;
+  margin: 0 0.25em;
+  padding: 1px 6px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+}
+
+/* Placeholder */
+.nib-editor .nib-prose .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted);
+  pointer-events: none;
+}

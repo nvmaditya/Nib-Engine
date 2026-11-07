@@ -225,9 +225,16 @@ const INL = [
   { re:/`([^`]+)`/, g:1, k:null },
   { re:/\[([^\]]+)\]\([^)]*\)/, g:1, k:null },
 ];
-function parseInline(t, st) {
-  const out = []; let rest = t; let guard = 0;
-  while (rest && guard++ < 500) {
+// A backslash before ASCII punctuation makes that character literal: swap it to a private-use character while matching.
+const ESC_RE = /\\([!-\/:-@\[-`{-~])/g;
+const hideEsc = t => t.replace(ESC_RE, (_, c) => String.fromCharCode(0xE000 + c.charCodeAt(0)));
+const showEsc = t => t.replace(/[\uE021-\uE07E]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xE000));
+export function parseInline(t) {
+  return parseInlineRaw(hideEsc(t), {}).map(p => ({ text:showEsc(p.text), style:p.style }));
+}
+function parseInlineRaw(t, st) {
+  const out = []; let rest = t;
+  while (rest) {
     let best = null, bi = 0;
     for (const p of INL) {
       const m = p.re.exec(rest);
@@ -236,10 +243,28 @@ function parseInline(t, st) {
     if (!best) { out.push({ text:rest, style:st }); break; }
     if (bi > 0) out.push({ text:rest.slice(0, bi), style:st });
     const ns = best.p.k ? { ...st, [best.p.k]:true } : st;
-    out.push(...parseInline(best.m[best.p.g], ns));
-    rest = rest.slice(best.m.index + best.m[0].length);
+    out.push(...parseInlineRaw(best.m[best.p.g], ns));
+    const next = rest.slice(best.m.index + best.m[0].length);
+    // Every match uses up some text; should one ever not, keep the rest as it is rather than loop.
+    if (next.length >= rest.length) { out.push({ text:rest, style:st }); break; }
+    rest = next;
   }
   return out;
+}
+// What kind of line this is, and where its words begin.
+export function parseLine(raw) {
+  raw = raw.replace(/\t/g, '    ');
+  const info = (kind, content = '', x = {}) => ({ kind, level:0, depth:0, marker:'', content, prefix:raw.length - content.length, ...x });
+  const plain = kind => ({ kind, level:0, depth:0, marker:'', content:'', prefix:0 });
+  if (/^\s*\\newpage\s*$/.test(raw)) return plain('newpage');
+  if (!raw.trim()) return plain('blank');
+  if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(raw)) return plain('hr');
+  let m;
+  if ((m = raw.match(/^(#{1,3})\s+(.*)$/))) return info('heading', m[2], { level:m[1].length });
+  if ((m = raw.match(/^(\s*)([-*+])\s+(.*)$/))) return info('bullet', m[3], { depth:Math.min(3, Math.floor(m[1].length / 2)), marker:m[2] });
+  if ((m = raw.match(/^(\s*)(\d{1,3}[.)]|[a-z]\))\s+(.*)$/))) return info('number', m[3], { depth:Math.min(3, Math.floor(m[1].length / 2)), marker:m[2] });
+  if ((m = raw.match(/^\s*>\s?(.*)$/))) return info('quote', m[1]);
+  return { kind:'text', level:0, depth:0, marker:'', content:raw, prefix:0 };
 }
 function tokenize(segs) {
   const toks = []; let cur = null; let pending = 0;
@@ -342,24 +367,31 @@ function addMistakes(toks, key) {
   return out;
 }
 
-// Lay out one box. Rows sit on ruled lines; anything past the bottom of a page
-// continues at the top of the next page.
-function layoutBox(box, g, cfg) {
-  const base = S.size * cfg.scale;
-  const segs = []; let seg = null; let gid = 0;
+// A margin note's letters, against the document's letter size.
+export const NOTE_SCALE = 0.8;
+// Lay out one box, a page's part at a time. Rows sit on ruled lines; anything past the bottom of
+// a page continues on the page after the one its part before is on. Each part first asks where it
+// would go (yield) and is told where it goes: computeLayout may push it down or onto a later page.
+function* boxParts(box, g, cfg, out) {
+  const base = S.size * cfg.scale * (box.kind === 'note' ? NOTE_SCALE : 1);
+  let seg = null, n = 0, gid = 0;
   // Each page's part of a box is a frame. Later frames can be moved and resized on their own page;
   // the text flows from one frame into the next.
-  const newSeg = (page, top) => {
-    const idx = segs.length, fr = idx && box.frames ? box.frames[idx] : null;
-    seg = { box, page, idx, x:fr && fr.x != null ? fr.x : box.x, w:fr && fr.w != null ? fr.w : box.w, top:fr && fr.y != null ? fr.y : top, rows:[] };
-    segs.push(seg);
-  };
-  newSeg(box.page, box.y);
+  function* newSeg() {
+    const idx = n++, fr = idx && box.frames ? box.frames[idx] : null;
+    const page = seg ? seg.page + 1 : box.page;
+    const x = fr && fr.x != null ? fr.x : box.x, w = fr && fr.w != null ? fr.w : box.w;
+    const top = idx === 0 ? box.y : fr && fr.y != null ? fr.y : g.top;
+    const at = yield { page, idx, x, w, top };
+    seg = { box, page:at.page, idx, x, w, top:at.top, storedTop:top, pushed:at.page !== page || at.top !== top, rows:[] };
+    out.push(seg);
+  }
+  yield* newSeg();
   const full = () => seg.rows.length > 0 && seg.top + (seg.rows.length + 1) * g.gap > g.maxBase;
-  const push = r => {
-    if (full()) newSeg(seg.page + 1, g.top);
+  function* push(r) {
+    if (full()) yield* newSeg();
     r.ruleY = seg.top + (seg.rows.length + 1) * g.gap; r.gid = gid++; seg.rows.push(r);
-  };
+  }
   // Where a row's text starts in the box's text: line number, and word number within the line.
   const srcOf = (li, items) => {
     const t = items.length ? items[0].tok : null;
@@ -369,24 +401,24 @@ function layoutBox(box, g, cfg) {
   let li = -1;
   for (let raw of src) {
     li++;
-    raw = raw.replace(/\t/g, '    ');
-    if (/^\s*\\newpage\s*$/.test(raw)) { if (seg.rows.length) newSeg(seg.page + 1, g.top); continue; }
-    if (!raw.trim()) { push({ kind:'blank', src:{ li, tok:0 } }); continue; }
-    if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(raw)) { push({ kind:'hr', src:{ li, tok:0 } }); continue; }
+    const L = parseLine(raw);
+    if (L.kind === 'newpage') { if (seg.rows.length) yield* newSeg(); continue; }
+    if (L.kind === 'blank') { yield* push({ kind:'blank', src:{ li, tok:0 } }); continue; }
+    if (L.kind === 'hr') { yield* push({ kind:'hr', src:{ li, tok:0 } }); continue; }
     const b = { size:base, indent:0, align:'left', marker:null, quote:false, headingUL:false, level:0 };
-    let content = raw, m;
-    if ((m = raw.match(/^(#{1,3})\s+(.*)$/))) {
-      const l = m[1].length; b.level = l; b.size = base * [1.4, 1.18, 1.06][l - 1];
-      b.headingUL = l <= 2; b.align = l === 1 ? 'center' : 'left'; content = m[2];
-    } else if ((m = raw.match(/^(\s*)[-*+]\s+(.*)$/))) {
-      const lv = Math.min(3, Math.floor(m[1].length / 2)); b.indent = 30 * (lv + 1); b.marker = { type:'dot' }; content = m[2];
-    } else if ((m = raw.match(/^(\s*)(\d{1,3}[.)]|[a-z]\))\s+(.*)$/))) {
-      const lv = Math.min(3, Math.floor(m[1].length / 2)); b.indent = 34 * (lv + 1) + (m[2].length > 2 ? 8 : 0);
-      b.marker = { type:'text', text:m[2] }; content = m[3];
-    } else if ((m = raw.match(/^\s*>\s?(.*)$/))) {
-      b.quote = true; b.indent = 26; content = m[1];
+    const content = L.content;
+    if (L.kind === 'heading') {
+      const l = L.level; b.level = l; b.size = base * [1.4, 1.18, 1.06][l - 1];
+      b.headingUL = l <= 2; b.align = l === 1 ? 'center' : 'left';
+    } else if (L.kind === 'bullet') {
+      b.indent = 30 * (L.depth + 1); b.marker = { type:'dot' };
+    } else if (L.kind === 'number') {
+      b.indent = 34 * (L.depth + 1) + (L.marker.length > 2 ? 8 : 0);
+      b.marker = { type:'text', text:L.marker };
+    } else if (L.kind === 'quote') {
+      b.quote = true; b.indent = 26;
     }
-    let segs2 = parseInline(content, {});
+    let segs2 = parseInline(content);
     if (b.level === 3) segs2 = segs2.map(s => ({ text:s.text, style:{ ...s.style, bold:true } }));
     const f = fontStr(cfg, b.size);
     let toks = tokenize(segs2);
@@ -396,12 +428,12 @@ function layoutBox(box, g, cfg) {
     // wrapped again to that frame's width.
     let rest = toks, first = true;
     for (;;) {
-      if (full()) newSeg(seg.page + 1, g.top);
+      if (full()) yield* newSeg();
       const rows = wrap(rest, Math.max(40, seg.w - b.indent), f, b.size);
       let used = 0;
       for (const rw of rows) {
         if (used > 0 && full()) break;
-        push({ kind:'text', block:b, items:rw.items, w:rw.w, first:first && used === 0, src:srcOf(li, rw.items) });
+        yield* push({ kind:'text', block:b, items:rw.items, w:rw.w, first:first && used === 0, src:srcOf(li, rw.items) });
         used++;
       }
       first = false;
@@ -410,21 +442,72 @@ function layoutBox(box, g, cfg) {
       rest[0] = { ...rest[0], spaces:0 };
     }
   }
-  const out = segs.filter((s, i) => i === 0 || s.rows.length);
-  for (const s of out) {
-    s.bottom = s.rows.length ? s.rows[s.rows.length - 1].ruleY + g.gap * 0.35 : s.top + g.gap * 1.1;
-  }
-  return out;
 }
 
 let SEGS = [], PAGES = 1;
+const lastRule = (s, g) => s.rows.length ? s.rows[s.rows.length - 1].ruleY : s.top + g.gap;
+// Where every part goes (spec §4, layout rules 1 and 2). Pages fill in order, and each page from
+// the top down, in the order of where the parts would go. A part that sits side by side with one
+// already on the page starts below that one's last line (it is pushed down); if it no longer fits,
+// it goes to the top of the next page. Blocks keep their own place: pushing is never stored.
 function computeLayout() {
-  const g = geom();
-  SEGS = [];
-  for (const b of doc.boxes) SEGS.push(...withBox(b, () => layoutBox(b, g, fontCfg())));
+  const g = geom(), out = [], queue = new Map(), order = new Map(); // queue: page -> parts waiting to go on it
+  const wait = (p, c) => { if (!queue.has(p)) queue.set(p, []); queue.get(p).push(c); };
+  const resume = (c, at) => withBox(c.box, () => c.gen.next(at));
+  doc.boxes.forEach((box, i) => {
+    if (!order.has(box)) order.set(box, i);
+    const c = { box, order:i, gen:withBox(box, () => boxParts(box, g, fontCfg(), out)) };
+    c.req = resume(c).value; wait(c.req.page, c);
+  });
+  while (queue.size) {
+    const p = Math.min(...queue.keys()); // the lowest page still waiting (pages only go up from here)
+    const here = queue.get(p).sort((a, b) => a.req.top - b.req.top || (b.req.idx > 0) - (a.req.idx > 0) || a.req.x - b.req.x || a.order - b.order);
+    queue.delete(p);
+    const placed = [];
+    for (const c of here) {
+      let top = c.req.top;
+      if (p < 1000) for (const s of placed) if (s.x < c.req.x + c.req.w && c.req.x < s.x + s.w) top = Math.max(top, lastRule(s, g));
+      if (top > c.req.top && top + g.gap > g.maxBase) { wait(p + 1, { ...c, req:{ ...c.req, top:g.top } }); continue; } // pushed off the page
+      const r = resume(c, { page:p, top }), seg = out[out.length - 1]; // this part, now filled
+      if (seg.idx > 0 && !seg.rows.length) out.pop(); else placed.push(seg);
+      if (!r.done) wait(r.value.page, { ...c, req:r.value });
+    }
+  }
+  out.sort((a, b) => order.get(a.box) - order.get(b.box) || a.idx - b.idx);
+  for (const s of out) s.bottom = s.rows.length ? s.rows[s.rows.length - 1].ruleY + g.gap * 0.35 : s.top + g.gap * 1.1;
+  SEGS = out;
   let maxP = 0; for (const s of SEGS) maxP = Math.max(maxP, s.page);
   PAGES = Math.max(doc.pageCount, maxP + 1);
   return { segs:SEGS, pages:PAGES };
+}
+
+// A margin note is written slightly tilted, between 1° and 3° anticlockwise (radians; 0 for other blocks).
+const tiltNow = sg => sg.box.kind === 'note' ? -(1 + 2 * rng(S.seed, 'note', sg.box.id)()) * Math.PI / 180 : 0;
+export const segTilt = sg => withBox(sg.box, () => tiltNow(sg));
+const segMid = sg => [sg.x + sg.w / 2, (sg.top + sg.bottom) / 2];
+// The word under a point on a part (page units), as { li, tok } like a row's src. Words are taken
+// where wrap() measured them, without the hand's wobble; the nearest one on the row wins.
+export const hitWord = (sg, x, y) => withBox(sg.box, () => hitWordNow(sg, x, y));
+function hitWordNow(sg, x, y) {
+  if (!sg.rows.length) return null;
+  const t = tiltNow(sg);
+  if (t) { // undo the note's tilt
+    const [cx, cy] = segMid(sg), dx = x - cx, dy = y - cy, c = Math.cos(-t), s = Math.sin(-t);
+    x = cx + dx * c - dy * s; y = cy + dx * s + dy * c;
+  }
+  const g = geom();
+  const r = sg.rows.find(rw => rw.ruleY + g.gap * 0.25 >= y) || sg.rows[sg.rows.length - 1];
+  if (r.kind !== 'text' || !r.items.length) return { li:r.src.li, tok:0 };
+  const b = r.block, f = fontStr(fontCfg(), b.size), sp = spaceW(f, b.size);
+  let at = b.align === 'center' ? sg.x + (sg.w - r.w) / 2 : sg.x + b.indent, best = r.items[0], bd = Infinity;
+  for (const it of r.items) {
+    at += it.spaces * sp * 1.1;
+    const end = at + tokW(it.tok, f, b.size) * 1.08;
+    const d = x < at ? at - x : x > end ? x - end : 0;
+    if (d < bd) { bd = d; best = it; }
+    at = end;
+  }
+  return { li:r.src.li, tok:best.tok.oi != null ? best.tok.oi : 0 };
 }
 
 /* ---------- Drawing: ink ---------- */
@@ -875,6 +958,8 @@ function renderSegmentNow(canvas, sg, scale) {
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(scale, 0, 0, scale, -bb.ox * scale, -bb.oy * scale);
+  const tilt = tiltNow(sg);
+  if (tilt) { const [cx, cy] = segMid(sg); ctx.translate(cx, cy); ctx.rotate(tilt); ctx.translate(-cx, -cy); } // a margin note, around its centre
   for (const r of sg.rows) {
     if (r.kind === 'text') drawText(ctx, r, sg, g, cfg, ink);
     else if (r.kind === 'hr') drawHr(ctx, r, sg, g, ink);
@@ -1237,8 +1322,13 @@ export function setFrame(sg, patch) {
   box.frames[sg.idx] = { ...(box.frames[sg.idx] || {}), ...patch };
 }
 // Where a line's words begin, after any heading, list or note marker.
-const contentStart = line => { const m = line.match(/^(#{1,3}\s+|\s*[-*+]\s+|\s*(\d{1,3}[.)]|[a-z]\))\s+|\s*>\s?)/); return m ? m[0].length : 0; };
-function srcOffset(text, src) {
+// (as an index into the line as typed, where a tab counts as one character)
+const contentStart = line => {
+  const want = parseLine(line).prefix; let ex = 0, i = 0;
+  while (i < line.length && ex < want) { ex += line[i] === '\t' ? 4 : 1; i++; }
+  return i;
+};
+export function srcOffset(text, src) {
   const lines = text.split('\n'); let off = 0;
   if (src.li >= lines.length) return text.length;
   for (let i = 0; i < src.li; i++) off += lines[i].length + 1;
@@ -1256,8 +1346,12 @@ export function frameRange(box, idx) {
 }
 // Markup still open at the end of a piece of a line (so a split can close and reopen it).
 function openMarks(s) {
-  const open = []; const re = /\*\*|~~|==|\*/g; let m;
-  while ((m = re.exec(s))) { const i = open.lastIndexOf(m[0]); if (i >= 0) open.splice(i, 1); else open.push(m[0]); }
+  s = hideEsc(s);
+  const open = []; const re = /\*\*|~~|==|\*|_/g; let m;
+  while ((m = re.exec(s))) {
+    if (m[0] === '_' && /\w/.test(s[m.index - 1] || '') && /\w/.test(s[m.index + 1] || '')) continue;
+    const i = open.lastIndexOf(m[0]); if (i >= 0) open.splice(i, 1); else open.push(m[0]);
+  }
   return open;
 }
 // The box's text without what this page's part shows; what follows moves up.

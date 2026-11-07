@@ -3,15 +3,18 @@ import { toast as sonner } from 'sonner';
 import { MEMORY_ID } from '@/app/route';
 import { cleanSettings } from '@/engine/doc.js';
 import { resetBoxStyle } from '@/features/doc/actions';
-import { putDoc, type DocRecord } from '@/store/documents';
-import { SAVE_FAILED, closeDocument, flushSave, openDocument, redo, renameDocument, snapshot, undo, undoTo, update, useEditor } from './editor';
+import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
+import { box, docOf, rec as mkRec, open } from '@/test/docs';
+import { SAVE_FAILED, closeDocument, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, undo, undoTo, update, useEditor } from './editor';
 
-vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
+const get = useEditor.getState;
+
+vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
 
 const rec = (title: string, text: string): DocRecord => ({
   id: 'd' + title, title, createdAt: 1, updatedAt: 1, settings: cleanSettings(null, false),
-  doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b1', page: 0, x: 100, y: 100, w: 300, text, style: {}, shuffle: 0, frames: {} }] },
+  doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b1', page: 0, x: 100, y: 100, w: 300, text, style: {}, shuffle: 0, frames: {}, kind: 'text', name: 'Text block', color: 0 }] },
 });
 
 beforeEach(async () => {
@@ -164,4 +167,108 @@ test('the in-memory document is never written and says Not saved', async () => {
   expect(useEditor.getState().saving).toBe('unsaved');
   await closeDocument(); // it stays open: there is nowhere to read it back from
   expect(useEditor.getState().docId).toBe(MEMORY_ID);
+});
+
+const hang = () => {
+  let reject!: (e: Error) => void;
+  const p = new Promise<void>((_, rj) => { reject = rj; });
+  return { p, reject };
+};
+
+test('a failed save’s retry is skipped once a newer save has started', async () => {
+  const written: string[] = [];
+  const first = hang();
+  let n = 0;
+  vi.mocked(putDoc).mockImplementation(async r => {
+    written.push(r.doc.boxes[0].text);
+    if (++n === 1) return first.p;
+  });
+  open(docOf(box()));
+  update(s => { s.doc.boxes[0].text = 'old'; });
+  const f1 = flushSave();
+  update(s => { s.doc.boxes[0].text = 'new'; });
+  await flushSave();
+  first.reject(new Error('closed'));
+  await f1;
+  expect(written).toEqual(['old', 'new']);
+  expect(get().saving).toBe('saved');
+  expect(sonner).not.toHaveBeenCalled();
+});
+
+test('save failures are reported once per document', async () => {
+  vi.mocked(putDoc).mockRejectedValue(new Error('disk full'));
+  openDocument(mkRec('A', 'a'));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  await flushSave();
+  update(s => { s.doc.boxes[0].text = 'xy'; });
+  await flushSave();
+  openDocument(mkRec('B', 'b'));
+  update(s => { s.doc.boxes[0].text = 'y'; });
+  await flushSave();
+  expect(sonner).toHaveBeenCalledTimes(2);
+});
+
+test('a failure that lands after its document was closed shows no message', async () => {
+  const a = hang();
+  vi.mocked(putDoc).mockImplementation(() => a.p);
+  openDocument(mkRec('A', 'a'));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  const f = flushSave();
+  vi.mocked(putDoc).mockRejectedValue(new Error('still failing'));
+  openDocument(mkRec('B', 'b'));
+  a.reject(new Error('closed'));
+  await f;
+  expect(sonner).not.toHaveBeenCalled();
+});
+
+test('leaving the tab writes the waiting change at once', () => {
+  const off = installFlushOnHide();
+  open(docOf(box()));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  window.dispatchEvent(new Event('pagehide'));
+  expect(putDoc).toHaveBeenCalledTimes(1);
+  off();
+});
+
+test('hiding the tab writes it too', () => {
+  const off = installFlushOnHide();
+  open(docOf(box()));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  document.dispatchEvent(new Event('visibilitychange'));
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  expect(putDoc).toHaveBeenCalledTimes(1);
+  off();
+});
+
+test('a gesture is one undo step however long it pauses', () => {
+  vi.useFakeTimers();
+  open(docOf(box()));
+  const g = gesture('resize');
+  g(s => { s.doc.boxes[0].w = 400; });
+  vi.advanceTimersByTime(1500);
+  g(s => { s.doc.boxes[0].w = 500; });
+  undo();
+  expect(get().doc.boxes[0].w).toBe(630);
+  expect(get().canUndo).toBe(false);
+});
+
+test('updates without a key are separate steps', () => {
+  open(docOf(box()));
+  update(s => { s.doc.boxes[0].x = 1; });
+  update(s => { s.doc.boxes[0].x = 2; });
+  undo();
+  expect(get().doc.boxes[0].x).toBe(1);
+});
+
+test('a save refused because a newer Nib wrote the document says so', async () => {
+  vi.mocked(putDoc).mockRejectedValue(new NewerDocumentError());
+  openDocument(rec('A', 'a'));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  await flushSave();
+  update(s => { s.doc.boxes[0].text = 'y'; });
+  await flushSave();
+  expect(sonner).toHaveBeenCalledTimes(1);
+  expect(sonner).toHaveBeenCalledWith('This document was saved by a newer version of Nib. Reload the page to keep editing.', undefined);
+  expect(putDoc).toHaveBeenCalledTimes(2); // no retry for a newer-version refusal
 });

@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { setS } from '@/features/doc/actions';
+import { useStageActive } from '@/features/doc/StageHost';
 import { toast, update, useEditor } from '@/store/editor';
 import { savePdf, savePng } from './exporters';
 
@@ -33,7 +34,8 @@ export function ExportPanel({ pages }: { pages: number }) {
   const look = useEditor(s => s.S.look);
   const tilt = useEditor(s => s.S.tilt);
   const fileName = useEditor(s => s.doc.fileName);
-  useEditor(s => s.version);
+  const active = useStageActive();
+  useEditor(s => (active ? s.version : -1)); // redraw on every change only while the stage is shown
   const [busy, setBusy] = useState<'pdf' | 'png' | null>(null);
   const [page, setPage] = useState(0);
   useEffect(() => { if (page > pages - 1) setPage(Math.max(0, pages - 1)); }, [page, pages]);

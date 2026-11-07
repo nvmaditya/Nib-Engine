@@ -12,16 +12,30 @@ export interface Settings {
 
 export interface FrameRect { x?: number; y?: number; w?: number }
 
+export type BlockKind = 'text' | 'header' | 'note';
+export type HeaderKey = 'name' | 'class' | 'subject' | 'roll' | 'date';
+export type HeaderFields = Partial<Record<HeaderKey, string>>;
+
 export interface Box {
   id: string; page: number; x: number; y: number; w: number; text: string;
   style: Partial<Settings>; shuffle: number; frames: Record<number, FrameRect>;
+  kind: BlockKind; name: string; color: number; fields?: HeaderFields; from?: string;
+  /** What Split took out between this block and the one it came from (blank lines, `\\newpage` lines); Join back puts it back. */
+  fromSep?: string;
 }
 
 export interface EngineDoc { pageCount: number; boxes: Box[]; fileName: string }
 
+/** One ruled line a part writes on; `src` is where its words start in the block's text (line, word). */
+export interface Row { kind: 'text' | 'blank' | 'hr'; ruleY: number; src: { li: number; tok: number } }
+
 export interface Seg {
   box: Box; page: number; idx: number; x: number; w: number; top: number; bottom: number;
-  rows: unknown[];
+  /** Where the part would go if nothing pushed it: the block's y for part 1, a later part's own y or the top line. */
+  storedTop: number;
+  /** A block above pushed it down, or onto a later page (spec §4 rule 2). */
+  pushed: boolean;
+  rows: Row[];
 }
 
 export interface Layout { segs: Seg[]; pages: number }

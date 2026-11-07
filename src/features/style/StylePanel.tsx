@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { newVariation, resetBoxStyle, setS, setV, view } from '@/features/doc/actions';
+import { useStageActive } from '@/features/doc/StageHost';
 import { cn } from '@/lib/utils';
 import { selectedBox, toast, update, useEditor } from '@/store/editor';
 
@@ -159,7 +160,8 @@ function ScopeBar() {
 
 export function StylePanel() {
   const S = useEditor(s => s.S);
-  useEditor(s => s.version);
+  const active = useStageActive();
+  useEditor(s => (active ? s.version : -1)); // redraw on every change only while the stage is shown
   const V = view();
   const pen = PENS.find(p => p.id === V.tip) || PENS[1];
   const inkLabel = V.ink === 'custom' ? 'Your colour' : (INKS.find(i => i.id === V.ink) || INKS[0]).name;

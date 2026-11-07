@@ -2,9 +2,10 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast as sonner } from 'sonner';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
-import { deleteBox } from '@/features/doc/actions';
+import { deleteBlock } from '@/features/doc/actions';
 import { createDoc, getDoc } from '@/store/documents';
 import { flushSave, useEditor } from '@/store/editor';
+import { TopBar } from '@/shell/TopBar';
 import { App } from './App';
 import { parseHash } from './route';
 
@@ -93,11 +94,11 @@ test('going Home clears a message whose Undo belongs to the document', async () 
   const rec = await createDoc({ title: 'Two blocks', settings: S, doc: sampleDoc(S) });
   location.hash = `#/d/${rec.id}/write`;
   render(<App />);
-  await screen.findByRole('textbox', { name: 'Block contents' });
-  act(() => deleteBox(useEditor.getState().doc.boxes[0].id));
-  expect(await screen.findByText('Block deleted.')).toBeInTheDocument();
+  await screen.findByRole('group', { name: 'Write view' });
+  act(() => deleteBlock(useEditor.getState().doc.boxes[0].id));
+  expect(await screen.findByText('Deleted “Header”.')).toBeInTheDocument();
   await user.click(screen.getByRole('link', { name: 'Home' }));
-  await waitFor(() => expect(screen.queryByText('Block deleted.')).toBeNull());
+  await waitFor(() => expect(screen.queryByText('Deleted “Header”.')).toBeNull());
 });
 
 test('blocked storage opens the document in memory and Home lists it', async () => {
@@ -111,4 +112,14 @@ test('blocked storage opens the document in memory and Home lists it', async () 
   location.hash = '#/';
   expect(await screen.findByText('The Water Cycle')).toBeInTheDocument();
   vi.doUnmock('@/store/bootstrap');
+});
+
+test('while a document opens its name field says Opening…', () => {
+  render(<TopBar route={{ name: 'doc', id: 'x', stage: 'write' }} ready={false} />);
+  const f = screen.getByRole('textbox', { name: 'Document name' });
+  expect(f).toBeDisabled();
+  expect(f).toHaveAttribute('placeholder', 'Opening…');
+  expect(f).toHaveValue('');
+  expect(screen.queryByText('Saved')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
 });

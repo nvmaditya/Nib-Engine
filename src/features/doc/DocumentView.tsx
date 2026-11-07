@@ -1,17 +1,19 @@
 // The open document: fetches its fonts, lays out its pages, and shows the stage the route asks for.
-// The pages stay mounted while the stage changes, so switching keeps their place and doesn't redraw them.
+// Every stage visited stays mounted (hidden and inert while another is shown), so switching keeps
+// its editors, searches and scroll places; each lays out its own pages beside its panel.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Stage } from '@/app/route';
 import { FONTS } from '@/engine/config.js';
 import { clearMeasureCache, computeLayout, fontReady, fontsInUse, fontStr, loadFont, onAssetReady, use } from '@/engine/core.js';
-import { update, useEditor } from '@/store/editor';
-import { cn } from '@/lib/utils';
-import { PageView, type PageLayout } from '@/features/pages/PageView';
-import { WriteStage } from '@/features/write/WriteStage';
+import { setWriteView, update, useEditor } from '@/store/editor';
+import type { PageLayout } from '@/features/pages/PageView';
+import { PagesView } from '@/features/write/PagesView';
+import { OutlineView } from '@/features/write/OutlineView';
 import { StyleStage } from '@/features/style/StyleStage';
 import { ExportStage } from '@/features/export/ExportStage';
 import { ImportDialog } from '@/features/import/ImportDialog';
 import { openImport, select } from './actions';
+import { StageHost } from './StageHost';
 
 /** Fetch the font files the document needs, and lay the pages out again once they arrive. */
 function usePageLayout(): PageLayout | null {
@@ -79,29 +81,32 @@ export function DocumentView({ stage }: { stage: Stage }) {
   const importOpen = useEditor(s => s.importOpen);
   const importFile = useEditor(s => s.importFile);
 
-  // Escape leaves the selected block (unless the editor or a dialog has the key).
+  useEffect(() => { if (stage === 'write' || stage === 'outline') setWriteView(stage); }, [stage]);
+
+  // Escape leaves the selected block (unless an editor, a field or a dialog has the key).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useEditor.getState(), el = document.activeElement;
       if (e.key !== 'Escape' || !s.selectedId || s.importOpen) return;
-      if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) return;
-      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return;
+      if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.closest('[contenteditable="true"]'))) return;
+      // An open dialog or menu takes it, but not one left in a hidden stage.
+      const open = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]');
+      if ([...open].some(m => !m.closest('[data-stage][hidden]'))) return;
       select(null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  const write = stage === 'write' || stage === 'outline';
   return (
     <>
-      {/* Wide screens: the panel and the pages scroll on their own. Phones: one column that scrolls as a whole.
-          Each stage places its panel with `order`: Write's before the pages, Style's and Export's after. */}
-      <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto wide:grid wide:grid-rows-[minmax(0,1fr)] wide:overflow-hidden',
-        write ? 'wide:grid-cols-[400px_minmax(0,1fr)]' : 'wide:grid-cols-[minmax(0,1fr)_380px]')}>
-        {write ? <WriteStage key="write" /> : stage === 'style' ? <StyleStage key="style" /> : <ExportStage key="export" pages={layout ? layout.pages : 1} />}
-        <PageView key="pages" layout={layout} readOnly={stage === 'export'} className="order-1 flex-none wide:min-h-0 wide:overflow-y-auto" />
-      </div>
+      {/* Wide screens: each stage's panel and pages scroll on their own. Phones: one column that scrolls as a whole. */}
+      <StageHost stage={stage} render={s => (
+        s === 'write' ? <PagesView layout={layout} />
+          : s === 'outline' ? <OutlineView layout={layout} />
+            : s === 'style' ? <StyleStage layout={layout} />
+              : <ExportStage layout={layout} />
+      )} />
       <ImportDialog open={importOpen} file={importFile} pages={layout ? layout.pages : 1} />
       {veil && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-[3px] border-dashed border-primary bg-primary/10 text-lg font-semibold text-fg">

@@ -6,11 +6,14 @@ import { cleanDoc, cleanSettings, loadSaved } from '@/engine/doc.js';
 import { clearMeasureCache, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Settings } from '@/engine/types';
 import { MEMORY_ID } from '@/app/route';
-import { putDoc, type DocRecord } from '@/store/documents';
+import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { forgetDb } from './db';
 import { History } from './history';
 
 export interface ToastAction { label: string; fn: () => void }
+
+/** A request to put the caret at a markup offset of a block; the editor showing that offset takes it. */
+export interface CaretRequest { boxId: string; offset: number; n: number }
 
 export interface EditorState {
   docId: string | null;
@@ -27,10 +30,9 @@ export interface EditorState {
   canRedo: boolean;
   importOpen: boolean;
   importFile: File | null;
-  focusEditor: number;
-  pendingSelect: [number, number] | null;
-  touchedId: string | null;
   scrollToPage: number | null;
+  caret: CaretRequest | null;
+  writeView: 'write' | 'outline'; // the Write view shown last; the Write stage button goes back to it
 }
 
 export interface UpdateOptions {
@@ -61,10 +63,9 @@ export const useEditor = create<EditorState>(() => ({
   canRedo: false,
   importOpen: false,
   importFile: null,
-  focusEditor: 0,
-  pendingSelect: null,
-  touchedId: null,
   scrollToPage: null,
+  caret: null,
+  writeView: 'write',
 }));
 use(init.S, init.doc);
 
@@ -82,7 +83,9 @@ const snapshotState = () => { const s = get(); return JSON.stringify({ S: s.S, d
 const stored = (id: string | null): id is string => id !== null && id !== MEMORY_ID;
 
 export const SAVE_FAILED = 'Nib couldn’t save your last change.';
-let saveFailing = false; // one message per run of failed saves, not one per keystroke
+export const SAVE_NEWER = 'This document was saved by a newer version of Nib. Reload the page to keep editing.';
+let saveSeq = 0;
+let failing: string | null = null; // the document whose saves are failing; one message per streak
 
 async function saveNow(): Promise<void> {
   clearTimeout(saveTimer);
@@ -91,17 +94,20 @@ async function saveNow(): Promise<void> {
   const s = get();
   if (!stored(s.docId)) return;
   const id = s.docId;
+  const seq = ++saveSeq;
   const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc };
   try {
-    try { await putDoc(rec); } catch {
+    try { await putDoc(rec); } catch (e) {
+      if (e instanceof NewerDocumentError || seq !== saveSeq) throw e; // a newer save has started and carries newer content: no retry
       forgetDb(); // the connection may have been closed under us: open a fresh one and try once more
       await putDoc(rec);
     }
-    saveFailing = false;
-    if (get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
-  } catch {
-    if (get().docId === id) useEditor.setState({ saving: 'unsaved' });
-    if (!saveFailing) { saveFailing = true; toast(SAVE_FAILED); }
+    if (failing === id) failing = null;
+    if (seq === saveSeq && get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
+  } catch (e) {
+    if (seq !== saveSeq || get().docId !== id) return; // superseded, or its document is closed
+    useEditor.setState({ saving: 'unsaved' });
+    if (failing !== id) { failing = id; toast(e instanceof NewerDocumentError ? SAVE_NEWER : SAVE_FAILED); }
   }
 }
 
@@ -110,6 +116,18 @@ function saveSoon(): void {
   clearTimeout(saveTimer);
   savePending = true;
   saveTimer = setTimeout(() => { void saveNow(); }, 400);
+}
+
+/** Write a waiting change when the page is left or hidden (the tab may never come back). Returns the remover. */
+export function installFlushOnHide(): () => void {
+  const onHide = () => { void flushSave(); };
+  const onVisibility = () => { if (document.visibilityState === 'hidden') onHide(); };
+  window.addEventListener('pagehide', onHide);
+  document.addEventListener('visibilitychange', onVisibility);
+  return () => {
+    window.removeEventListener('pagehide', onHide);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
 }
 
 /** Write any change still waiting for the debounce (leaving the document, closing the tab). */
@@ -124,7 +142,7 @@ export function openDocument(rec: DocRecord): void {
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
   history.clear();
-  saveFailing = false;
+  failing = null;
   createdAt = rec.createdAt;
   clearMeasureCache();
   use(S, doc);
@@ -133,7 +151,7 @@ export function openDocument(rec: DocRecord): void {
     docId: rec.id, title: rec.title, S, doc,
     version: s.version + 1, layoutTick: s.layoutTick + 1,
     selectedId: longestBox(doc)?.id ?? null, scope: 'all', saving: stored(rec.id) ? 'saved' : 'unsaved',
-    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null,
+    importOpen: false, importFile: null, scrollToPage: null, caret: null, writeView: 'write',
     ...historyFlags(),
   });
 }
@@ -151,19 +169,34 @@ export function closeDocument(): Promise<void> {
   layoutTimer = undefined;
   sonnerToast.dismiss();
   history.clear();
-  saveFailing = false;
+  failing = null;
   useEditor.setState({
     docId: null, title: '', version: s.version + 1, selectedId: null, scope: 'all', saving: 'saved',
-    importOpen: false, importFile: null, pendingSelect: null, touchedId: null, scrollToPage: null,
+    importOpen: false, importFile: null, scrollToPage: null, caret: null,
     ...historyFlags(),
   });
   return saved;
 }
 
+let edits = 0, gestures = 0;
+
+/**
+ * One undo step for a whole drag or resize, however long it pauses: the first call records a step under
+ * a key of its own, later calls record nothing.
+ */
+export function gesture(kind: string): (fn: (s: EditorState) => void, opts?: Omit<UpdateOptions, 'history'>) => void {
+  const key = kind + ':g' + ++gestures;
+  let first = true;
+  return (fn, opts) => {
+    update(fn, { ...opts, history: first ? key : false });
+    first = false;
+  };
+}
+
 // Change state, then let React know. layout: 'now' (default), 'soon' (typing: wait for a pause) or false.
 export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOptions = {}): void {
   const { save = true, layout = 'now', history: hist } = opts;
-  if (save && hist !== false) history.record(snapshotState(), hist ?? 'edit');
+  if (save && hist !== false) history.record(snapshotState(), hist ?? 'edit:' + ++edits);
   if (fn) fn(get());
   const s = get();
   use(s.S, s.doc);
@@ -220,6 +253,21 @@ export function docAction(label: string, fn: () => void): ToastAction {
 export const snapshot = (): string => JSON.stringify(get().doc);
 export const undoTo = (snap: string, sel: string | null): ToastAction =>
   docAction('Undo', () => update(s => { s.doc = cleanDoc(JSON.parse(snap)) ?? emptyDoc(); s.selectedId = sel; }, { history: 'undo-to' }));
+
+let caretSeq = 0;
+/** Ask for the caret at a markup offset of a block (a clicked word, the change an undo made). Also selects the block. */
+export function placeCaret(boxId: string, offset: number): void {
+  update(s => { s.caret = { boxId, offset, n: ++caretSeq }; s.selectedId = boxId; }, { save: false, layout: false });
+}
+/** An editor has placed the caret for request n: clear it, unless a newer request has come since. */
+export function consumeCaret(n: number): void {
+  if (get().caret?.n === n) useEditor.setState({ caret: null });
+}
+
+/** The Pages or Outline view is on screen (only the Stages nav reads this, so nothing else redraws). */
+export function setWriteView(v: 'write' | 'outline'): void {
+  if (get().writeView !== v) useEditor.setState({ writeView: v });
+}
 
 export const selectedBox = (): Box | null => {
   const s = get();

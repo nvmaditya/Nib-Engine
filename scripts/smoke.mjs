@@ -50,7 +50,7 @@ async function main() {
 
     await step('the document opens and its first page is drawn in handwriting', async () => {
       await page.getByText('The Water Cycle').click();
-      await page.getByRole('textbox', { name: 'Block contents' }).waitFor();
+      await page.getByRole('textbox', { name: 'Main text, page 1' }).waitFor();
       // The paper is painted and, once the font file arrives (fontTick), the ink canvases get writing.
       await page.waitForFunction(() => {
         const painted = c => {
@@ -62,6 +62,62 @@ async function main() {
         const sheet = document.querySelector('.sheet');
         return !!sheet && painted(sheet.querySelector('.paper-bg')) && [...sheet.querySelectorAll('.ink-layer canvas')].some(painted);
       }, null, { timeout: 20000 });
+    });
+
+    await step('Write: Outline, a page break in Main text', async () => {
+      await page.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Outline' }).click();
+      const list = page.getByRole('region', { name: 'Outline' });
+      await list.locator('[data-item^="b1:"]').first().click();
+      const editor = page.getByRole('textbox', { name: 'Main text, all pages' });
+      await editor.getByText('Why it matters').click();
+      await page.keyboard.press('Home');
+      await page.getByRole('button', { name: 'Page break' }).click();
+      await page.getByText('Page 2 starts here').waitFor({ timeout: 5000 });
+      await list.getByRole('heading', { name: 'Page 2' }).waitFor({ timeout: 5000 });
+    });
+
+    await step('Outline: dragging Page 1 moves the rest of Main text onto a new page 3', async () => {
+      const list = page.getByRole('region', { name: 'Outline' });
+      const grip = list.getByRole('img', { name: 'Drag to move page 1' });
+      const gb = await grip.boundingBox();
+      const sb = await list.locator('[data-drop-page="1"]').boundingBox();
+      if (!gb || !sb) fail('the page grip or the Page 2 section has no box');
+      const gx = gb.x + gb.width / 2, gy = gb.y + gb.height / 2;
+      await page.mouse.move(gx, gy);
+      await page.mouse.down();
+      await page.mouse.move(gx + 4, gy + 4, { steps: 2 });
+      await page.mouse.move(gx + 40, gy + 40, { steps: 6 });
+      await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height * 0.85, { steps: 10 });
+      await page.mouse.up();
+      await page.getByText('Moved page 1 to position 2. The rest of “Main text” followed it onto a new page 3.').waitFor({ timeout: 5000 });
+      await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Outline"] [data-drop-page]').length === 3);
+      await list.locator('[data-drop-page="0"]').getByText('Drop a block here').waitFor({ timeout: 5000 });
+    });
+
+    // (Pages comes before Join back: joining puts the continuation's text back without a page break, so page 3 goes.)
+    await step('Pages: clicking the page 3 part of Main text focuses its typed editor', async () => {
+      await page.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Pages' }).click();
+      const row = page.locator('main[aria-label="Pages"] [data-drop-page="2"]');
+      await row.scrollIntoViewIfNeeded();
+      const canvas = row.locator('.ink-layer canvas[data-id="b1:1"]');
+      await canvas.waitFor({ timeout: 10000 });
+      await canvas.scrollIntoViewIfNeeded();
+      const b = await canvas.boundingBox();
+      if (!b) fail('the page 3 ink canvas has no box');
+      await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+      await page.waitForFunction(() => document.activeElement?.closest('[role="textbox"]')?.getAttribute('aria-label') === 'Main text, page 3', null, { timeout: 5000 });
+    });
+
+    await step('Outline: Split here, then Join back', async () => {
+      await page.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Outline' }).click();
+      await page.getByText('Page 3 starts here').waitFor({ timeout: 5000 });
+      await page.getByRole('button', { name: 'Split here' }).click();
+      await page.getByText('Split “Main text”: from page 3 on, it’s a block of its own.').waitFor({ timeout: 5000 });
+      await page.getByRole('button', { name: 'Join back' }).click();
+      await page.getByText('Joined “Main text (continued)” back into “Main text”.').waitFor({ timeout: 5000 });
+      const left = await page.getByRole('region', { name: 'Outline' }).locator('[data-item]').evaluateAll(
+        els => els.filter(e => (e.getAttribute('aria-label') || '').startsWith('Main text (continued)')).length);
+      if (left) fail('the list still has an item named Main text (continued)');
     });
 
     await step('Style: choose the Gel pen', async () => {

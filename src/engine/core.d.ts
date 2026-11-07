@@ -35,6 +35,12 @@ export function boxSettings(box: Box | null | undefined): Settings;
 export function hasOwnStyle(box: Box | null | undefined): boolean;
 export function withBox<T>(box: Box, fn: () => T): T;
 export function computeLayout(): Layout;
+/** A margin note's letter size, against the document's. */
+export const NOTE_SCALE: number;
+/** A part's tilt in radians: 0, or between −3° and −1° for a margin note. */
+export function segTilt(sg: Seg): number;
+/** The word under a point (page units) on a part, or null when the part has no rows. */
+export function hitWord(sg: Seg, x: number, y: number): RowSrc | null;
 export function renderSegment(canvas: HTMLCanvasElement, sg: Seg, scale: number): void;
 export function segBounds(sg: Seg): Bounds;
 export function paintPaper(canvas: HTMLCanvasElement, i: number, pxW: number): void;
@@ -47,3 +53,11 @@ export function snapX(x: number, g: Geom, w: number): number;
 export function snapY(y: number, g: Geom): number;
 export function rng(...parts: unknown[]): () => number;
 export type { InkLayer, PaperCfg };
+
+export interface InlinePiece { text: string; style: { bold?: true; ul?: true; strike?: true; hl?: true } }
+export function parseInline(t: string): InlinePiece[];
+export type LineKind = 'newpage' | 'blank' | 'hr' | 'heading' | 'bullet' | 'number' | 'quote' | 'text';
+export interface LineInfo { kind: LineKind; level: 0 | 1 | 2 | 3; depth: number; marker: string; content: string; prefix: number }
+export function parseLine(raw: string): LineInfo;
+export interface RowSrc { li: number; tok: number }
+export function srcOffset(text: string, src: RowSrc): number;
