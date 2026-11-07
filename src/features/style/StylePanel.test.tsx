@@ -86,6 +86,8 @@ test('in Only a block, every handwriting slider changes only that block', async 
     const s = screen.getByRole('slider', { name: c.label });
     s.focus();
     await userEvent.keyboard(+s.getAttribute('aria-valuenow')! >= LIMITS[key as keyof typeof LIMITS][1] ? '{ArrowLeft}' : '{ArrowRight}');
+    // The save waits for a pause (400 ms), which a slow machine can leave between two presses: it changes nothing here.
+    if (key === 'flow') await act(() => flushSave());
   }
   expect(Object.keys(get().doc.boxes[0].style).sort()).toEqual(['flow', 'mess', 'mistakes', 'size', 'track', 'variety', 'weight', 'wobble', 'words']);
   expect(get().S).toMatchObject({ size: 30, mess: 45, weight: 100 });

@@ -82,7 +82,7 @@ test('switching stages keeps the Style search', async () => {
   await userEvent.click(stageButton('Style'));
   await userEvent.click(screen.getByRole('button', { name: 'Change handwriting' }));
   expect(screen.getByRole('searchbox', { name: 'Search handwriting' })).toHaveValue('cav');
-});
+}, 20_000); // draws every hand in the picker (jsdom has no IntersectionObserver) and redraws three stages: about 0.7 s alone, up to 5.4 s on a busy machine
 
 test('an inactive stage stays in the page but hidden', async () => {
   location.hash = `#/d/${id}/style`;
