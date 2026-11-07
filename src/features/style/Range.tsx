@@ -27,7 +27,7 @@ export const FORMAT: Partial<Record<keyof typeof LIMITS, (v: number) => string>>
   words: v => (v > 0 ? '+' : '') + v + '%',
 };
 
-export function Range({ id, V, step = 1 }: { id: keyof typeof LIMITS; V: Settings; step?: number }) {
+export function Range({ id, V, step = 1, meta }: { id: keyof typeof LIMITS; V: Settings; step?: number; meta?: string }) {
   const ref = useRef<Steps | null>(null);
   const steps = (ref.current ??= rangeSteps(id));
   const [min, max] = LIMITS[id];
@@ -36,7 +36,10 @@ export function Range({ id, V, step = 1 }: { id: keyof typeof LIMITS; V: Setting
   return (
     <div className="mt-3.5 first:mt-0">
       <div className="flex items-center justify-between gap-2">
-        <span id={labelId} className="text-sm font-medium">{label}</span>
+        <span className="flex items-baseline gap-2">
+          <span id={labelId} className="text-sm font-medium">{label}</span>
+          {meta && <span className="text-[13px] text-muted">{meta}</span>}
+        </span>
         <output className="text-[13px] text-muted tabular-nums">{fmt ? fmt(v) : v}</output>
       </div>
       <Slider aria-labelledby={labelId} className="mt-2.5 h-5" thumbLabel={label} min={min} max={max} step={step} value={[v]}
