@@ -1,17 +1,26 @@
 // Smoke run: build, serve with `vite preview`, and drive the real app in Chromium through Home, Write,
-// Style and Export (reading the downloaded PDF and ZIP byte by byte). Prints "smoke ok" and exits 0, or exits 1 on any failure or console error.
+// Style and Export, then Home, the templates and Import (reading the downloaded PDF and ZIP byte by byte). Prints "smoke ok" and exits 0, or exits 1 on any failure or console error.
 // Uses the Playwright that is installed on the machine (it is not a project dependency).
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
+import { essayDocx, textPdf, RIVERS_PAGES } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('..', import.meta.url));
-const PORT = 4317;
-const BASE = `http://localhost:${PORT}/`;
+let PORT = 0, BASE = '';
+/** A free port: listen on 0, read what the system gave, let go of it. (So two smoke runs side by side don't collide.) */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.once('error', reject);
+    srv.listen(0, () => { const { port } = srv.address(); srv.close(() => resolve(port)); });
+  });
+}
 
 function fail(msg) { throw new Error(msg); }
 
@@ -97,6 +106,8 @@ async function waitForServer(url, ms = 30000) {
 }
 
 async function main() {
+  PORT = await freePort();
+  BASE = `http://localhost:${PORT}/`;
   const built = spawnSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
   if (built.status !== 0) fail('the build failed');
 
@@ -112,6 +123,32 @@ async function main() {
     const errors = [];
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('pageerror', e => errors.push(e.message));
+    /** The method and URL of every request the page makes (data: URLs left out). */
+    let requests = [];
+    page.on('request', r => { if (!r.url().startsWith('data:')) requests.push({ method: r.method(), url: r.url() }); });
+    /** Every record of an IndexedDB store of the app (or one record, by key), read in the page. */
+    const idb = (store, key) => page.evaluate(([st, k]) => new Promise((res, rej) => {
+      const open = indexedDB.open('nib');
+      open.onerror = () => rej(open.error);
+      open.onsuccess = () => {
+        const get = open.result.transaction(st).objectStore(st)[k === undefined ? 'getAll' : 'get'](k);
+        get.onsuccess = () => { open.result.close(); res(get.result); };
+        get.onerror = () => rej(get.error);
+      };
+    }), [store, key]);
+    const idbDocs = () => idb('documents');
+    /** Whether the picture is drawn with ink: at least `min` pixels are 70 or more darker than its median luminance. */
+    const inked = (locator, min) => locator.evaluate((img, m) => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      const lum = [];
+      for (let i = 0; i < d.length; i += 4) lum.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      const median = [...lum].sort((a, b) => a - b)[lum.length >> 1];
+      return lum.filter(v => v <= median - 70).length >= m;
+    }, min);
     const step = async (name, fn) => {
       try { await fn(); } catch (e) { fail(`${name}: ${e.message.split('\n')[0]}`); }
       if (errors.length) fail(`${name}: console error: ${errors.join(' | ')}`);
@@ -255,6 +292,7 @@ async function main() {
     const exportNav = () => page.getByRole('navigation', { name: 'Stages' }).getByRole('button', { name: /Export$/ });
     const formatBtn = name => page.getByRole('group', { name: 'Format' }).getByRole('button', { name, exact: true });
     let n = 0;
+    let exportedPdf;
 
     await step('Export: a PDF of every page, with no metadata', async () => {
       await exportNav().click();
@@ -266,6 +304,7 @@ async function main() {
       const [download] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), button.click()]);
       if (download.suggestedFilename() !== 'The Water Cycle.pdf') fail(`the download is called ${download.suggestedFilename()}`);
       const bytes = readFileSync(await download.path());
+      exportedPdf = bytes;
       const text = bytes.toString('latin1');
 
       // Cut the streams out (each dictionary says its /Length), so the checks below read only the file's own structure.
@@ -370,6 +409,195 @@ async function main() {
       await page.keyboard.press('Escape');
       // (Page 1 was dragged to position 2 earlier and is empty now, so any page of Style may be the one that has writing.)
       await painted();
+    });
+
+    // ---- Milestone 5: Home, templates and Import ----
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const todayText = () => { const d = new Date(); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+    const homeLink = () => page.getByRole('link', { name: 'Home', exact: true });
+    const newest = async () => (await idbDocs()).sort((a, b) => b.createdAt - a.createdAt)[0];
+    const TEMPLATES = [
+      // name, card pattern, look name, hand, tip, ink, paper, size, boxes (kind, text)
+      ['Blank page', 'exam', 'Exam answer', 'labelle', 'ball', 'blue', 'ruled', null, () => [['text', '']]],
+      ['Assignment', 'exam', 'Exam answer', 'labelle', 'ball', 'blue', 'ruled', null, () => [['header', null], ['text', '# Title\n\n## Introduction\n']]],
+      ['Class notes', 'notes', 'Neat notes', 'patrick', 'gel', 'blueblack', 'grid', null, () => [['text', '# Notes\n\n## Topic\n- First point\n- Second point']]],
+      ['Letter', 'letter', 'Letter', 'cedarville', 'fine', 'black', 'plain', null, () => [['text', 'Dear …,\n\n\n\nWith love,']]],
+      ['Journal page', 'journal', 'Journal', 'caveat', 'felt', 'purple', 'yellow', null, () => [['text', todayText() + '\n\n']]],
+      ['Card', 'letter', 'Letter', 'cedarville', 'fine', 'black', 'plain', 38, () => [['text', '# Happy birthday!']]],
+    ];
+
+    await step('Home: Import is the hero, six templates, Recent with a drawn first page', async () => {
+      await homeLink().click();
+      await page.getByRole('button', { name: /^Import a PDF, Word or text file/ }).waitFor({ timeout: 15000 });
+      const heading = page.getByRole('heading', { name: 'Start something new' });
+      await heading.waitFor();
+      const names = await page.locator('#templates-h ~ div button, section[aria-labelledby="templates-h"] button').evaluateAll(
+        els => els.map(e => e.querySelector('span:nth-of-type(2)')?.textContent ?? e.textContent));
+      const want = ['Blank page', 'Assignment', 'Class notes', 'Letter', 'Journal page', 'Card'];
+      if (names.join('|') !== want.join('|')) fail(`the template cards are ${names.join(', ')}`);
+      for (const [k, name] of want.entries()) {
+        const card = page.getByRole('button', { name: new RegExp(`^${name}`) });
+        const img = card.locator('img');
+        await page.waitForFunction(el => !!el && el.src.startsWith('data:image/jpeg') && el.naturalWidth === 360, await img.elementHandle(), { timeout: 20000 });
+        const ink = await inked(img, 20);
+        if (k === 0 ? ink : !ink) fail(`${name}'s picture is ${ink ? 'inked' : 'not inked'}`);
+      }
+      const row = page.locator('li').filter({ hasText: 'The Water Cycle' });
+      const thumb = row.locator('img');
+      await page.waitForFunction(el => !!el && el.src.startsWith('data:image/jpeg') && el.naturalWidth === 156, await thumb.elementHandle(), { timeout: 20000 });
+      // (Page 1 of The Water Cycle was dragged to position 2 earlier and is empty now, so this drawn page may have no ink;
+      // the migrated document's thumbnail in the phone step is the inked one.)
+      const meta = (await row.getByText(/^(\d+) pages? · (.+ · )?Edited today$/).textContent()) ?? '';
+      const doc = (await idbDocs()).find(d => d.title === 'The Water Cycle');
+      const stored = await idb('prefs', 'thumb:doc:' + doc.id);
+      if (!stored || Number(/^(\d+)/.exec(meta)[1]) !== stored.pages) fail(`Recent says "${meta}" but the stored thumbnail has ${stored?.pages} pages`);
+      await page.getByText('Everything is saved on this device. Nothing is uploaded.').waitFor();
+    });
+
+    await step('Templates: each opens with its own look, paper and content', async () => {
+      for (const [name, , lookName, hand, tip, ink, paper, size, boxes] of TEMPLATES) {
+        await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+        await page.waitForURL(/#\/d\/.+\/write/, { timeout: 15000 });
+        await page.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
+        const rec = await newest();
+        const S = rec.settings;
+        if (S.font !== hand || S.tip !== tip || S.ink !== ink || S.paper !== paper) fail(`${name}: settings are ${S.font}/${S.tip}/${S.ink}/${S.paper}`);
+        if (size !== null && S.size !== size) fail(`${name}: size is ${S.size}, not ${size}`);
+        const kinds = rec.doc.boxes.map(b => [b.kind, b.kind === 'header' ? null : b.text]);
+        const expected = boxes();
+        if (JSON.stringify(kinds) !== JSON.stringify(expected)) fail(`${name}: boxes are ${JSON.stringify(kinds)}`);
+        const header = rec.doc.boxes.find(b => b.kind === 'header');
+        if (header && header.fields.date !== todayText()) fail(`${name}: the header date is "${header.fields.date}"`);
+        await styleNav().click();
+        if (name === 'Class notes') {
+          await page.getByText(/^Patrick Hand · /).first().waitFor({ timeout: 10000 });
+          const grid = page.getByRole('group', { name: 'Paper' }).getByRole('button', { name: /^Grid/ });
+          if ((await grid.getAttribute('aria-pressed')) !== 'true') fail('Class notes: the Grid paper is not pressed');
+        } else {
+          await page.waitForFunction(l => [...document.querySelectorAll('button[aria-pressed="true"]')].some(b => b.textContent.startsWith(l)), lookName, { timeout: 10000 });
+        }
+        await homeLink().click();
+        await page.getByRole('heading', { name: 'Start something new' }).waitFor();
+      }
+    });
+
+    const docxFile = { name: 'Essay.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from(essayDocx()) };
+    const importDialog = () => page.getByRole('dialog', { name: 'Import a document' });
+    const outlineView = async () => {
+      await page.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Outline' }).click();
+      return page.getByRole('region', { name: 'Outline' });
+    };
+    const itemLabels = list => list.locator('[data-item]').evaluateAll(els => els.map(e => e.getAttribute('aria-label')));
+
+    await step('Import: a Word file from Home becomes one main block flowing page by page, with its look and a header', async () => {
+      requests = [];
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /^Import a PDF, Word or text file/ }).click()]);
+      await chooser.setFiles(docxFile);
+      const dialog = importDialog();
+      await dialog.getByText('Essay.docx: 24 words.').waitFor({ timeout: 20000 });
+      const box = dialog.getByRole('textbox', { name: 'Imported text' });
+      const has = async (sel, text) => { if (!(await box.locator(sel).filter({ hasText: text }).count())) fail(`the preview has no ${sel} "${text}"`); };
+      await has('h1', 'A Short Essay');
+      await has('h2', 'Introduction'); await has('h2', 'Conclusion');
+      await has('strong', 'rivers'); await has('u', 'seas'); await has('s', 'lakes');
+      if ((await box.locator('li').count()) !== 4) fail(`the preview has ${await box.locator('li').count()} list items, not 4`);
+      await dialog.getByRole('checkbox', { name: 'Start a new page where the file does' }).click();
+      await dialog.getByRole('radio', { name: 'Neat notes' }).click();
+      await dialog.getByRole('checkbox', { name: 'Add a header block' }).click();
+      await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Asha');
+      await dialog.getByRole('button', { name: 'Write it out' }).click();
+      await page.waitForURL(/#\/d\/.+\/write/, { timeout: 20000 });
+      await page.waitForFunction(() => document.querySelector('input[aria-label="Document name"]')?.value === 'Essay', null, { timeout: 15000 });
+      const list = await outlineView();
+      await list.locator('[data-item]').first().waitFor({ timeout: 10000 });
+      const labels = await itemLabels(list);
+      const main = labels.filter(l => l.startsWith('Main text'));
+      if (main.join('|') !== 'Main text, part 1 of 2|Main text, part 2 of 2') fail(`Outline lists ${main.join(' | ')}`);
+      if (labels.filter(l => l === 'Header').length !== 1) fail(`Outline lists ${labels.filter(l => l === 'Header').length} Headers`);
+      await page.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
+      const rec = await newest();
+      if (rec.doc.boxes.map(b => b.kind).join() !== 'header,text') fail(`the boxes are ${rec.doc.boxes.map(b => b.kind)}`);
+      if (rec.doc.boxes[0].fields.name !== 'Asha') fail('the header does not say Asha');
+      if (!rec.doc.boxes[1].text.includes('\\newpage\n## Conclusion')) fail('Main text has no \\newpage before Conclusion');
+      if (rec.settings.font !== 'patrick') fail(`the hand is ${rec.settings.font}, not patrick`);
+      const bad = requests.filter(r => r.method !== 'GET' || !r.url.startsWith(BASE));
+      if (bad.length) fail(`the import made requests outside the app: ${bad.map(r => r.method + ' ' + r.url).join(', ')}`);
+    });
+
+    await step('Import into the open document: a PDF added after the last page carries on Main text, and one Undo takes it away', async () => {
+      await page.getByRole('button', { name: 'Import', exact: true }).click();
+      const dialog = importDialog();
+      await dialog.locator('input[type=file]').setInputFiles({ name: 'Rivers.pdf', mimeType: 'application/pdf', buffer: Buffer.from(textPdf(RIVERS_PAGES)) });
+      await dialog.getByRole('status').filter({ hasText: /^Rivers\.pdf: \d+ words from 2 pages\.$/ }).waitFor({ timeout: 20000 });
+      await dialog.getByRole('textbox', { name: 'Imported text' }).locator('h1').filter({ hasText: 'Rivers and seas' }).waitFor();
+      await dialog.getByRole('radio', { name: 'Add after the last page' }).click();
+      await dialog.getByRole('button', { name: 'Write it out' }).click();
+      await page.getByText('Added after the last page, carrying on “Main text”.').waitFor({ timeout: 10000 });
+      const parts = async () => {
+        const labels = await itemLabels(await outlineView());
+        if (labels.some(l => l.startsWith('Text block') || l.startsWith('Main text (continued)'))) fail(`Outline has another text block: ${labels}`);
+        return labels.filter(l => l.startsWith('Main text')).join('|');
+      };
+      const three = ['1', '2', '3'].map(k => `Main text, part ${k} of 3`).join('|');
+      if (await parts() !== three) fail(`after the import the parts are ${await parts()}`);
+      await page.getByTitle('Undo (Ctrl+Z)').click(); // (the top bar's, not the message's)
+      if (await parts() !== 'Main text, part 1 of 2|Main text, part 2 of 2') fail(`after Undo the parts are ${await parts()}`);
+    });
+
+    await step('Import: files Nib can’t read say why', async () => {
+      await page.getByRole('button', { name: 'Import', exact: true }).click();
+      const dialog = importDialog();
+      await dialog.locator('input[type=file]').setInputFiles({ name: 'Nib.pdf', mimeType: 'application/pdf', buffer: exportedPdf });
+      await dialog.getByRole('alert').filter({ hasText: 'This PDF has no text Nib can copy. If it’s a scan or a photo of pages, try the original document instead.' }).waitFor({ timeout: 20000 });
+      await dialog.locator('input[type=file]').setInputFiles({ name: 'letter.rtf', mimeType: 'text/rtf', buffer: Buffer.from('{\\rtf1 Hello}') });
+      await dialog.getByRole('alert').filter({ hasText: 'Rich text files (.rtf) can’t be read here. Open it in Word or Google Docs and save it as .docx or PDF first.' }).waitFor({ timeout: 10000 });
+      if (!(await dialog.getByRole('button', { name: 'Write it out' }).isDisabled())) fail('Write it out is enabled for a file that can’t be read');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await dialog.waitFor({ state: 'hidden', timeout: 5000 });
+    });
+
+    await step('Phone: Home and Import at 390 px, and Longhand work brought over on a first visit', async () => {
+      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, acceptDownloads: true });
+      try {
+        await phone.addInitScript(() => {
+          localStorage['longhand.v2'] = JSON.stringify({ s: {}, doc: { pageCount: 1, fileName: '', boxes: [{ id: 'b1', page: 0, x: 112, y: 110, w: 630, text: '# My Longhand notes\nhello', style: {}, shuffle: 0, frames: {} }] } });
+        });
+        const p = await phone.newPage();
+        const problems = [];
+        p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+        p.on('pageerror', e => problems.push(e.message));
+        await p.goto(BASE);
+        const row = p.locator('li').filter({ hasText: 'My Longhand notes' });
+        await row.waitFor({ timeout: 15000 });
+        const thumb = row.locator('img');
+        await p.waitForFunction(el => !!el && el.src.startsWith('data:image/jpeg') && el.naturalWidth === 156, await thumb.elementHandle(), { timeout: 20000 });
+        const phoneInked = await thumb.evaluate((img, m) => {
+          const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+          const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+          const d = g.getImageData(0, 0, c.width, c.height).data, lum = [];
+          for (let i = 0; i < d.length; i += 4) lum.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+          const median = [...lum].sort((a, b) => a - b)[lum.length >> 1];
+          return lum.filter(v => v <= median - 70).length >= m;
+        }, 2); // (a one-line document at 156 px has only 3 to 7 pixels that dark, so the brief's 5 is flaky)
+        if (!phoneInked) fail('the migrated document’s thumbnail has no ink');
+        const wide = await p.evaluate(() => document.documentElement.scrollWidth);
+        if (wide > 390) fail(`Home is ${wide} px wide on a 390 px phone`);
+        const tops = [];
+        for (const name of ['Blank page', 'Assignment', 'Class notes']) tops.push((await p.getByRole('button', { name: new RegExp(`^${name}`) }).boundingBox()).y);
+        if (Math.abs(tops[0] - tops[1]) > 1 || !(tops[2] > tops[0] + 20)) fail(`the template cards are at ${tops.join(', ')}: two to a row were expected`);
+        const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.getByRole('button', { name: /^Import a PDF, Word or text file/ }).click()]);
+        await chooser.setFiles(docxFile);
+        const dialog = p.getByRole('dialog', { name: 'Import a document' });
+        await dialog.getByText('Essay.docx: 24 words.').waitFor({ timeout: 20000 });
+        const b = await dialog.boundingBox();
+        if (!b || Math.abs(b.x) > 1 || Math.abs(b.y) > 1 || Math.abs(b.width - 390) > 1 || Math.abs(b.height - 844) > 1) fail(`the Import dialog is ${JSON.stringify(b)}, not the whole 390 × 844 screen`);
+        const write = dialog.getByRole('button', { name: 'Write it out' });
+        const wb = await write.boundingBox();
+        if (!wb || wb.x < 0 || wb.y < 0 || wb.x + wb.width > 390 || wb.y + wb.height > 844) fail(`Write it out is at ${JSON.stringify(wb)}, outside the screen`);
+        await write.click();
+        await p.getByRole('textbox', { name: 'Main text, page 1' }).waitFor({ timeout: 20000 });
+        if (problems.length) fail(`console error: ${problems.join(' | ')}`);
+      } finally { await phone.close(); }
     });
 
     console.log('smoke ok');
