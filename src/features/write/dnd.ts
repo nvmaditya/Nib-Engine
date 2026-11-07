@@ -74,6 +74,21 @@ if (typeof window !== 'undefined') {
 
 let busy = false; // one drag at a time
 
+/**
+ * Near `scroller`'s top or bottom edge (EDGE px), scroll it a step, faster the closer (`x`, `y` is the pointer;
+ * the page's own scroll if `scroller` is the document's). Returns whether it moved. Call it once a frame.
+ */
+export function edgeScroll(scroller: HTMLElement, x: number, y: number): boolean {
+  const root = scroller === document.scrollingElement || scroller === document.documentElement;
+  const r = root ? { top: 0, bottom: innerHeight, left: 0, right: innerWidth } : scroller.getBoundingClientRect();
+  if (x < r.left || x > r.right) return false;
+  const v = y < r.top + EDGE ? -Math.min(1, (r.top + EDGE - y) / EDGE) : y > r.bottom - EDGE ? Math.min(1, (y - r.bottom + EDGE) / EDGE) : 0;
+  if (!v) return false;
+  const before = scroller.scrollTop;
+  scroller.scrollTop += Math.round(v * MAX_SPEED) || Math.sign(v);
+  return scroller.scrollTop !== before;
+}
+
 export interface DragOptions {
   kind: DragKind;
   /** What follows the pointer once the drag starts (it is added to the page, and taken away at the end). */
@@ -115,15 +130,7 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
   // Near the scroller's top or bottom edge, scroll it (faster the closer), and aim again at what is now under the pointer.
   const tick = () => {
     raf = requestAnimationFrame(tick);
-    if (!scroller) return;
-    const root = scroller === document.scrollingElement || scroller === document.documentElement;
-    const r = root ? { top: 0, bottom: innerHeight, left: 0, right: innerWidth } : scroller.getBoundingClientRect();
-    if (x < r.left || x > r.right) return;
-    const v = y < r.top + EDGE ? -Math.min(1, (r.top + EDGE - y) / EDGE) : y > r.bottom - EDGE ? Math.min(1, (y - r.bottom + EDGE) / EDGE) : 0;
-    if (!v) return;
-    const before = scroller.scrollTop;
-    scroller.scrollTop += Math.round(v * MAX_SPEED) || Math.sign(v);
-    if (scroller.scrollTop !== before) retarget();
+    if (scroller && edgeScroll(scroller, x, y)) retarget();
   };
 
   const activate = () => {

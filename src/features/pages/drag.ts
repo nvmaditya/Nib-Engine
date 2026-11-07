@@ -5,6 +5,7 @@ import { geom, hitWord, segId, setFrame, snapX, snapY, srcOffset } from '@/engin
 import type { Seg } from '@/engine/types';
 import { rule4 } from '@/features/doc/actions';
 import { gesture, placeCaret, toast, update, useEditor, type EditorState } from '@/store/editor';
+import { edgeScroll } from '@/features/write/dnd';
 import { scrollerOf } from './useNearViewport';
 
 /** While a block is dragged nothing is redrawn and leftover transforms are kept. */
@@ -83,11 +84,37 @@ export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode, 
   const grabDX = (e.clientX - r0.left) / s - f0.x, grabDY = (e.clientY - r0.top) / s - f0.y;
   const head = paperEl.querySelector<HTMLElement>(`.ink-layer canvas[data-id="${segId(sg)}"]`);
   const resize = gesture('resize');
-  let target = { page: f0.page, x: f0.x, y: f0.y }, raf = 0;
+  let target = { page: f0.page, x: f0.x, y: f0.y }, raf = 0, scrollRaf = 0;
   const shift = (t: string) => { frame.style.transform = t; if (head) head.style.transform = t; };
   try { frame.setPointerCapture(e.pointerId); } catch { /* the pointer may already be gone */ }
   drag.active = mode === 'move';
   fig.classList.add('dragging'); paperEl.classList.remove('scanned');
+
+  // The drag's part follows the pointer at (x, y): over the page under it, snapped to the ruled lines.
+  const follow = (x: number, y: number) => {
+    const papers = column ? [...column.querySelectorAll<HTMLElement>('[data-paper]')] : [paperEl];
+    let tp = paperEl, tr = r0, best = Infinity;
+    for (const p of papers) {
+      const r = p.getBoundingClientRect();
+      if (y < r.top - 17 || y > r.bottom + 17) continue;
+      const d = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+      if (d < best) { best = d; tp = p; tr = r; }
+    }
+    if (best === Infinity) tr = paperEl.getBoundingClientRect();
+    const nx = snapX((x - tr.left) / s - grabDX, g, f0.w);
+    const ny = snapY((y - tr.top) / s - grabDY, g);
+    target = { page: best === Infinity ? f0.page : Number(tp.dataset.paper), x: nx, y: ny };
+    const or = paperEl.getBoundingClientRect();
+    shift(`translate(${(tr.left + nx * s) - (or.left + f0.x * s)}px,${(tr.top + ny * s) - (or.top + f0.y * s)}px)`);
+  };
+  // Near the top or bottom edge of what scrolls (the window, if nothing inside does), keep scrolling a frame
+  // at a time while the pointer is held there, and carry the part along.
+  const pointer = { x: e.clientX, y: e.clientY };
+  const scrolling = () => {
+    scrollRaf = requestAnimationFrame(scrolling);
+    const sc = scroller ?? document.scrollingElement;
+    if (sc instanceof HTMLElement && edgeScroll(sc, pointer.x, pointer.y)) follow(pointer.x, pointer.y);
+  };
 
   const move = (ev: PointerEvent) => {
     const dx = ev.clientX - st.x, dy = ev.clientY - st.y;
@@ -95,6 +122,7 @@ export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode, 
       if (Math.hypot(dx, dy) < 3) return;
       st.moved = true;
       onStart?.();
+      if (mode === 'move') scrollRaf = requestAnimationFrame(scrolling);
     }
     if (mode === 'resize') {
       const nw = Math.round(Math.max(60, Math.min(PAGE_W - f0.x - 6, f0.w + dx / s)));
@@ -104,30 +132,24 @@ export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode, 
       }
       return;
     }
-    // The page under the pointer: within its height (and a little), the nearest one across.
-    const papers = column ? [...column.querySelectorAll<HTMLElement>('[data-paper]')] : [paperEl];
-    let tp = paperEl, tr = r0, best = Infinity;
-    for (const p of papers) {
-      const r = p.getBoundingClientRect();
-      if (ev.clientY < r.top - 17 || ev.clientY > r.bottom + 17) continue;
-      const d = ev.clientX < r.left ? r.left - ev.clientX : ev.clientX > r.right ? ev.clientX - r.right : 0;
-      if (d < best) { best = d; tp = p; tr = r; }
-    }
-    if (best === Infinity) tr = paperEl.getBoundingClientRect();
-    const nx = snapX((ev.clientX - tr.left) / s - grabDX, g, f0.w);
-    const ny = snapY((ev.clientY - tr.top) / s - grabDY, g);
-    target = { page: best === Infinity ? f0.page : Number(tp.dataset.paper), x: nx, y: ny };
-    const or = paperEl.getBoundingClientRect();
-    shift(`translate(${(tr.left + nx * s) - (or.left + f0.x * s)}px,${(tr.top + ny * s) - (or.top + f0.y * s)}px)`);
-    // Near the top or bottom edge of what scrolls, scroll it (the window, if nothing inside does).
-    const cr = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: innerHeight };
-    const by = ev.clientY < cr.top + 60 ? -14 : ev.clientY > cr.bottom - 40 ? 14 : 0;
-    if (by) { if (scroller) scroller.scrollTop += by; else scrollBy(0, by); }
+    pointer.x = ev.clientX; pointer.y = ev.clientY;
+    follow(pointer.x, pointer.y);
+    const sc = scroller ?? document.scrollingElement;
+    if (sc instanceof HTMLElement && edgeScroll(sc, pointer.x, pointer.y)) follow(pointer.x, pointer.y);
   };
-  const end = (ev: PointerEvent) => {
+  // Escape cancels a move: nothing is dropped, and nothing else hears the key (it would deselect the block).
+  const onKey = (ev: KeyboardEvent) => {
+    if (ev.key !== 'Escape' || mode !== 'move') return;
+    ev.preventDefault(); ev.stopPropagation();
+    end({ type: 'cancel' });
+  };
+  const end = (ev: { type: string }) => {
     frame.removeEventListener('pointermove', move); frame.removeEventListener('pointerup', end); frame.removeEventListener('pointercancel', end);
+    window.removeEventListener('keydown', onKey, true);
     fig.classList.remove('dragging'); drag.active = false;
     if (raf) cancelAnimationFrame(raf);
+    if (scrollRaf) cancelAnimationFrame(scrollRaf);
+    try { if (frame.hasPointerCapture?.(e.pointerId)) frame.releasePointerCapture(e.pointerId); } catch { /* already released */ }
     if (!st.moved) { shift(''); return; }
     if (mode === 'resize') { resize(st2 => { const p = live(st2, sg); if (p) setFrame(p, { w: st.w }); }); return; }
     // A refused or cancelled drop puts the part back; a drop that moves it is redrawn in its new place.
@@ -135,4 +157,5 @@ export function startBlockDrag(e: ReactPointerEvent, sg: Seg, { s, frame, mode, 
     if (ev.type !== 'pointerup' || !dropPart(sg, target.page, target.x, target.y)) { shift(''); update(null, { save: false, layout: false }); }
   };
   frame.addEventListener('pointermove', move); frame.addEventListener('pointerup', end); frame.addEventListener('pointercancel', end);
+  window.addEventListener('keydown', onKey, true);
 }
