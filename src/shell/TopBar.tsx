@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils';
 import { useEditor, undo, redo, renameDocument } from '@/store/editor';
 import { StageNav } from './StageNav';
 import { useUndoShortcuts } from './useUndoShortcuts';
-import { createAndOpen, openImportPicker } from '@/features/home/actions';
+import { openImportPicker } from '@/features/home/actions';
+import { openTemplate } from '@/features/home/templates';
 
 function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name: 'doc' }>['stage']; ready: boolean }) {
   const title = useEditor(s => s.title);
@@ -59,7 +60,7 @@ export function TopBar({ route, ready }: { route: Route; ready: boolean }) {
           <a href="#/" className="flex items-center gap-2 text-xl"><Logo size={30} /><Wordmark /></a>
           <div className="flex-1" />
           <Button variant="outline" onClick={openImportPicker}>Import a file</Button>
-          <Button onClick={() => { void createAndOpen(); }}>New document</Button>
+          <Button onClick={() => { void openTemplate('blank'); }}>New document</Button>
         </>
       ) : <DocBar id={route.id} stage={route.stage} ready={ready} />}
     </header>
