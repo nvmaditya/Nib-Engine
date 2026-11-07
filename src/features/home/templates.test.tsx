@@ -71,6 +71,14 @@ test('two different templates pressed close together make one document each', as
   expect((await madeSince(before)).map(d => d.title).sort()).toEqual(['Journal page', 'Letter']);
 });
 
+test('each document a template makes has block ids of its own', async () => {
+  const before = await ids();
+  await openTemplate('assignment', NOW); await openTemplate('assignment', NOW);
+  const made = (await madeSince(before)).flatMap(d => d.doc.boxes.map(b => b.id));
+  expect(made).toHaveLength(4); expect(new Set(made).size).toBe(4);
+  expect(made.some(id => id.startsWith('tpl-'))).toBe(false); // (not the ids the cards’ pictures are drawn with)
+});
+
 test('once it has opened, New document makes another', async () => {
   const before = await ids();
   await openTemplate('blank'); await openTemplate('blank');

@@ -40,9 +40,15 @@ export function templateSettings(tpl: Template): Settings {
   return { ...cleanSettings(null, false), ...lookPatch(look, false), ...tpl.extra };
 }
 
-export function templateRecord(tpl: Template, now: Date = new Date()): { title: string; settings: Settings; doc: EngineDoc } {
+/**
+ * The template's document. Its blocks get new ids, as any new document's do, unless `idOf` names them (by their
+ * place): a card's picture is drawn from ids that stay the same, since the ids seed the handwriting's randomness
+ * and are part of what decides whether a kept picture can be shown.
+ */
+export function templateRecord(tpl: Template, now: Date = new Date(), idOf?: (i: number) => string): { title: string; settings: Settings; doc: EngineDoc } {
   const settings = templateSettings(tpl);
   const doc = newDocument(settings, tpl.text(now), tpl.header ? { name: '', class: '', date: today(now) } : null);
+  if (idOf) doc.boxes.forEach((b, i) => { b.id = idOf(i); });
   if (tpl.middle) doc.boxes[doc.boxes.length - 1].y = snapY(400, geomFor(settings));
   return { title: tpl.title, settings, doc };
 }
