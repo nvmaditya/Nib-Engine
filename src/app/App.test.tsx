@@ -32,7 +32,8 @@ const openId = () => { const r = parseHash(location.hash); return r.name === 'do
 test('a missing document goes home with a message', async () => {
   location.hash = '#/d/missing/write';
   render(<App />);
-  await waitFor(() => expect(location.hash).toBe('#/'));
+  // The app starts (the file's first, from cold), reads storage and goes Home: up to 1.2 s on a busy machine.
+  await waitFor(() => expect(location.hash).toBe('#/'), { timeout: 3500 });
   expect(await screen.findByText('That document isn’t on this device.')).toBeInTheDocument();
 });
 
@@ -61,7 +62,7 @@ test('a document renamed on Home opens with its new name and keeps it after an e
   expect(saved?.title).toBe('Essay');
   expect(saved?.settings.tip).toBe('gel');
   expect(await docName()).toHaveValue('Essay');
-});
+}, 20_000); // 17 clicks and keys across Home, Write and Style, each waited for well within a second: about 0.6 s alone, up to 5.5 s on a busy machine
 
 test('a document deleted on Home stays deleted when Back opens its address again', async () => {
   const user = userEvent.setup();
@@ -225,7 +226,7 @@ test('typing that adds a page, then Style before the pages are laid out again: n
     const go = (stage: string) => act(() => { location.hash = `#/d/${rec.id}/${stage}`; window.dispatchEvent(new HashChangeEvent('hashchange')); });
     location.hash = `#/d/${rec.id}/style`;
     render(<App />);
-    await screen.findAllByText('Page 2 of 2');
+    await screen.findAllByText('Page 2 of 2', undefined, { timeout: 6000 }); // a real hand read and laid out: up to 2.1 s on a busy machine
     go('write');
     act(() => { // a paragraph typed, and Style pressed within the pause typing waits for
       update(s => { s.doc.boxes[0].text += '\n' + paragraphs(1); }, { layout: 'soon', history: 'type:m' });
@@ -239,4 +240,4 @@ test('typing that adds a page, then Style before the pages are laid out again: n
     vi.unstubAllGlobals();
     delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
   }
-});
+}, 20_000); // a real hand's seven paragraphs laid out and shown in Style, Write and Style again: about 0.75 s alone, up to 5.2 s on a busy machine
