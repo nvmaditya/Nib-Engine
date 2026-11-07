@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { deleteDoc, duplicateDoc, listDocs, putDoc, type DocRecord } from '@/store/documents';
-import { closeDocument, toast, useEditor } from '@/store/editor';
+import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, putDoc, type DocRecord } from '@/store/documents';
+import { SAVE_NEWER, closeDocument, toast, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { createAndOpen, importIntoNewDoc, openImportPicker } from './actions';
 
@@ -65,7 +65,7 @@ export function HomePage() {
 
   const open = (d: DocRecord) => navigate({ name: 'doc', id: d.id, stage: 'write' });
   const change = async (fn: () => Promise<unknown>) => {
-    try { await fn(); } catch { toast(FAILED); }
+    try { await fn(); } catch (e) { toast(e instanceof NewerDocumentError ? SAVE_NEWER : FAILED); }
     await reload();
   };
   const doRename = async () => {

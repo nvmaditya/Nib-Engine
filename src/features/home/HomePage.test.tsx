@@ -1,11 +1,12 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Toaster, toast as sonner } from 'sonner';
-import { deleteDoc, duplicateDoc, listDocs, putDoc } from '@/store/documents';
+import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, putDoc } from '@/store/documents';
 import { HomePage } from './HomePage';
 
 const mem = vi.hoisted(() => ({ docs: [] as any[] }));
 vi.mock('@/store/documents', () => ({
+  NewerDocumentError: class NewerDocumentError extends Error {},
   listDocs: vi.fn(async () => [...mem.docs]),
   getDoc: vi.fn(async (id: string) => mem.docs.find(d => d.id === id)),
   createDoc: vi.fn(async (init: any = {}) => { const r = { id: 'new1', title: init.title ?? 'Untitled', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }; mem.docs.unshift(r); return r; }),
@@ -59,6 +60,17 @@ test('when the documents can’t be read, Home says so instead of “No document
   render(<HomePage />);
   expect(await screen.findByText('Nib can’t read your documents on this device right now.')).toBeInTheDocument();
   expect(screen.queryByText('No documents yet.')).toBeNull();
+});
+
+test('a rename of a document a newer version of Nib saved says to reload', async () => {
+  const user = userEvent.setup();
+  render(<><HomePage /><Toaster /></>);
+  vi.mocked(putDoc).mockRejectedValueOnce(new NewerDocumentError());
+  await user.click(await screen.findByRole('button', { name: 'More for A' }));
+  await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  const dlg = await screen.findByRole('dialog', { name: 'Rename document' });
+  await user.click(within(dlg).getByRole('button', { name: 'Rename' }));
+  expect(await screen.findByText('This document was saved by a newer version of Nib. Reload the page to keep editing.')).toBeInTheDocument();
 });
 
 test('a rename, duplicate or delete that fails says so and closes its dialog', async () => {
