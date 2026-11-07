@@ -19,7 +19,7 @@ const rec = (title: string, text: string): DocRecord => ({
 
 beforeEach(async () => {
   await flushSave();
-  vi.mocked(putDoc).mockReset().mockResolvedValue(undefined);
+  vi.mocked(putDoc).mockReset().mockResolvedValue(1);
   vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear();
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -152,7 +152,7 @@ test('saves that keep failing show one message for the run, and Not saved', asyn
   expect(sonner).toHaveBeenCalledTimes(1);
   expect(sonner).toHaveBeenCalledWith(SAVE_FAILED, { id: SAVE_FAILED });
 
-  vi.mocked(putDoc).mockResolvedValue(undefined); // the run ends with a save that works
+  vi.mocked(putDoc).mockResolvedValue(1); // the run ends with a save that works
   update(s => { s.doc.boxes[0].text = 'ok'; });
   await flushSave();
   expect(useEditor.getState().saving).toBe('saved');
@@ -177,7 +177,7 @@ test('the in-memory document is never written and says Not saved', async () => {
 
 const hang = () => {
   let reject!: (e: Error) => void;
-  const p = new Promise<void>((_, rj) => { reject = rj; });
+  const p = new Promise<number>((_, rj) => { reject = rj; });
   return { p, reject };
 };
 
@@ -188,6 +188,7 @@ test('a failed save’s retry is skipped once a newer save has started', async (
   vi.mocked(putDoc).mockImplementation(async r => {
     written.push(r.doc.boxes[0].text);
     if (++n === 1) return first.p;
+    return n;
   });
   open(docOf(box()));
   update(s => { s.doc.boxes[0].text = 'old'; });

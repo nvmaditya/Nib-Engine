@@ -103,6 +103,7 @@ let failing: string | null = null; // the document whose saves are failing; one 
 // is still `base` (the one this tab read), or the last write was this session's own (putDoc).
 let base = 0;
 let session = '';
+let written = -1; // the revision of this session's latest write: storage still holding it means this tab has it
 /** Each block's text as last written (or read): what a refused save loses is what differs from it. */
 let savedText = new Map<string, string>();
 /** Bumps each time a document is opened or read again, so an action made for the earlier copy does nothing. */
@@ -115,6 +116,7 @@ function adopt(rec: DocRecord, doc: EngineDoc): void {
   createdAt = rec.createdAt;
   base = rec.rev ?? 0;
   session = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  written = -1;
   savedText = textsOf(doc);
   opened++;
   followSeq++; // a look at storage started for the earlier copy is dropped
@@ -131,15 +133,17 @@ async function saveNow(): Promise<void> {
   const s = get();
   if (!stored(s.docId)) return;
   const id = s.docId;
-  const seq = ++saveSeq;
-  const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc, rev: base, savedBy: session };
+  const seq = ++saveSeq, at = opened, by = session;
+  const rec: DocRecord = { id, title: s.title, createdAt, updatedAt: Date.now(), settings: s.S, doc: s.doc, rev: base };
   const texts = textsOf(s.doc);
   try {
-    try { await putDoc(rec); } catch (e) {
+    let rev: number;
+    try { rev = await putDoc(rec, { session: by }); } catch (e) {
       if (refused(e) || seq !== saveSeq) throw e; // or a newer save has started and carries newer content: no retry
       forgetDb(); // the connection may have been closed under us: open a fresh one and try once more
-      await putDoc(rec);
+      rev = await putDoc(rec, { session: by });
     }
+    if (opened === at) written = rev;
     if (failing === id) failing = null;
     if (seq === saveSeq && get().docId === id) savedText = texts;
     if (seq === saveSeq && get().docId === id && !savePending) useEditor.setState({ saving: 'saved' });
@@ -169,7 +173,7 @@ async function follow(id: string, lost: boolean): Promise<void> {
   }
   if (n !== followSeq || get().docId !== id) return; // a later look is on its way, or the document was closed
   if (!rec) { leaveDeleted(); return; }
-  if ((rec.savedBy !== undefined && rec.savedBy === session) || (rec.rev ?? 0) === base) { // this tab has it already
+  if (rec.rev === written || (rec.rev ?? 0) === base) { // this tab has it already: its own write, or the copy it read
     if (followLost) { followLost = false; saveSoon(); }
     return;
   }

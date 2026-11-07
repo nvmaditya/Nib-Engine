@@ -29,7 +29,7 @@ test('the list follows documents another tab adds, renames, duplicates, saves an
     expect(await screen.findByText('Theirs, renamed')).toBeInTheDocument();
     await other.docs.duplicateDoc(mine.id);
     expect(await screen.findByText('Mine (copy)')).toBeInTheDocument();
-    await other.docs.putDoc({ ...(await other.docs.getDoc(mine.id))!, title: 'Mine, renamed in its tab', savedBy: 'their-tab' });
+    await other.docs.putDoc({ ...(await other.docs.getDoc(mine.id))!, title: 'Mine, renamed in its tab' }, { session: 'their-tab' });
     expect(await screen.findByText('Mine, renamed in its tab')).toBeInTheDocument();
     await other.docs.deleteDoc(theirs.id);
     await waitFor(() => expect(screen.queryByText('Theirs, renamed')).toBeNull());

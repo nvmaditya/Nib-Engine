@@ -11,9 +11,13 @@ export interface DocRecord {
   schema?: number;
   /** Bumps on every write (records without it are 0). A write is refused if storage moved on since its copy was read. */
   rev?: number;
-  /** The editing session that wrote it last: that session's next save isn't stopped by its own writes. */
-  savedBy?: string;
 }
+
+/**
+ * As stored: also the editing session that wrote it last, so that session's next save isn't stopped by its own
+ * writes. Reads never give it out: a copy read and written back can't pass for that session.
+ */
+type StoredDoc = DocRecord & { savedBy?: string };
 
 export const DOC_SCHEMA = 3;
 
@@ -37,9 +41,9 @@ export const newId = (): string => 'd' + Date.now().toString(36) + Math.floor(Ma
 const emptyDoc = (): EngineDoc => ({ pageCount: 1, boxes: [], fileName: '' });
 const revOf = (r: { rev?: unknown }): number => (typeof r.rev === 'number' && Number.isInteger(r.rev) && r.rev >= 0 ? r.rev : 0);
 
-function clean(rec: DocRecord): DocRecord {
+function clean({ savedBy: _, ...rec }: StoredDoc): DocRecord {
   return {
-    ...rec, rev: revOf(rec), savedBy: typeof rec.savedBy === 'string' ? rec.savedBy : undefined,
+    ...rec, rev: revOf(rec),
     settings: cleanSettings(rec.settings, false), doc: migrateDoc(cleanDoc(rec.doc) ?? emptyDoc(), rec.schema ?? 1),
   };
 }
@@ -89,12 +93,12 @@ export function onDocsChanged(fn: (c: DocChange) => void): () => void {
 // ---- Reading and writing ----
 
 export async function listDocs(): Promise<DocRecord[]> {
-  const all = (await (await getDb()).getAll('documents')) as DocRecord[];
+  const all = (await (await getDb()).getAll('documents')) as StoredDoc[];
   return all.map(clean).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getDoc(id: string): Promise<DocRecord | undefined> {
-  const rec = (await (await getDb()).get('documents', id)) as DocRecord | undefined;
+  const rec = (await (await getDb()).get('documents', id)) as StoredDoc | undefined;
   return rec && clean(rec);
 }
 
@@ -102,12 +106,12 @@ export async function getDoc(id: string): Promise<DocRecord | undefined> {
  * Change the stored copy of a document in one transaction. `change` gets the stored record and returns the one
  * to write (its revision is set here), or throws to write nothing. Resolves with the revision written.
  */
-async function rewrite(id: string, change: (stored: DocRecord) => DocRecord): Promise<number> {
+async function rewrite(id: string, change: (stored: StoredDoc) => StoredDoc): Promise<number> {
   const tx = (await getDb()).transaction('documents', 'readwrite');
   tx.done.catch(() => {}); // an abort is reported through the rejection below
   const store = tx.objectStore('documents');
-  const stored = (await store.get(id)) as DocRecord | undefined;
-  let next: DocRecord;
+  const stored = (await store.get(id)) as StoredDoc | undefined;
+  let next: StoredDoc;
   try {
     if (!stored) throw new MissingDocumentError();
     if ((stored.schema ?? 1) > DOC_SCHEMA) throw new NewerDocumentError();
@@ -123,18 +127,23 @@ async function rewrite(id: string, change: (stored: DocRecord) => DocRecord): Pr
 
 /**
  * Save `rec` over the stored document, only if storage hasn't moved on since `rec` was read: the stored revision is
- * still `rec.rev`, or the last write was this editing session's own (`rec.savedBy`). Otherwise nothing is written:
+ * still `rec.rev`, or the last write was this editing session's own. Otherwise nothing is written:
  * StaleDocumentError (another tab saved since), MissingDocumentError (it was deleted: a save never brings it back),
- * NewerDocumentError (a newer Nib wrote it).
+ * NewerDocumentError (a newer Nib wrote it). Resolves with the revision written.
+ *
+ * `session`: the editing session saving (only the editor's save gives one). It is given apart from the record, so a
+ * copy that was read and written back never counts as that session's own write.
  */
-export async function putDoc(rec: DocRecord): Promise<void> {
-  const copy = structuredClone(rec);
+export async function putDoc(rec: DocRecord, o: { session?: string } = {}): Promise<number> {
+  const { savedBy: _, ...copy } = structuredClone(rec as StoredDoc);
+  const { session } = o;
   const rev = await rewrite(rec.id, stored => {
-    const own = rec.savedBy !== undefined && stored.savedBy === rec.savedBy;
+    const own = session !== undefined && stored.savedBy === session;
     if (!own && revOf(stored) !== revOf(rec)) throw new StaleDocumentError();
-    return { ...copy, schema: DOC_SCHEMA };
+    return { ...copy, schema: DOC_SCHEMA, savedBy: session };
   });
-  announce({ type: 'saved', id: rec.id, rev, ...(rec.savedBy !== undefined && { by: rec.savedBy }) });
+  announce({ type: 'saved', id: rec.id, rev, ...(session !== undefined && { by: session }) });
+  return rev;
 }
 
 /**
