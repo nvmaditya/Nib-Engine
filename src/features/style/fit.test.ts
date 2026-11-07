@@ -178,6 +178,22 @@ test('…the first such block, in document order, and never the one Fit back is 
   open(d);
   expect(fitBack(1)).toBe(false);
   expect(lastToast()).toMatch(/ “Text block 3” has its own letter size, which Fit back leaves alone\.$/);
+  // Page by page: a block near the top of page 2 comes after one low on page 1.
+  const pages2 = longNote(40);
+  pages2.pageCount = 2;
+  pages2.boxes.unshift(box({ id: 'p2', name: 'Page 2 block', page: 1, y: 110, w: 300, text: 'on page 2', style: { size: 20 } }));
+  open(pages2);
+  expect(fitBack(1)).toBe(false);
+  expect(lastToast()).toMatch(/ “Margin note” has its own letter size, which Fit back leaves alone\.$/);
+  // On the same line, the one on the left comes first.
+  const line = longNote();
+  line.boxes.unshift(
+    box({ id: 'r', name: 'Right block', page: 0, y: 300, x: 440, w: 300, text: 'right', style: { size: 20 } }),
+    box({ id: 'l', name: 'Left block', page: 0, y: 300, x: 112, w: 300, text: 'left', style: { size: 20 } }),
+  );
+  open(line);
+  expect(fitBack(1)).toBe(false);
+  expect(lastToast()).toMatch(/ “Left block” has its own letter size, which Fit back leaves alone\.$/);
   open(longNote(40));
   styleBox('n'); // Only “Margin note”: its own letter size is the one Fit back would lower
   expect(fitBack(1)).toBe(false);
