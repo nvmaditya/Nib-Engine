@@ -132,8 +132,12 @@ function makeEngine(font, id) {
     return b;
   };
   // An alternate drawn inside a frame or circle (a stylistic set's squared or circled letters: W -> a boxed W)
-  // is about twice as tall as its letter, and is not a way to write it, whatever its width.
-  const enclosed = (a, base) => { const [, y0, , y1] = bounds(a), [, b0, , b1] = bounds(base); return y1 - y0 > (b1 - b0) * 1.4; };
+  // is both much taller than its letter (over 1.4 times) and much wider (over 1.3 times, in outline box and
+  // advance), and is not a way to write it. A script font's tall flourish that is no wider is kept.
+  const enclosed = (a, base) => {
+    const [x0, y0, x1, y1] = bounds(a), [bx0, b0, bx1, b1] = bounds(base);
+    return y1 - y0 > (b1 - b0) * 1.4 && x1 - x0 > (bx1 - bx0) * 1.3 && adv(a) > adv(base) * 1.3;
+  };
   const forms = gi => {
     let f = formsCache.get(gi);
     if (!f) {

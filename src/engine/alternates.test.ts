@@ -15,6 +15,7 @@ const GLYPHS: Record<number, { advanceWidth: number; cmds: Cmd[] }> = {
   2: { advanceWidth: 1430, cmds: box(1400, 1300) },
   3: { advanceWidth: 1020, cmds: box(930, 710) },
   4: { advanceWidth: 700, cmds: box(600, 500) },
+  5: { advanceWidth: 1010, cmds: box(700, 1100) }, // a script font's tall flourish: 1.57 times as tall, but no wider
 };
 const sub = (from: number, to: number) => ({ lookupType: 1, subtables: [{ substFormat: 2, coverage: { format: 1, glyphs: [from] }, substitute: [to] }] });
 const fake = {
@@ -22,13 +23,13 @@ const fake = {
   charToGlyphIndex: (c: string) => (c === 'W' ? 1 : c === 'w' ? 4 : 0),
   glyphs: { get: (i: number) => ({ advanceWidth: GLYPHS[i].advanceWidth, getPath: () => ({ commands: GLYPHS[i].cmds }) }) },
   tables: { gsub: {
-    lookups: [sub(1, 2), sub(1, 3)],
-    features: [{ tag: 'ss06', feature: { lookupListIndexes: [0] } }, { tag: 'salt', feature: { lookupListIndexes: [1] } }],
+    lookups: [sub(1, 2), sub(1, 3), sub(1, 5)],
+    features: [{ tag: 'ss06', feature: { lookupListIndexes: [0] } }, { tag: 'salt', feature: { lookupListIndexes: [1] } }, { tag: 'ss01', feature: { lookupListIndexes: [2] } }],
   } },
 };
 vi.mock('opentype.js', () => ({ default: { parse: () => fake } }));
 
-test('a squared or circled form is not another way to write the letter; a plain alternate is', () => {
+test('a squared or circled form is not another way to write the letter; a plain or a tall-but-narrow alternate is', () => {
   const e = engineFor({ id: 'up-fake', name: 'Fake', family: 'Fake', weight: 400, scale: 1, group: 'mine', buf: new ArrayBuffer(8) }) as { forms(g: number): number[] };
-  expect(e.forms(1)).toEqual([1, 3]);
+  expect(e.forms(1)).toEqual([1, 3, 5]);
 });
