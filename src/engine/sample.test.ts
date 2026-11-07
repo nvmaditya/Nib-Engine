@@ -48,6 +48,16 @@ test('drawing a sample leaves the document as the engine had it', () => {
   expect(framesOf(doc.boxes[0]).map(segSig)).toEqual(before);
   expect(frameRange(doc.boxes[0], 1)[0]).toBe(lines(28).length + 1);
 });
+test('the large scratch canvas a sample is drawn on is let go at once', () => {
+  const made: HTMLCanvasElement[] = [], create = document.createElement.bind(document);
+  vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => { const el = create(tag); if (tag === 'canvas') made.push(el as HTMLCanvasElement); return el; }) as typeof document.createElement);
+  const c = create('canvas');
+  drawSample(c, S, 'Homework', 60);
+  vi.restoreAllMocks();
+  expect(made).toHaveLength(1);
+  expect([made[0].width, made[0].height]).toEqual([0, 0]);
+  expect(c.height).toBe(60);
+});
 test('nothing to write draws nothing', () => expect(drawSample(canvas(), S, '   ', 60)).toBeNull());
 test('a first line that isn’t words draws nothing, and leaves the document as it was', () => {
   const doc = { ...docOf(box({ id: 'm', text: lines(40) })), fileName: 'Notes' }; use(S, doc); const before = computeLayout().segs.map(segSig);
