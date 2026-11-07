@@ -6,7 +6,7 @@ export function matches(query: string): boolean {
 }
 
 /** The `wide:` breakpoint (app.css `--breakpoint-wide`, 860 px). */
-const WIDE = '(min-width: 53.75rem)';
+export const WIDE = '(min-width: 53.75rem)';
 
 function onWideChange(fn: () => void): () => void {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};

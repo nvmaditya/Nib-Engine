@@ -1,6 +1,8 @@
 import { navigate } from '@/app/route';
 import { createDoc, type DocRecord } from '@/store/documents';
-import { openDocument, toast, update } from '@/store/editor';
+import { openImport } from '@/features/doc/actions';
+import { IMPORT_ACCEPT } from '@/features/import/options';
+import { openDocument, toast } from '@/store/editor';
 
 async function open(rec: DocRecord): Promise<void> {
   openDocument(rec);
@@ -37,18 +39,12 @@ export function createAndOpen(init: NewDocument = {}): Promise<boolean> {
   return made;
 }
 
-/** A new document, opened on Write, with the import dialog already showing this file. */
-export async function importIntoNewDoc(file: File): Promise<void> {
-  const rec = await create();
-  if (!rec) return;
-  await open(rec);
-  update(s => { s.importOpen = true; s.importFile = file; }, { save: false, layout: false });
-}
-
+/** The file picker, then Import with the chosen file. (Nothing is made until the dialog's Write it out.) */
 export function openImportPicker(): void {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.pdf,.docx,.txt,.md,application/pdf,text/plain';
-  input.onchange = () => { const f = input.files?.[0]; if (f) void importIntoNewDoc(f); };
+  input.accept = IMPORT_ACCEPT;
+  input.onchange = () => { const f = input.files?.[0]; if (f) openImport(f); };
   input.click();
 }
+

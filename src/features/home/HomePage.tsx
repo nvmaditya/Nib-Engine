@@ -6,13 +6,19 @@ import { loadUploadedFonts } from '@/features/style/fonts';
 import { listDocs, onDocsChanged, type DocRecord } from '@/store/documents';
 import { closeDocument, useEditor } from '@/store/editor';
 import { cn } from '@/lib/utils';
-import { createAndOpen, importIntoNewDoc, openImportPicker } from './actions';
+import { closeImport, openImport } from '@/features/doc/actions';
+import { ImportDialog } from '@/features/import/ImportDialog';
+import { openImportPicker } from './actions';
 import { RecentList } from './RecentList';
+import { TemplateGrid } from './TemplateGrid';
+import { openTemplate } from './templates';
 
 export function HomePage() {
   const [docs, setDocs] = useState<DocRecord[] | 'unreadable' | null>(null);
   const [over, setOver] = useState(false);
   const memory = useEditor(s => s.docId === MEMORY_ID);
+  const importOpen = useEditor(s => s.importOpen);
+  const importFile = useEditor(s => s.importFile);
   const memTitle = useEditor(s => s.title);
   const memDoc = useEditor(s => s.doc);
   const memS = useEditor(s => s.S);
@@ -59,18 +65,20 @@ export function HomePage() {
     ? [{ id: MEMORY_ID, title: memTitle, createdAt: 0, updatedAt: Date.now(), settings: memS, doc: memDoc }]
     : docs;
 
-  // A file dropped anywhere on Home starts a new document with the import dialog open.
+  // A file dropped anywhere on Home opens Import with it (nothing is made until Write it out). While the dialog is
+  // open it has its own drop zone: entering and leaving do nothing then.
   const depth = useRef(0);
   useEffect(() => {
     const hasFile = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-    const enter = (e: DragEvent) => { if (hasFile(e)) { depth.current++; setOver(true); } };
-    const leave = (e: DragEvent) => { if (hasFile(e) && --depth.current <= 0) { depth.current = 0; setOver(false); } };
+    const dialogOpen = () => useEditor.getState().importOpen;
+    const enter = (e: DragEvent) => { if (hasFile(e) && !dialogOpen()) { depth.current++; setOver(true); } };
+    const leave = (e: DragEvent) => { if (hasFile(e) && !dialogOpen() && --depth.current <= 0) { depth.current = 0; setOver(false); } };
     const dover = (e: DragEvent) => { if (hasFile(e)) e.preventDefault(); };
     const drop = (e: DragEvent) => {
       if (!hasFile(e)) return;
       e.preventDefault(); depth.current = 0; setOver(false);
       const f = e.dataTransfer?.files[0];
-      if (f) void importIntoNewDoc(f);
+      if (f) openImport(f);
     };
     window.addEventListener('dragenter', enter); window.addEventListener('dragleave', leave);
     window.addEventListener('dragover', dover); window.addEventListener('drop', drop);
@@ -87,9 +95,12 @@ export function HomePage() {
             over ? 'border-primary bg-primary-soft' : 'border-line-strong bg-surface hover:bg-surface-2')}
         >
           <FileUp className="mb-1 size-6 text-primary" aria-hidden />
-          <span className="font-semibold">Import a PDF, Word or text file</span>
-          <span className="text-sm text-muted">or drop it anywhere</span>
+          <span className="text-lg font-semibold">Import a PDF, Word or text file</span>
+          <span className="text-muted">or drop it anywhere</span>
+          <span className="text-[13px] text-muted">Headings, lists, bold, underline and crossed-out words come across.</span>
         </button>
+
+        <TemplateGrid />
 
         <section aria-labelledby="recent-h">
           <h2 id="recent-h" className="mb-3 text-sm font-semibold text-muted">Recent</h2>
@@ -98,7 +109,7 @@ export function HomePage() {
           ) : shown.length === 0 ? (
             <div className="flex flex-col items-start gap-3 rounded-xl border border-line bg-surface p-6">
               <p className="text-muted">No documents yet.</p>
-              <Button onClick={() => { void createAndOpen(); }}>New document</Button>
+              <Button onClick={() => { void openTemplate('blank'); }}>New document</Button>
             </div>
           ) : (
             <RecentList docs={shown} readOnly={memory} onChange={reload} />
@@ -108,6 +119,12 @@ export function HomePage() {
         <p className="text-sm text-muted">Everything is saved on this device. Nothing is uploaded.</p>
       </div>
 
+      <ImportDialog open={importOpen} file={importFile} target="new" onClose={closeImport} />
+      {over && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-[3px] border-dashed border-primary bg-primary/10 text-lg font-semibold text-fg">
+          Drop to import this document
+        </div>
+      )}
     </main>
   );
 }
