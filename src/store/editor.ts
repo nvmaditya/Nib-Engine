@@ -253,8 +253,13 @@ export function renameDocument(title: string): void {
   update(s => { s.title = t; }, { history: 'rename', layout: false });
 }
 
-export function toast(msg: string, action?: ToastAction): void {
-  sonnerToast(msg, action ? { action: { label: action.label, onClick: action.fn } } : undefined);
+/** A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. */
+export function toast(msg: string, action?: ToastAction, o: { duration?: number } = {}): void {
+  if (!action && o.duration === undefined) { sonnerToast(msg, undefined); return; }
+  sonnerToast(msg, {
+    ...(action && { action: { label: action.label, onClick: action.fn } }),
+    ...(o.duration !== undefined && { duration: o.duration }),
+  });
 }
 
 /** A message's action that only runs while the document it was made in is still open. */
