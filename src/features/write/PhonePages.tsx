@@ -70,7 +70,7 @@ export function PhonePages({ layout }: { layout: PageLayout | null }) {
   useLayoutEffect(() => {
     const el = mainRef.current;
     if (!el) return;
-    const measure = () => setWidth(el.clientWidth);
+    const measure = () => { const w = el.clientWidth; if (w > 0) setWidth(w); }; // 0: the stage is hidden, so keep the last width
     measure();
     if (typeof ResizeObserver !== 'function') return;
     const ro = new ResizeObserver(measure);
@@ -102,7 +102,7 @@ export function PhonePages({ layout }: { layout: PageLayout | null }) {
   // A sideways swipe on the page: left for the next page, right for the one before.
   const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
   const onPointerDown = (e: PointerEvent) => {
-    if (!e.isPrimary) { swipe.current = null; return; } // a second finger: a pinch, not a swipe
+    if (!e.isPrimary || e.pointerType === 'mouse') { swipe.current = null; return; } // a second finger is a pinch, a mouse drags: not a swipe
     const t = e.target as Element;
     swipe.current = drag.active || t.closest(NO_SWIPE) ? null : { id: e.pointerId, x: e.clientX, y: e.clientY };
   };
@@ -135,7 +135,7 @@ export function PhonePages({ layout }: { layout: PageLayout | null }) {
                   <Button variant="ghost" size="icon" aria-label="Next page" title="Next page" disabled={cur >= pages - 1} onClick={() => go(cur + 1)}>
                     <ChevronRight />
                   </Button>
-                  <PageMenu page={cur} pages={pages} />
+                  <PageMenu page={cur} pages={pages} onMoved={setWant} />
                 </div>
                 <div className="ml-auto">
                   <Segmented label="Show">
@@ -145,7 +145,7 @@ export function PhonePages({ layout }: { layout: PageLayout | null }) {
                 </div>
               </div>
               <div data-phone-page className="flex touch-pan-y touch-pinch-zoom justify-center"
-                onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}>
+                onPointerDownCapture={onPointerDown} onPointerUpCapture={onPointerUp} onPointerCancelCapture={onPointerCancel}>
                 {face === 'typed'
                   ? <TypedPage page={cur} segs={layout.segs} s={cssW / PAGE_W} />
                   : <HandSheet i={cur} pages={pages} segs={layout.segs.filter(sg => sg.page === cur)} allSegs={layout.segs}

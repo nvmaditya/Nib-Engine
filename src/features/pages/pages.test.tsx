@@ -10,7 +10,7 @@ import { layoutFor } from '@/features/doc/model';
 import { flushSave, update } from '@/store/editor';
 import { box, docOf, get, lastToast, layoutOf, lines, open, words } from '@/test/docs';
 import { PageView, type PageLayout } from './PageView';
-import { dropPart, nudge, wordClick } from './drag';
+import { drag, dropPart, nudge, wordClick } from './drag';
 
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
@@ -168,6 +168,45 @@ test('the sheet a part is dragged from stays drawn when the drag carries it far 
   expect(inkCanvases(sheet(1))).toHaveLength(0);
   fireEvent.pointerUp(f, { clientX: 300, clientY: 260, pointerId: 1 });
   expect(inkCanvases(sheet(0))).toHaveLength(0);
+});
+
+test('Escape during a block drag puts the part back, keeps it selected, and drops nothing', () => {
+  open(docOf(box({ id: 'w', name: 'Notes', text: words(30) })));
+  pages();
+  const f = frame('w:0'), y0 = get().doc.boxes[0].y;
+  fireEvent.pointerDown(f, { clientX: 300, clientY: 140, button: 0, pointerId: 1 });
+  fireEvent.pointerMove(f, { clientX: 300, clientY: 290, pointerId: 1 });
+  expect(f.style.transform).not.toBe('');
+  const ok = fireEvent.keyDown(f, { key: 'Escape' });
+  expect(ok).toBe(false); // default prevented
+  expect(f.style.transform).toBe('');
+  expect(drag.active).toBe(false);
+  expect(get().selectedId).toBe('w'); // Escape ended the drag; it didn't also deselect
+  fireEvent.pointerMove(f, { clientX: 300, clientY: 400, pointerId: 1 });
+  fireEvent.pointerUp(f, { clientX: 300, clientY: 400, pointerId: 1 });
+  expect(get().doc.boxes[0].y).toBe(y0);
+  expect(get().canUndo).toBe(false);
+});
+
+test('a block drag held near the bottom edge keeps scrolling without pointer moves', () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  open(docOf(m()));
+  pages();
+  const scroller = document.querySelector<HTMLElement>('[data-pages]')!;
+  scroller.style.overflowY = 'auto';
+  Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 5000 });
+  Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 600 });
+  scroller.getBoundingClientRect = () => ({ top: 0, bottom: 600, left: 0, right: 1000, width: 1000, height: 600, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+  const f = frame('m:0');
+  fireEvent.pointerDown(f, { clientX: 300, clientY: 200, button: 0, pointerId: 1 });
+  fireEvent.pointerMove(f, { clientX: 300, clientY: 590, pointerId: 1 });
+  const after1 = scroller.scrollTop;
+  expect(after1).toBeGreaterThan(0);
+  for (let k = 0; k < 4; k++) { const run = frames.splice(0); act(() => run.forEach(cb => cb(0))); }
+  expect(scroller.scrollTop).toBeGreaterThan(after1 + 14); // more than one step, with the pointer still
+  fireEvent.pointerUp(f, { clientX: 300, clientY: 590, pointerId: 1 });
 });
 
 test('a continuation dropped on another page stays and says why', () => {

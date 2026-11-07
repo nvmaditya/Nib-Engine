@@ -1,6 +1,6 @@
 // Write on a phone: one page at a time, a Typed ⇄ Handwritten flip, swipes between pages, and a caret
 // request that takes you to its page. Also the top bar's single 860 px breakpoint.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { cleanSettings } from '@/engine/doc.js';
@@ -153,6 +153,52 @@ test('a caret request turns the handwritten page over to the typed one', async (
   // once handled, it doesn't pull you back
   await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
   expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+});
+
+test('while the stage is hidden (width 0) the page and its editor stay mounted', async () => {
+  let width = 390, resize: (() => void) | null = null;
+  vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { resize = cb; } observe() {} disconnect() {} });
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => width });
+  cleanup();
+  render(<App />);
+  await screen.findByText('Page 1 of 2');
+  try {
+    width = 0;
+    act(() => resize?.());
+    expect(screen.getByRole('textbox', { name: 'Main text, page 1' })).toBeInTheDocument();
+    expect(screen.queryByText('Loading handwriting…')).toBeNull();
+  } finally {
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 390 });
+    vi.unstubAllGlobals();
+  }
+});
+
+test('a swipe that starts on the handwritten writing turns the page', async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Handwritten' }));
+  const frame = await waitFor(() => { const f = document.querySelector('.block-frame'); expect(f).not.toBeNull(); return f!; });
+  swipe(frame, -160, 0);
+  expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
+});
+
+test('a mouse drag does not turn the page', () => {
+  const at = (x: number) => ({ pointerId: 3, pointerType: 'mouse', isPrimary: true, button: 0, clientX: x, clientY: 300 });
+  fireEvent.pointerDown(pageArea(), at(250));
+  fireEvent.pointerUp(pageArea(), at(50));
+  expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+});
+
+test('Move down in the page menu keeps the pager on the moved page', async () => {
+  cleanup();
+  const S = cleanSettings(null, false);
+  const two = { ...docOf(box({ id: 'a', name: 'First', text: 'one' }), box({ id: 'b', name: 'Second', text: 'two', page: 1 })), pageCount: 2 };
+  const id = (await createDoc({ title: 'U', settings: S, doc: two })).id;
+  location.hash = `#/d/${id}/write`;
+  render(<App />);
+  await screen.findByText('Page 1 of 2');
+  await userEvent.click(screen.getByRole('button', { name: 'Options for page 1' }));
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Move down' }));
+  expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'First, page 2' })).toBeInTheDocument();
 });
 
 test('the top bar uses the 860 px breakpoint', () => {

@@ -57,7 +57,7 @@ function WidePages({ layout }: { layout: PageLayout | null }) {
   useLayoutEffect(() => {
     const el = pagesRef.current;
     if (!el) return;
-    const measure = () => setWidth(el.clientWidth);
+    const measure = () => { const w = el.clientWidth; if (w > 0) setWidth(w); }; // 0: the stage is hidden, so keep the last width
     measure();
     if (typeof ResizeObserver !== 'function') return;
     const ro = new ResizeObserver(measure);

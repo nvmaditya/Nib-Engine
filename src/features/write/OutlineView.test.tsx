@@ -72,6 +72,23 @@ test('the page list shows each page’s blocks', async () => {
   expect(within(list).getByRole('button', { name: 'Options for page 2' })).toBeInTheDocument();
 });
 
+test('an item is described by its snippet, so the name keeps the snippet', async () => {
+  await outline(docOf(m(), n()));
+  const it = itemFor('Main text', 0);
+  expect(it).toHaveAccessibleDescription(/^line1 line2 line3/);
+});
+
+test('the ⋯ on a handwritten tag is white on the colour, as on the typed tag', async () => {
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1200 });
+  try {
+    await outline(docOf(m(), n()));
+    await waitFor(() => expect(document.querySelector('.block-frame .tag-menu button')).not.toBeNull());
+    expect(document.querySelector('.block-frame .tag-menu button')!.className).toMatch(/text-white/);
+  } finally {
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  }
+});
+
 test('selecting a block opens it with its page-break line', async () => {
   await outline(docOf(m(), n()));
   act(() => select('n'));
