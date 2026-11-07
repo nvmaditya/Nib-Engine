@@ -130,6 +130,19 @@ test('on a phone, the sheet doesn’t keep Escape from leaving the block', async
   expect(get().selectedId).toBeNull();
 });
 
+test('on a phone, Tab goes on out of the sheet, both ways', async () => {
+  phone();
+  await openApp('style');
+  const sheet = await screen.findByRole('dialog', { name: 'Style' });
+  const controls = [...sheet.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]')];
+  controls[controls.length - 1].focus();
+  await userEvent.tab();
+  expect(sheet).not.toContainElement(document.activeElement as HTMLElement);
+  screen.getByRole('button', { name: 'Drag to show more or less of Style' }).focus();
+  await userEvent.tab({ shift: true });
+  expect(sheet).not.toContainElement(document.activeElement as HTMLElement);
+});
+
 test('on a wide screen, the panel sits beside the pages', async () => {
   await openApp('style');
   expect(await screen.findByRole('region', { name: 'Style' })).toBeInTheDocument();

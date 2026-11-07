@@ -37,7 +37,11 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
       )}
       {...props}
     >
-      {children}
+      {modal ? children : (
+        // Radix's dialog content loops Tab inside itself even when it isn't modal. A sheet that stays
+        // open beside the page lets Tab go on to the rest of the page, both ways.
+        <div className="contents" onKeyDown={e => { if (e.key === 'Tab') e.stopPropagation(); }}>{children}</div>
+      )}
     </DrawerPrimitive.Content>
   );
 }

@@ -49,6 +49,18 @@ function usePageLayout(): PageLayout | null {
   }, [layoutTick, fontTick, ready]);
 }
 
+/**
+ * Whether something other than the page has Escape: an editor or a field with the focus, or an open
+ * dialog or menu (not one left in a hidden stage, nor a sheet that stays open beside the page, such as
+ * Style's on phones, which says aria-modal="false").
+ */
+function escapeTaken(): boolean {
+  const el = document.activeElement;
+  if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.closest('[contenteditable="true"]'))) return true;
+  const open = document.querySelectorAll('[role="dialog"]:not([aria-modal="false"]), [role="alertdialog"], [role="menu"], [role="listbox"]');
+  return [...open].some(m => !m.closest('[data-stage][hidden]'));
+}
+
 /** A file dropped anywhere on the document opens the import dialog with it. */
 function useDropToImport(): boolean {
   const [veil, setVeil] = useState(false);
@@ -83,20 +95,21 @@ export function DocumentView({ stage }: { stage: Stage }) {
 
   useEffect(() => { if (stage === 'write' || stage === 'outline') setWriteView(stage); }, [stage]);
 
-  // Escape leaves the selected block (unless an editor, a field or a dialog has the key).
+  // Escape leaves the selected block, unless an editor, a field, a dialog or a menu has the key. Who has
+  // it is settled as the key goes down (on the window, before a Radix dialog closes itself in its own
+  // listener on the document), and the block is left only if the key then comes back up to the
+  // document (a drag that cancels on Escape stops it on the way).
   useEffect(() => {
+    const taken = new WeakSet<Event>();
+    const claim = (e: KeyboardEvent) => { if (e.key === 'Escape' && escapeTaken()) taken.add(e); };
     const onKey = (e: KeyboardEvent) => {
-      const s = useEditor.getState(), el = document.activeElement;
-      if (e.key !== 'Escape' || !s.selectedId || s.importOpen) return;
-      if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.closest('[contenteditable="true"]'))) return;
-      // An open dialog or menu takes it, but not one left in a hidden stage, nor a sheet that stays
-      // open beside the page (Style's on phones, aria-modal="false").
-      const open = document.querySelectorAll('[role="dialog"]:not([aria-modal="false"]), [role="alertdialog"], [role="menu"], [role="listbox"]');
-      if ([...open].some(m => !m.closest('[data-stage][hidden]'))) return;
+      const s = useEditor.getState();
+      if (e.key !== 'Escape' || !s.selectedId || s.importOpen || taken.has(e)) return;
       select(null);
     };
+    window.addEventListener('keydown', claim, true);
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', claim, true); document.removeEventListener('keydown', onKey); };
   }, []);
 
   return (

@@ -135,6 +135,28 @@ test('Escape in a rich-text editor doesn’t leave the block', async () => {
   expect(useEditor.getState().selectedId).toBeNull();
 });
 
+test('Escape that closes a dialog doesn’t also leave the block', async () => {
+  location.hash = `#/d/${id}/write`;
+  render(<App />);
+  await screen.findByRole('textbox', { name: 'Main text, page 1' });
+  act(() => select('b1'));
+  // Like Radix's: the dialog goes in a capture listener on the document, before the key reaches the page.
+  const dialog = document.createElement('div');
+  dialog.setAttribute('role', 'dialog');
+  document.body.append(dialog);
+  const close = (e: KeyboardEvent) => { if (e.key === 'Escape') dialog.remove(); };
+  document.addEventListener('keydown', close, true);
+  try {
+    await userEvent.keyboard('{Escape}');
+    expect(dialog.isConnected).toBe(false);
+    expect(useEditor.getState().selectedId).toBe('b1');
+  } finally {
+    document.removeEventListener('keydown', close, true);
+  }
+  await userEvent.keyboard('{Escape}');
+  expect(useEditor.getState().selectedId).toBeNull();
+});
+
 test('a menu left in a hidden stage doesn’t keep Escape from leaving the block', async () => {
   location.hash = `#/d/${id}/style`;
   render(<App />);
