@@ -37,9 +37,13 @@ export function matchLook(V: Settings, S: Settings, looks: SavedLook[], blockSco
 
 export const pickLook = (look: SavedLook): void => setV(lookPatch(look, !!scopeBox()), step('look'));
 
-/** The handwriting keys as the panel shows them, and the document's paper: what saving a look keeps. */
+/**
+ * The handwriting keys as the panel shows them, and the document's paper: what saving a look keeps.
+ * Not the As drawn pen, which isn't offered: a look made from such a document leaves the pen alone.
+ */
 export function currentLookValues(): Partial<Settings> {
   const V = view() as unknown as Record<string, unknown>;
   const v = Object.fromEntries(BOX_KEYS.map(k => [k, V[k]])) as Partial<Settings>;
+  if (v.tip === 'font') delete v.tip;
   return { ...v, paper: useEditor.getState().S.paper };
 }

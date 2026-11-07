@@ -12,10 +12,14 @@ export const useStylePrefs = create<StylePrefs>(() => ({ looks: [], favourites: 
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** A look keeps the handwriting keys (cleaned) and the paper, nothing else. */
+/**
+ * A look keeps the handwriting keys (cleaned) and the paper, nothing else. Not the As drawn pen: it is
+ * kept only for documents that already draw with it, and isn't offered, so a look doesn't hand it on.
+ */
 function cleanLookValues(v: unknown): Partial<Settings> {
   const src = isObj(v) ? v : {};
   const out: Partial<Settings> = cleanStyle(Object.fromEntries(BOX_KEYS.filter(k => k in src).map(k => [k, src[k]])));
+  if (out.tip === 'font') delete out.tip;
   if (typeof src.paper === 'string' && Object.prototype.hasOwnProperty.call(PAPERS, src.paper)) out.paper = src.paper;
   return out;
 }

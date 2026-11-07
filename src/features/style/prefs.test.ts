@@ -19,6 +19,12 @@ beforeEach(async () => {
 });
 
 test('a saved look is kept on the device and read back', async () => { const L = await addSavedLook('  Neat blue  ', { font: 'caveat', tip: 'gel', paper: 'grid', mess: 20, gap: 40 }); expect(L).toMatchObject({ name: 'Neat blue', v: { font: 'caveat', tip: 'gel', paper: 'grid', mess: 20 } }); expect(L.v).not.toHaveProperty('gap'); useStylePrefs.setState({ looks: [] }); await loadStylePrefs(); expect(useStylePrefs.getState().looks).toEqual([L]); });
+test('a look never holds the As drawn pen, saved or stored', async () => {
+  expect((await addSavedLook('A', { tip: 'font', ink: 'red' })).v).toEqual({ ink: 'red' });
+  await setPref('looks', [{ id: 'look-b', name: 'B', v: { tip: 'font', ink: 'black' } }]);
+  await loadStylePrefs();
+  expect(useStylePrefs.getState().looks[0].v).toEqual({ ink: 'black' });
+});
 test('an unnamed look is My look; names are at most 40 characters', async () => { expect((await addSavedLook('  ', {})).name).toBe('My look'); expect((await addSavedLook('x'.repeat(50), {})).name).toBe('x'.repeat(40)); });
 test('a look that can’t be saved is not kept', async () => { vi.mocked(setPref).mockRejectedValueOnce(new Error('quota')); await expect(addSavedLook('A', {})).rejects.toThrow(); expect(useStylePrefs.getState().looks).toEqual([]); });
 test('a removed look goes back where it was', async () => { const [a, b, c] = [await addSavedLook('A', {}), await addSavedLook('B', {}), await addSavedLook('C', {})]; const r = (await removeSavedLook(b.id))!; expect(r.index).toBe(1); await putBackSavedLook(r.look, r.index); expect(useStylePrefs.getState().looks.map(l => l.id)).toEqual([a.id, b.id, c.id]); });
