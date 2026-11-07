@@ -73,7 +73,7 @@ export const PAPERS = {
   plain:  { name:'Plain',      bg:[249,249,246], holes:true },
   photo:  { name:'Photo',      bg:[201,198,203], photo:true }, // a real sheet photographed on a cloth
 };
-export const DEFAULTS = { font:'labelle', ink:'blue', customInk:'#5a2d82', tip:'ball', weight:100, size:30, gap:34, mess:45, wobble:30, variety:60, flow:55, track:0, words:0, mistakes:0, paper:'ruled', holes:false, lighting:true, ghost:true, crease:false, look:'none', tilt:true, seed:7 };
+export const DEFAULTS = { font:'labelle', ink:'blue', customInk:'#5a2d82', tip:'ball', weight:100, size:30, gap:34, mess:45, wobble:30, variety:60, flow:55, track:0, words:0, mistakes:0, paper:'ruled', holes:false, lighting:true, ghost:true, crease:false, look:'none', tilt:false, seed:7 };
 export const LIMITS = { size:[18,44], gap:[24,48], mess:[0,100], wobble:[0,100], variety:[0,100], flow:[0,100], weight:[50,160], track:[-3,8], words:[-50,150], mistakes:[0,100] };
 export const TOGGLES = ['lighting', 'ghost', 'crease', 'holes', 'tilt'];
 export const KEY = 'longhand.v2', OLD_KEY = 'longhand.v1';
