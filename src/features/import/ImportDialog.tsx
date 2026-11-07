@@ -4,13 +4,14 @@
 // crossing 860 px never remounts the preview or loses an edit.
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { FileUp, Loader2 } from 'lucide-react';
+import { toast as sonner } from 'sonner';
 import { cleanSettings } from '@/engine/doc.js';
 import { importError, readDocument } from '@/engine/importers.js';
 import type { ReadResult } from '@/engine/types';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { useEditor } from '@/store/editor';
+import { placeCaret, useEditor } from '@/store/editor';
 import { importAsNewDocument, importIntoOpenDocument, type ImportRequest } from './apply';
 import { ImportOptions } from './ImportOptions';
 import { ImportPreview, type PreviewHandle } from './ImportPreview';
@@ -58,6 +59,13 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
   const content = useRef<HTMLDivElement>(null);
   const preview = useRef<PreviewHandle>(null);
   const reading = useRef(0); // only the last file read wins
+  // What had the focus when it opened (the Write bar's Import, say): it gets it back on closing. The dialog is
+  // opened from the store, not by a Radix trigger, so Radix itself has nothing to give it back to.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+
+  // An earlier import's message would sit over the footer (on phones, over Write it out): put away each one
+  // showing, by its own id (dismissing them all at once can swallow a new message that reuses an id).
+  useEffect(() => { for (const t of sonner.getToasts?.() ?? []) sonner.dismiss(t.id); }, []);
 
   async function readFile(f: File): Promise<void> {
     const seq = ++reading.current;
@@ -105,7 +113,14 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
       // A header belongs at the top of page 1: never with Add after (its choice is hidden then, but kept).
       place: { where: options.where, look: lookById(options.look), header: target === 'new' || options.where === 'replace' ? options.header : null },
     };
-    if (target === 'open') { importIntoOpenDocument(req); onClose(); return; }
+    if (target === 'open') {
+      importIntoOpenDocument(req);
+      // The caret goes where the imported text starts (the block it went into ends with it), ready to write on.
+      const s = get(), b = s.doc.boxes.find(x => x.id === s.selectedId);
+      if (b) placeCaret(b.id, b.text.endsWith(req.text) ? b.text.length - req.text.length : 0);
+      onClose();
+      return;
+    }
     setBusy(true);
     const ok = await importAsNewDocument(req);
     setBusy(false);
@@ -133,6 +148,12 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
     <DialogContent ref={content} tabIndex={-1}
       // Opening never puts the focus in the editor, so a phone's keyboard doesn't come up over the text at once.
       onOpenAutoFocus={e => { e.preventDefault(); content.current?.focus(); }}
+      // Closing gives the focus back to what opened it, unless the caret went into the document (Write it out).
+      onCloseAutoFocus={e => {
+        e.preventDefault();
+        if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[contenteditable="true"]')) return;
+        if (opener?.isConnected) opener.focus();
+      }}
       onKeyDown={keepUndo}
       onDragOver={e => { e.preventDefault(); setOver(true); }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}

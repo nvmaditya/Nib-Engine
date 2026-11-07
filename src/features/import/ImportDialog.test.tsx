@@ -11,6 +11,7 @@ import type { ReadResult } from '@/engine/types';
 import { closeImport, openImport, setV } from '@/features/doc/actions';
 import { today } from '@/features/doc/model';
 import { BlockEditor } from '@/features/editor/BlockEditor';
+import { offsetAt } from '@/features/editor/positions';
 import { useUndoShortcuts } from '@/shell/useUndoShortcuts';
 import { createDoc, listDocs } from '@/store/documents';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
@@ -18,7 +19,7 @@ import { box, docOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
 import { ImportDialog } from './ImportDialog';
 
 vi.mock('@/engine/importers.js', async orig => ({ ...(await orig<typeof import('@/engine/importers.js')>()), readDocument: vi.fn() }));
-vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn(), getToasts: vi.fn(() => []) }), Toaster: () => null }));
 vi.mock('@/store/documents', async orig => {
   const actual = await orig<typeof import('@/store/documents')>();
   return { ...actual, createDoc: vi.fn(actual.createDoc) };
@@ -45,7 +46,7 @@ const dialog = () => screen.findByRole('dialog', { name: 'Import a document' }),
 const ready = () => screen.findByText('Essay.docx: 24 words.');
 
 beforeEach(async () => {
-  await flushSave(); vi.mocked(sonner).mockClear(); vi.mocked(createDoc).mockClear();
+  await flushSave(); vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear(); vi.mocked(sonner.getToasts).mockReset().mockReturnValue([]); vi.mocked(createDoc).mockClear();
   vi.mocked(readDocument).mockReset().mockResolvedValue(ESSAY);
 });
 afterEach(() => { window.matchMedia = wideMatchMedia; width(1200); closeImport(); });
@@ -213,6 +214,37 @@ test('a file dropped anywhere on the dialog is read there, and goes no further',
     fireEvent.drop(within(d).getByRole('heading', { name: 'Import a document' }), data);
     expect(await screen.findByText('Dropped.txt: 24 words.')).toBeInTheDocument(); expect(readDocument).toHaveBeenLastCalledWith(f); expect(behind).not.toHaveBeenCalled();
   } finally { window.removeEventListener('drop', behind); }
+});
+/** The Write bar's Import button, as the dialog is opened from it. */
+function ImportButton() { return <button type="button" onClick={() => openImport()}>Import</button>; }
+test.each([
+  ['Cancel', () => userEvent.click(screen.getByRole('button', { name: 'Cancel' }))],
+  ['the close button', () => userEvent.click(screen.getByRole('button', { name: 'Close' }))],
+  ['Escape', () => userEvent.keyboard('{Escape}')],
+])('closing with %s gives the focus back to the button that opened it', async (_how, close) => {
+  open(docOf(box())); render(<><ImportButton /><Open /></>); const button = screen.getByRole('button', { name: 'Import' });
+  await userEvent.click(button); await ready(); expect(button).not.toHaveFocus();
+  await close(); await waitFor(() => expect(button).toHaveFocus());
+});
+test('Write it out puts the caret where the imported text starts, in the document', async () => {
+  open(docOf(box({ id: 'm', name: 'Main text', text: 'mine' }))); let behind!: Editor;
+  render(<><ImportButton /><BlockEditor boxId="m" range={null} label="Main text" acceptCaret onReady={e => (behind = e)} /><Open /></>);
+  await userEvent.click(screen.getByRole('button', { name: 'Import' })); await ready();
+  await userEvent.click(screen.getByRole('radio', { name: 'Add after the last page' })); await userEvent.click(writeIt());
+  await waitFor(() => expect(behind.view.dom).toHaveFocus());
+  const text = get().doc.boxes[0].text; expect(offsetAt(behind.state.doc, text, behind.state.selection.from)).toBe('mine\n\\newpage\n'.length);
+  await new Promise(r => setTimeout(r, 10)); expect(behind.view.dom).toHaveFocus(); // (closing doesn't take it back to the button)
+});
+test('…and with Replace, at the start of the new Main text', async () => {
+  open(docOf(box({ id: 'm', text: 'mine' }))); render(<><ImportButton /><Open /></>);
+  await userEvent.click(screen.getByRole('button', { name: 'Import' })); await ready(); await userEvent.click(writeIt());
+  expect(get().caret).toMatchObject({ boxId: get().doc.boxes.at(-1)!.id, offset: 0 }); expect(get().canUndo).toBe(true);
+  undo(); expect([get().doc.boxes.map(b => b.text), get().canUndo]).toEqual([['mine'], false]); // (still the one step)
+});
+test('opening it puts away the messages still showing, each by its own id', async () => {
+  open(docOf(box())); vi.mocked(sonner.dismiss).mockClear(); vi.mocked(sonner.getToasts).mockReturnValue([{ id: 1 }, { id: 'two' }] as ReturnType<typeof sonner.getToasts>);
+  openImport(); render(<Open />); await ready();
+  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([[1], ['two']]);
 });
 test('opening puts the focus on the dialog itself, not in the preview', async () => {
   open(docOf(box())); openImport(); render(<Open />); const d = await dialog(); await ready();
