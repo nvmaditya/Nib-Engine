@@ -177,13 +177,27 @@ test('add to the end of a different block still uses one line break', () => {
   appendToBlock(S, d, nb.id, 'n');
   expect(d.boxes.find(b => b.id === 'n')!.text).toBe('extra\n' + lines(40).split('\n').slice(28).join('\n'));
 });
-test('the separator goes when the block it belongs to goes or is joined elsewhere', () => {
+test('the separator stays when its block is re-pointed to the block the joined one went into', () => {
   const o = docOf(box({ id: 'm', text: SHAPES['a \\newpage boundary'] }));
   const n2 = splitBlock(S, o, 'm', 1)!;
   expect(n2.fromSep).toBe('\n\\newpage\n');
   const n3 = splitBlock(S, o, n2.id, 1)!;
   appendToBlock(S, o, n2.id, 'm'); // n2 gone: n3 now comes from m, with a separator that was for n2
-  expect(o.boxes.find(b => b.id === n3.id)!.fromSep).toBeUndefined();
+  const k = o.boxes.find(b => b.id === n3.id)!;
+  expect(k.from).toBe('m');
+  expect(k.fromSep).toBe('\n\\newpage\n');
+});
+test('split twice then join back in order restores the text byte for byte, still 3 pages', () => {
+  const text = lines(5) + '\n\\newpage\n' + lines(5, 'b') + '\n\\newpage\n' + lines(3, 'c');
+  const d = docOf(box({ id: 'm', text }));
+  const pages = layoutFor(S, d).pages;
+  expect(pages).toBe(3);
+  const n2 = splitBlock(S, d, 'm', 1)!, n3 = splitBlock(S, d, n2.id, 1)!;
+  joinBack(S, d, n2.id);
+  joinBack(S, d, n3.id);
+  expect(d.boxes).toHaveLength(1);
+  expect(d.boxes[0].text).toBe(text);
+  expect(layoutFor(S, d).pages).toBe(3);
 });
 
 // Join back keeps the later parts' own places (item 2).
@@ -224,4 +238,28 @@ test('merging a page that shows only a pushed block moves that block up', () => 
   const d = pushedN();
   expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false });
   expect(d.boxes.map(b => [b.id, b.page, b.y])).toEqual([['a', 0, 110], ['n', 0, 110]]);
+});
+
+// A block pushed down on its own page keeps its stored y through moves and merges.
+const hdr = (page: number) => box({ id: 'h', kind: 'header', name: 'Header', page, x: 446, y: 76, w: 320, fields: { name: 'A', class: 'B', date: 'C' }, text: 'Name: A\nClass: B\nDate: C' });
+test('moving a page keeps the stored y of a block pushed on its own page', () => {
+  const d = { ...docOf(hdr(0), box({ id: 't', y: 110, text: lines(5) }), box({ id: 'o', page: 1, text: 'other' })), pageCount: 2 };
+  expect(layoutFor(S, d).segs.find(s => s.box.id === 't')!.top).toBe(178);
+  movePage(S, d, 0, 1);
+  expect(d.boxes.find(b => b.id === 't')!.y).toBe(110);
+  removeBlock(d, 'h');
+  expect(layoutFor(S, d).segs.find(s => s.box.id === 't')!.top).toBe(110);
+});
+test('merging a page keeps the stored y of a block pushed on its own page', () => {
+  const d = { ...docOf(box({ id: 'o', y: 700, text: 'other' }), hdr(1), box({ id: 't', page: 1, y: 110, text: lines(5) })), pageCount: 2 };
+  mergeIntoPrevious(S, d, 1);
+  expect(d.boxes.find(b => b.id === 't')!.y).toBe(110);
+  removeBlock(d, 'h');
+  expect(layoutFor(S, d).segs.find(s => s.box.id === 't')!.top).toBe(110);
+});
+test('moving the page before a pushed-only page swaps the two', () => {
+  const d = pushedN();
+  movePage(S, d, 0, 1);
+  expect(layoutFor(S, d).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['n', 0]]);
+  expect(layoutFor(S, d).pages).toBe(2);
 });

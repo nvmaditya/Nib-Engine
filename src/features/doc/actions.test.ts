@@ -271,6 +271,12 @@ test('moving a page that shows only a pushed block moves that block', () => {
   expect(where()).toEqual([['a', 1, 110], ['b', 0, 110]]);
   expect(get().canUndo).toBe(true);
 });
+test('moving the page before a pushed-only page says so rightly', () => {
+  open(pushedPage());
+  movePageTo(0, 1);
+  expect(lastToast()).toBe('Moved page 1 to position 2.');
+  expect(layoutFor(get().S, get().doc).segs.map(s => [s.box.id, s.page])).toEqual([['a', 1], ['b', 0]]);
+});
 test('merging a page that shows only a pushed block moves that block up', () => {
   open(pushedPage());
   mergeIntoPreviousPage(1);

@@ -2,8 +2,9 @@
 // Each function works on the given settings and document, changes the document in place, and lays
 // it out with the engine whenever it needs to know where the parts are.
 //
-// A block "starts on" the page it is stored on (box.page). Pushing (layout rule 2) can show its first
-// part on a later page; page moves and merges go by the stored page, deleting a page goes by what it shows.
+// A block "starts on" the page its first part is shown on. Pushing (layout rule 2) can show that part
+// on a later page than the one the block is stored on (box.page); page moves and merges go by the shown
+// page, and only write a new y when that differs from the stored page. Deleting a page goes by what it shows.
 import { headerText, uid } from '@/engine/doc.js';
 import { computeLayout, frameRange, geom, snapX, snapY, splitAtFrame, textWithoutFrame, use } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, FrameRect, HeaderKey, Layout, Seg, Settings } from '@/engine/types';
@@ -28,9 +29,8 @@ function drop(doc: EngineDoc, gone: Set<Box>, into?: Box): void {
   const ids = new Set([...gone].map(b => b.id));
   for (const b of doc.boxes) {
     if (b.from === undefined || !ids.has(b.from)) continue;
-    if (into && into !== b) b.from = into.id;
-    else delete b.from;
-    delete b.fromSep; // it was for the block that went
+    if (into && into !== b) b.from = into.id; // the separator stays: it is still what lies between the two texts
+    else { delete b.from; delete b.fromSep; } // it was for the block that went
   }
 }
 
@@ -119,9 +119,9 @@ export function removeBlock(doc: EngineDoc, boxId: string): Box | null {
 }
 
 // Two notions of a block's page. Its stored page (box.page) is where the person put it; layout rule 2
-// can push its first part onto a later page without changing that. Moving, merging and inserting pages
-// go by the stored page (a pushed block belongs to the page it was put on). Deleting a page goes by
-// what the page shows (deletePage), since it promises to take everything on it.
+// can push its first part onto a later page without changing that. Moving and merging pages go by the
+// page the first part is shown on; a block shown on its stored page keeps its stored y (even if pushed
+// down there), one shown elsewhere is pinned to where it is shown. Deleting a page goes by what it shows.
 
 /** A page with no block of its own can't move on its own: its first continuation always follows its start. */
 export function pageRefusal(L: Layout, doc: EngineDoc, page: number): Refused | null {
@@ -130,14 +130,16 @@ export function pageRefusal(L: Layout, doc: EngineDoc, page: number): Refused | 
   return c ? { ok: false, part: c.idx + 1, name: c.box.name } : null;
 }
 
-/** Blocks whose first part is shown on `page`: stored there, or pushed onto it. Each is paired with where that part sits. */
-function startingOn(L: Layout, page: number): Seg[] {
-  return L.segs.filter(s => s.page === page && s.idx === 0);
+/** The page a block starts on: where its first part is shown, or its stored page when nothing is shown. */
+function startPage(L: Layout, b: Box): { page: number; seg?: Seg } {
+  const seg = partOf(L, b, 0);
+  return { page: seg ? seg.page : b.page, seg };
 }
 
-/** Put these blocks on `page` at the place their first part is shown (a pushed block keeps what it looks like). */
-function placeOn(starts: Seg[], page: number): void {
-  for (const s of starts) { s.box.page = page; if (s.pushed) s.box.y = s.top; }
+/** Put the block on `page`; if it was shown on another page than it is stored on, it keeps the place it is shown at. */
+function place(b: Box, seg: Seg | undefined, page: number): void {
+  if (seg && seg.page !== b.page) b.y = seg.top;
+  b.page = page;
 }
 
 /** Where page `p` ends up when page `from` moves to position `to`. */
@@ -160,9 +162,9 @@ export function movePage(S: Settings, doc: EngineDoc, from: number, to: number):
   const no = pageRefusal(L, doc, from);
   if (no) return no;
   doc.pageCount = pages;
-  const starts = startingOn(L, from), going = starts.map(s => s.box);
-  for (const b of doc.boxes) b.page = moved(b.page, from, to);
-  placeOn(starts, to);
+  const going = doc.boxes.filter(b => startPage(L, b).page === from);
+  const starts = doc.boxes.map(b => startPage(L, b));
+  doc.boxes.forEach((b, k) => place(b, starts[k].seg, moved(starts[k].page, from, to)));
   const after = layoutFor(S, doc);
   for (const b of going) {
     const next = partOf(after, b, 1);
@@ -185,9 +187,7 @@ export function mergeIntoPrevious(S: Settings, doc: EngineDoc, i: number): { ran
   const L = layoutFor(S, doc);
   if (i < 1 || i >= L.pages) return null;
   const ranOn = L.segs.some(s => s.page === i && s.idx > 0);
-  const starts = startingOn(L, i);
-  for (const b of doc.boxes) if (b.page === i) b.page = i - 1;
-  placeOn(starts, i - 1);
+  for (const b of doc.boxes) { const st = startPage(L, b); if (st.page === i) place(b, st.seg, i - 1); }
   if (!layoutFor(S, doc).segs.some(s => s.page === i)) {
     for (const b of doc.boxes) if (b.page > i) b.page--;
     doc.pageCount = Math.max(1, L.pages - 1);
