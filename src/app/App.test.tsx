@@ -4,6 +4,7 @@ import { toast as sonner } from 'sonner';
 import { FONTS } from '@/engine/config.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { addFontFile, FONT_KEY_PREFIX, fontId } from '@/features/style/fonts';
+import { useStylePrefs } from '@/features/style/prefs';
 import { fontFile } from '@/test/fonts';
 import { deleteBlock } from '@/features/doc/actions';
 import { createDoc, getDoc, setPref } from '@/store/documents';
@@ -151,4 +152,13 @@ test('a hand another tab added after this page started is kept when a document t
   act(() => { location.hash = `#/d/${rec.id}/write`; });
   await waitFor(() => expect(useEditor.getState().docId).toBe(rec.id));
   expect(useEditor.getState().S.font).toBe(id);
+});
+
+test('coming back to the tab shows the looks another tab saved', async () => {
+  location.hash = '#/'; render(<App />);
+  await screen.findByRole('heading', { name: 'Recent' });
+  await setPref('looks', [{ id: 'look-a', name: 'Theirs', v: { tip: 'gel' } }]);
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  await waitFor(() => expect(useStylePrefs.getState().looks.map(l => l.name)).toEqual(['Theirs']));
 });

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
 import { loadUploadedFonts } from '@/features/style/fonts';
-import { bootStyle } from '@/features/style/prefs';
+import { bootStyle, refreshStylePrefsOnShow } from '@/features/style/prefs';
 import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
 import { closeDocument, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
@@ -35,6 +35,7 @@ export function App() {
   }, []);
 
   useEffect(() => installFlushOnHide(), []);
+  useEffect(() => refreshStylePrefsOnShow(), []);
 
   const wantId = route.name === 'doc' ? route.id : null;
   useEffect(() => {
