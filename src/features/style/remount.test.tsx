@@ -39,7 +39,7 @@ async function openSeeded(stage: string): Promise<void> {
 }
 
 let win: ReturnType<typeof resizableWindow>;
-beforeEach(async () => { await flushSave(); localStorage.clear(); win = resizableWindow(1280); await openSeeded('style'); });
+beforeEach(async () => { await flushSave(); localStorage.clear(); localStorage.setItem('nib.tips', 'seen'); win = resizableWindow(1280); await openSeeded('style'); });
 afterEach(() => win.restore());
 const turn = (w: number) => act(() => win.resize(w));
 

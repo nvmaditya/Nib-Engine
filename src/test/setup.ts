@@ -62,3 +62,9 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
     addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
   }) as MediaQueryList;
 }
+
+// The first-visit tips have been seen, so a test that opens a document sees only the document. Tips.test.tsx
+// clears this to show them; a test that clears localStorage itself sets it again.
+beforeEach(() => {
+  try { localStorage.setItem('nib.tips', 'seen'); } catch { /* a test's own blocked storage */ }
+});
