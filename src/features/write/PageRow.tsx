@@ -67,7 +67,11 @@ export const PageRow = memo(function PageRow({ i, pages, segs, cssW, mode, tagMe
             <figcaption className="mt-2.5 flex min-h-8 items-center text-[13px] text-muted">Typed · edit here</figcaption>
           </figure>
         )}
-        {mode !== 'typed' && <HandSheet key="hand" i={i} pages={pages} segs={here} allSegs={segs} cssW={cssW} tagMenu={tagMenu} onWordClick={onWordClick} />}
+        {/* The handwritten tags get the block's ⋯ only when the typed copy (which has its own) is hidden. */}
+        {mode !== 'typed' && (
+          <HandSheet key="hand" i={i} pages={pages} segs={here} allSegs={segs} cssW={cssW}
+            tagMenu={mode === 'hand' ? tagMenu : undefined} onWordClick={onWordClick} />
+        )}
       </div>
     </div>
   );

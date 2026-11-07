@@ -168,6 +168,25 @@ test('while frozen, a part the block gains waits, and every line shows once', as
   expect(textOf('Main text, page 3')).toBe('line56');
 });
 
+test('a waiting part keeps waiting when the focus moves to another part of its block', async () => {
+  await openWrite(docOf(m(lines(56))));
+  vi.useFakeTimers();
+  const p1 = editorFor('Main text, page 1');
+  act(() => { p1.view.focus(); });
+  act(() => { p1.commands.setTextSelection(6); p1.commands.splitBlock(); p1.commands.insertContent('new'); });
+  await act(() => vi.advanceTimersByTimeAsync(200)); // line56 goes on to a page 3, which waits
+  act(() => { editorFor('Main text, page 2').view.focus(); });
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  expect(document.activeElement).toBe(textbox('Main text, page 2'));
+  expect(screen.queryByText(/^Continues the paragraph/)).toBeNull();
+  expect(screen.queryByRole('textbox', { name: 'Main text, page 3' })).toBeNull();
+  const shown = [...textOf('Main text, page 1').split('\n'), ...textOf('Main text, page 2').split('\n')];
+  expect(shown).toEqual(get().doc.boxes[0].text.split('\n'));
+  act(() => { editorFor('Main text, page 2').commands.blur(); });
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  expect(textOf('Main text, page 3')).toBe('line56');
+});
+
 test('while frozen, a block that no longer reaches the next page shows its last lines at once', async () => {
   await openWrite(docOf(m(lines(29))));
   vi.useFakeTimers();
@@ -266,6 +285,27 @@ test('dragging a page by its grip moves it', async () => {
   expect(row(0).dataset.drop).toBe('before');
   fireEvent.pointerUp(document, { pointerId: 1, clientX: 10, clientY: 20 });
   expect(get().doc.boxes.map(b => [b.id, b.page])).toEqual([['m', 1], ['n', 0]]);
+});
+
+test('a block’s ⋯ is on its typed tag, and on its handwritten tag only when the typed copy is hidden', async () => {
+  await openWrite();
+  const handTag = () => document.querySelector<HTMLElement>('.block-frame[data-id="b1:0"] .tag')!;
+  expect(screen.getAllByRole('button', { name: 'Options for Main text' })).toHaveLength(1);
+  expect(within(handTag()).queryByRole('button', { name: 'Options for Main text' })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Handwritten' }));
+  expect(within(handTag()).getByRole('button', { name: 'Options for Main text' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Typed' }));
+  expect(screen.getAllByRole('button', { name: 'Options for Main text' })).toHaveLength(1);
+});
+
+test('a header on two pages shows its fields once, on its first part', async () => {
+  await openWrite(docOf(box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: { name: 'A', class: 'B', date: 'C' } })));
+  const later = typed(1).querySelector<HTMLElement>('[data-part="h:1"]')!;
+  expect(later).not.toBeNull(); // the header really runs onto page 2
+  expect(screen.getAllByRole('textbox', { name: 'Name' })).toHaveLength(1);
+  expect(within(typed(0)).getByRole('textbox', { name: 'Date' })).toHaveValue('C');
+  expect(later.querySelector('input, [role="textbox"]')).toBeNull();
+  expect(within(later).queryByText(/^Continues/)).toBeNull();
 });
 
 test('the grips have no browser panning, so touch drags them', async () => {

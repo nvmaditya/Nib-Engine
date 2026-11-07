@@ -63,14 +63,15 @@ type Body =
   | { t: 'fields' }
   | { t: 'editor'; range: LineRange; breaks: PageBreakMark[] }
   | { t: 'cont'; from: number }   // no line of its own: its paragraph starts on page `from`
-  | { t: 'wait' };                // a part the frozen lines don't reach yet; it fills once the editor is left
+  | { t: 'wait' }                 // a part the frozen lines don't reach yet; it fills once the editor is left
+  | { t: 'none' };                // a header's later part: its fields are on its first part
 
 /** A part on a typed page, in plain values (so a page is drawn again only when one of them changes). */
 interface Part {
   id: string; boxId: string; idx: number; page: number;
   x: number; top: number; w: number; h: number;  // page units
   label: string; body: Body;
-  /** The ranges its block shows on every page, for a freeze that starts here. */
+  /** The ranges its block shows on every page, for a freeze that starts here (not the parts that wait). */
   shown: LineRange[];
 }
 
@@ -90,7 +91,7 @@ function blockOf(box: Box, segs: Seg[], fr: Freeze | null): Block {
 }
 
 function bodyOf(box: Box, b: Block, k: number): Body {
-  if (box.kind === 'header') return { t: 'fields' };
+  if (box.kind === 'header') return k === 0 ? { t: 'fields' } : { t: 'none' };
   if (k >= b.reach) return { t: 'wait' };
   const r = b.ranges[k];
   if (r.end <= r.first) {
@@ -119,7 +120,9 @@ function partsOn(page: number, segs: Seg[], fr: Freeze | null, gap: number): Par
     const top = sg.top + gap * 0.1;
     out.push({
       id: segId(sg), boxId: id, idx: sg.idx, page: sg.page, x: sg.x, top, w: sg.w, h: Math.max(gap * 0.8, sg.bottom - top),
-      label: partLabel(sg.idx, b.parts.length), body: bodyOf(box, b, b.parts.indexOf(sg)), shown: b.ranges,
+      label: partLabel(sg.idx, b.parts.length), body: bodyOf(box, b, b.parts.indexOf(sg)),
+      // A freeze that starts on another of its parts keeps a waiting part waiting.
+      shown: b.ranges.slice(0, b.reach),
     });
   }
   return out;
