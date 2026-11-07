@@ -26,7 +26,7 @@
 - **The service worker exists only in a production build.** Development has none (`devOptions.enabled` false).
   - Tests have none either: the plugin is `disable`d while `process.env.VITEST` is set. This covers `npm test`, whether its settings are in `vite.config.ts` or `vitest.config.ts`, and the Vite builds that `*.browser.test.ts` make.
   - No test imports `src/app/pwa.ts`, because `virtual:pwa-register` is only real in a build. Update logic is tested through `startUpdates(register)` with a fake `register`.
-- `vite.config.ts` keeps `base: './'`, and every path stays relative, so the site and the service worker work under `/nib-engine/`. The manifest's `start_url`, `scope` and `id` are `'./'`.
+- `vite.config.ts` keeps `base: './'`, and every path stays relative, so the site and the service worker work under `/nib-engine/`. The manifest's `start_url` and `scope` are `'./'`, and it has no `id`: an `id` resolves against the origin, so `'./'` would make the whole github.io origin Nib's permanent app identity; without one it is `start_url` (…/nib-engine/). (Controller ruling, Task 1 review.)
 - Colour tokens and type follow spec §2:
   - Tailwind classes: `bg-bg`, `bg-surface`, `bg-surface-2`, `border-line`, `text-muted` (grey text, never `bg-muted`), `bg-primary`, `text-primary`, `bg-primary-soft`, `text-danger`.
   - UI parts come from `src/components/ui`, hand-written on `radix-ui` (the shadcn CLI is blocked). `src/components/ui/command.tsx` wraps `cmdk` in the same style.
@@ -340,7 +340,7 @@ scripts/smoke.mjs, README.md (+ any phone fixes found)                          
 - Consumes: `public/favicon.svg` (the ink-page drawing), and `node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2` (social image).
 - Produces:
   - `pwaManifest.ts` (pure data, with type-only imports from `vite-plugin-pwa`):
-    - `NIB_MANIFEST: Partial<ManifestOptions>` is `{ id: './', name: 'Nib', short_name: 'Nib', description: <Interface copy>, lang: 'en', dir: 'ltr', start_url: './', scope: './', display: 'standalone', background_color: '#F7F7F8', theme_color: '#FFFFFF', categories: ['education', 'productivity'], icons }`.
+    - `NIB_MANIFEST: Partial<ManifestOptions>` is `{ name: 'Nib', short_name: 'Nib', description: <Interface copy>, lang: 'en', dir: 'ltr', start_url: './', scope: './', display: 'standalone', background_color: '#F7F7F8', theme_color: '#FFFFFF', categories: ['education', 'productivity'], icons }`.
     - `icons` are, in order: `{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }`, the same for `icon-512.png` at `512x512`, and `{ src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }`.
     - `PWA_WORKBOX: NonNullable<VitePWAOptions['workbox']>` is exactly Design decision 1. The two `runtimeCaching` entries have `urlPattern` `/^https:\/\/fonts\.googleapis\.com\//` and `/^https:\/\/fonts\.gstatic\.com\//`.
   - `vite.config.ts` adds `VitePWA({ disable: process.env.VITEST !== undefined, registerType: 'prompt', injectRegister: false, manifest: NIB_MANIFEST, workbox: PWA_WORKBOX })` after `tailwindcss()`. `devOptions` stays at its default (off).
@@ -362,7 +362,7 @@ const pngSize = (file: string): [number, number] => {
   return [b.readUInt32BE(16), b.readUInt32BE(20)];
 };
 test('the manifest names Nib, in its own colours, and installs where the page is', () =>
-  expect(NIB_MANIFEST).toMatchObject({ id: './', name: 'Nib', short_name: 'Nib', start_url: './', scope: './', display: 'standalone', lang: 'en',
+  expect(NIB_MANIFEST).toMatchObject({ name: 'Nib', short_name: 'Nib', start_url: './', scope: './', display: 'standalone', lang: 'en',
     background_color: '#F7F7F8', theme_color: '#FFFFFF', description: 'Turn typed text into realistic handwritten pages, then download them as a PDF or images.' }));
 test('every icon is a PNG of the size it says, with one to mask', () => {
   expect(NIB_MANIFEST.icons!.map(i => [i.src, i.sizes, i.purpose])).toEqual([
