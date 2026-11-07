@@ -150,6 +150,11 @@
     background: #fbfbf8; /* until its canvas is drawn (a sheet far from view isn't) */
     box-shadow: var(--sheet-shadow);
   }
+  /* The paper's own picture (its canvas and ink): a box the size of the paper, so a stand-in tilt can clip it. */
+  .paper .paper-art {
+    position: absolute;
+    inset: 0;
+  }
   .paper .paper-bg {
     position: absolute;
     inset: 0;
@@ -191,6 +196,14 @@
   .paper.scanned .paper-bg,
   .paper.scanned .ink-layer {
     visibility: hidden;
+  }
+  /* Camera tilt has the same stand-in: the page turned a little and cropped, so the exact tilted page
+     (a moment later, when it is back in view or has been drawn again) doesn't jump from a straight one. */
+  [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art {
+    overflow: hidden;
+  }
+  [data-sheets][data-tilt='true'] .paper:not(.scanned) .paper-art > :is(.paper-bg, .ink-layer) {
+    transform: rotate(0.5deg) scale(1.02);
   }
   [data-sheets][data-look='scan'] .paper:not(.scanned) {
     filter: brightness(1.08) contrast(1.12) saturate(0.85);

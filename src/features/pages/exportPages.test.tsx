@@ -33,6 +33,21 @@ test('in Export, camera tilt shows on the pages, even As written', async () => {
   expect(frameShot).toHaveBeenCalledWith(expect.any(HTMLCanvasElement), 0);
   expect(container.querySelector('.paper')).toHaveClass('scanned');
 });
+test('while the exact tilted page is not ready, the pages carry a stand-in tilt', () => {
+  open(docOf(box({ text: 'x' }))); update(s => { s.S.tilt = true; }, { history: false });
+  const { container, rerender } = render(<PageView layout={pageLayout()} mode="export" />);
+  const sheets = container.querySelector('[data-sheets]')!;
+  expect(sheets).toHaveAttribute('data-tilt', 'true');
+  expect(container.querySelector('.paper > .paper-art > .paper-bg')).not.toBeNull();
+  expect(container.querySelector('.paper > .paper-art > .ink-layer')).not.toBeNull();
+  act(() => update(s => { s.S.tilt = false; }, { history: false })); rerender(<PageView layout={pageLayout()} mode="export" />);
+  expect(sheets).toHaveAttribute('data-tilt', 'false');
+});
+test('Write and Style never carry the download’s tilt, even with it on', () => {
+  open(docOf(box({ text: 'x' }))); update(s => { s.S.tilt = true; }, { history: false });
+  const { container } = render(<PageView layout={pageLayout()} mode="write" />);
+  expect(container.querySelector('[data-sheets]')).toHaveAttribute('data-tilt', 'false');
+});
 test('As written without tilt shows the pages as drawn, and turning tilt off takes the tilted preview away', async () => {
   vi.useFakeTimers(); open(docOf(box({ text: 'x' }))); update(s => { s.S.tilt = true; }, { history: false });
   const { container, rerender } = render(<PageView layout={pageLayout()} mode="export" />);
