@@ -420,3 +420,13 @@
     bottom: calc(var(--offset, 24px) + 72px + env(safe-area-inset-bottom));
   }
 }
+
+/* In dark, messages sit on the Studio surface, like dialogs and menus, instead of sonner's black. `html` outranks
+   sonner's own [data-sonner-theme='dark'] rule, which a build adds to <head> after this stylesheet. */
+html [data-sonner-toaster][data-sonner-theme='dark'] {
+  --normal-bg: var(--surface);
+  --normal-bg-hover: var(--surface-2);
+  --normal-border: var(--line);
+  --normal-border-hover: var(--line-strong);
+  --normal-text: var(--fg);
+}
