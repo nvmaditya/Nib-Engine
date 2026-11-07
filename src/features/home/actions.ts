@@ -13,9 +13,17 @@ async function create(): Promise<DocRecord | null> {
   try { return await createDoc({ title: 'Untitled' }); } catch { toast(CANT_CREATE); return null; }
 }
 
-export async function createAndOpen(): Promise<void> {
-  const rec = await create();
-  if (rec) await open(rec);
+let creating: Promise<void> | null = null;
+
+/**
+ * New document. Pressed again before the first one has opened (a double click, Enter pressed twice), it is the
+ * same press: the button stays on screen until the new document opens, and one press makes one document.
+ */
+export function createAndOpen(): Promise<void> {
+  creating ??= (async () => {
+    try { const rec = await create(); if (rec) await open(rec); } finally { creating = null; }
+  })();
+  return creating;
 }
 
 /** A new document, opened on Write, with the import dialog already showing this file. */

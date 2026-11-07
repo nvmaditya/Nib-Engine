@@ -5,7 +5,7 @@ import { loadUploadedFonts } from '@/features/style/fonts';
 import { bootStyle, refreshStylePrefsOnShow } from '@/features/style/prefs';
 import { bootstrapDocuments } from '@/store/bootstrap';
 import { getDoc } from '@/store/documents';
-import { closeDocument, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
+import { NOT_ON_DEVICE, closeDocument, installDocFollow, installFlushOnHide, openDocument, toast, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { HomePage } from '@/features/home/HomePage';
 import { DocumentView } from '@/features/doc/DocumentView';
@@ -35,6 +35,7 @@ export function App() {
   }, []);
 
   useEffect(() => installFlushOnHide(), []);
+  useEffect(() => installDocFollow(), []); // another tab's saves, renames and deletes of the open document
   useEffect(() => refreshStylePrefsOnShow(), []);
 
   const wantId = route.name === 'doc' ? route.id : null;
@@ -48,7 +49,7 @@ export function App() {
     void loadUploadedFonts().then(() => getDoc(wantId)).then(rec => {
       if (!live) return;
       if (rec) openDocument(rec);
-      else { goHome(); toast('That document isn’t on this device.'); }
+      else { goHome(); toast(NOT_ON_DEVICE); }
     }).catch(() => { if (live) goHome(); });
     return () => { live = false; };
   }, [boot, wantId, openId]);
