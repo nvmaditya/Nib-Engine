@@ -202,6 +202,20 @@ test('pasted text lands as the converter writes it, so positions stay exact', ()
   expect(offsetAt(ed.state.doc, text(), ed.state.selection.head)).toBe(3); // between x and a
 });
 
+test('spaces typed at the start of a heading or list item go, as markup has none there', () => {
+  setup('# Title\n- item');
+  select(2);
+  type(' ');
+  expect([text(), ed.state.doc.firstChild!.textContent]).toEqual(['# Title\n- item', 'Title']);
+  select(text().indexOf('item'));
+  type('  x');
+  expect([text(), ed.state.doc.lastChild!.textContent]).toEqual(['# Title\n- xitem', 'xitem']);
+  expect(offsetAt(ed.state.doc, text(), ed.state.selection.head)).toBe(text().indexOf('item'));
+  select(4);
+  type(' ');
+  expect(text()).toBe('# Ti tle\n- xitem'); // anywhere else a space stays
+});
+
 test('page-break lines outlive a pasted change', () => {
   setup('- item\nnext', { breaks: [{ offset: 7, page: 2, idx: 1, actions: false }] });
   select(6);

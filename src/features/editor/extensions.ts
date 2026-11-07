@@ -250,15 +250,29 @@ const ListMarkers = Extension.create({
   },
 });
 
+// Whether a heading or list item starts with whitespace, which its markup line can't hold (after the marker
+// the engine skips it all).
+function leadingSpace(doc: PMNode): boolean {
+  let found = false;
+  doc.descendants((node, _pos, parent) => {
+    if (found || !node.isTextblock) return !found;
+    const first = node.firstChild;
+    found = (node.type.name === 'heading' || parent?.type.name === 'listItem') && !!first?.isText && /^\s/.test(first.text!);
+    return false;
+  });
+  return found;
+}
+
 // Pasted or dropped content is rewritten as the converter reads its own markup back (tabs as spaces, no
-// space after a list marker, no whitespace-only lines), so every leaf matches its markup line exactly and
-// markup offsets map to positions without drift.
+// space after a list marker, no whitespace-only lines), and so is a space typed at the start of a heading or
+// list item: every leaf matches its markup line exactly and markup offsets map to positions without drift.
 const ConverterSync = Extension.create({
   name: 'nibConverterSync',
   addProseMirrorPlugins() {
     return [new Plugin({
       appendTransaction: (trs, _old, state) => {
-        if (!trs.some(tr => tr.docChanged && (tr.getMeta('paste') || ['paste', 'drop'].includes(tr.getMeta('uiEvent'))))) return null;
+        const pasted = trs.some(tr => tr.docChanged && (tr.getMeta('paste') || ['paste', 'drop'].includes(tr.getMeta('uiEvent'))));
+        if (!pasted && !(trs.some(tr => tr.docChanged) && leadingSpace(state.doc))) return null;
         const md = toMarkup(state.doc.toJSON()), doc = state.schema.nodeFromJSON(fromMarkup(md));
         const start = state.doc.content.findDiffStart(doc.content);
         if (start == null) return null;
