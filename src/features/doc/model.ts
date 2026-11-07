@@ -38,11 +38,13 @@ function drop(doc: EngineDoc, gone: Set<Box>, into?: Box): void {
 export function splitBlock(S: Settings, doc: EngineDoc, boxId: string, idx: number): Box | null {
   const box = find(doc, boxId);
   if (!box || idx < 1 || box.kind === 'header') return null;
-  const sg = partOf(layoutFor(S, doc), box, idx);
+  const L = layoutFor(S, doc), sg = partOf(L, box, idx), before = partOf(L, box, idx - 1);
   if (!sg) return null;
   const color = nextColor(doc);
   const orig = box.text, [start] = frameRange(box, idx);
   const nb: Box = { ...splitAtFrame(box, sg, uid()), kind: box.kind, name: continuedName(box.name), color, from: box.id };
+  // On the page right after the part before, a block above only pushed it down: the new block keeps its own place.
+  if (before && sg.page === before.page + 1) nb.y = sg.storedTop;
   // At a line start, remember what the split took out between the halves (blank lines, \newpage lines), so Join back can put it back.
   if ((start === 0 || orig[start - 1] === '\n') && orig.startsWith(box.text) && orig.endsWith(nb.text)) nb.fromSep = orig.slice(box.text.length, orig.length - nb.text.length);
   doc.boxes.splice(doc.boxes.indexOf(box) + 1, 0, nb);

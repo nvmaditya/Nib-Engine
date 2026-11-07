@@ -200,3 +200,12 @@ test('join back keeps the later parts’ own width, and the joined block’s own
   expect(f.boxes[0].frames).toEqual({ 1: { x: 200, y: 300, w: 400 } });
   expect(layoutFor(S, f).segs.map(s => [s.x, s.w, s.top])).toEqual([[112, 630, 110], [200, 400, 300]]);
 });
+
+test('a split part pushed down by a block above keeps its own place, not the pushed one', () => {
+  const h = box({ id: 'h', kind: 'header', name: 'Header', page: 1, x: 446, y: 76, w: 320, fields: { name: 'A', class: 'B', date: 'C' }, text: 'Name: A\nClass: B\nDate: C' });
+  const d = docOf(m(), h);
+  const part2 = layoutFor(S, d).segs.find(s => s.box.id === 'm' && s.idx === 1)!;
+  expect([part2.top, part2.storedTop]).toEqual([178, 110]);
+  const nb = splitBlock(S, d, 'm', 1)!;
+  expect(nb.y).toBe(110);
+});
