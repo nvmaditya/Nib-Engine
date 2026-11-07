@@ -387,6 +387,14 @@
   }
 }
 
+/* On a phone, while the Style or Export sheet is open, its pinned footer (Download and Share) is at the
+   bottom of the screen, so messages (like "Saved …" after a download) are lifted above it. */
+@media (width < 53.75rem) {
+  body:has([data-vaul-drawer]) [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: calc(var(--offset, 24px) + 96px + env(safe-area-inset-bottom));
+  }
+}
+
 /* On a phone the picker is a sheet along the bottom with its footer ("Use your own font") last, so
    messages are lifted above that footer instead. */
 @media (width < 53.75rem) {
