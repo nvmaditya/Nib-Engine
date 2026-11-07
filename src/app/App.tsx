@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
+import { useDarkTheme } from '@/lib/theme';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
 import { loadUploadedFonts } from '@/features/style/fonts';
 import { bootStyle, refreshStylePrefsOnShow } from '@/features/style/prefs';
@@ -15,6 +16,7 @@ export function App() {
   const route = useRoute();
   const [boot, setBoot] = useState<'pending' | 'ok' | 'memory'>('pending');
   const openId = useEditor(s => s.docId);
+  const dark = useDarkTheme();
 
   useEffect(() => {
     let live = true;
@@ -65,7 +67,7 @@ export function App() {
       )}
       <TopBar route={route} ready={route.name === 'doc' && openId === route.id} />
       {route.name === 'home' ? <HomePage /> : openId === route.id ? <DocumentView stage={route.stage} /> : null}
-      <Toaster position="bottom-center" expand visibleToasts={3} />
+      <Toaster theme={dark ? 'dark' : 'light'} position="bottom-center" expand visibleToasts={3} />
     </>
   );
 }
