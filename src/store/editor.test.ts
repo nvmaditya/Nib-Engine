@@ -3,7 +3,7 @@ import { toast as sonner } from 'sonner';
 import { MEMORY_ID } from '@/app/route';
 import { cleanSettings } from '@/engine/doc.js';
 import { resetBoxStyle } from '@/features/doc/actions';
-import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
+import { MissingDocumentError, NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { box, docOf, rec as mkRec, open } from '@/test/docs';
 import { SAVE_FAILED, closeDocument, flushLayout, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, toast, undo, undoTo, update, useEditor } from './editor';
 
@@ -19,7 +19,7 @@ const rec = (title: string, text: string): DocRecord => ({
 
 beforeEach(async () => {
   await flushSave();
-  vi.mocked(putDoc).mockReset().mockResolvedValue(undefined);
+  vi.mocked(putDoc).mockReset().mockResolvedValue(1);
   vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear();
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -89,11 +89,17 @@ test('closing a document writes its last edit and leaves nothing open', async ()
   expect(s.saving).toBe('saved');
 });
 
-test('opening and closing a document dismiss its messages', async () => {
+test('opening and closing a document take down its messages, one by one', async () => {
   openDocument(rec('A', 'a'));
-  expect(sonner.dismiss).toHaveBeenCalledTimes(1);
+  toast('One'); toast('Two', { label: 'Undo', fn: () => {} });
+  vi.mocked(sonner.dismiss).mockClear();
+  openDocument(rec('B', 'b'));
+  // Never all at once: sonner merges a message said again right after a dismiss-all into the one going away.
+  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['One'], ['Two']]);
+  toast('Three');
+  vi.mocked(sonner.dismiss).mockClear();
   await closeDocument();
-  expect(sonner.dismiss).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(sonner.dismiss).mock.calls).toEqual([['Three']]);
 });
 
 test('a message’s Undo does nothing once another document is open', () => {
@@ -146,7 +152,7 @@ test('saves that keep failing show one message for the run, and Not saved', asyn
   expect(sonner).toHaveBeenCalledTimes(1);
   expect(sonner).toHaveBeenCalledWith(SAVE_FAILED, { id: SAVE_FAILED });
 
-  vi.mocked(putDoc).mockResolvedValue(undefined); // the run ends with a save that works
+  vi.mocked(putDoc).mockResolvedValue(1); // the run ends with a save that works
   update(s => { s.doc.boxes[0].text = 'ok'; });
   await flushSave();
   expect(useEditor.getState().saving).toBe('saved');
@@ -171,7 +177,7 @@ test('the in-memory document is never written and says Not saved', async () => {
 
 const hang = () => {
   let reject!: (e: Error) => void;
-  const p = new Promise<void>((_, rj) => { reject = rj; });
+  const p = new Promise<number>((_, rj) => { reject = rj; });
   return { p, reject };
 };
 
@@ -182,6 +188,7 @@ test('a failed save’s retry is skipped once a newer save has started', async (
   vi.mocked(putDoc).mockImplementation(async r => {
     written.push(r.doc.boxes[0].text);
     if (++n === 1) return first.p;
+    return n;
   });
   open(docOf(box()));
   update(s => { s.doc.boxes[0].text = 'old'; });
@@ -218,6 +225,22 @@ test('a failure that lands after its document was closed shows no message', asyn
   openDocument(mkRec('B', 'b'));
   a.reject(new Error('closed'));
   await f;
+  expect(sonner).not.toHaveBeenCalled();
+});
+
+test('a save refused after its document was opened again (same document, read again) leaves the open copy alone', async () => {
+  const a = hang();
+  vi.mocked(putDoc).mockImplementation(() => a.p);
+  location.hash = '#/d/dA/write';
+  openDocument(mkRec('A', 'a'));
+  update(s => { s.doc.boxes[0].text = 'x'; });
+  const f = flushSave();
+  openDocument(mkRec('A', 'a')); // left and opened again before the save's answer came
+  update(s => { s.selectedId = 'b1'; s.scope = 'box'; }, { save: false, layout: false });
+  a.reject(new MissingDocumentError()); // the answer for the earlier copy
+  await f;
+  expect([get().docId, get().selectedId, get().scope]).toEqual(['dA', 'b1', 'box']);
+  expect(location.hash).toBe('#/d/dA/write');
   expect(sonner).not.toHaveBeenCalled();
 });
 

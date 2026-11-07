@@ -9,21 +9,31 @@ async function open(rec: DocRecord): Promise<void> {
 
 const CANT_CREATE = 'Nib can’t create documents on this device right now.';
 
-async function create(): Promise<DocRecord | null> {
-  try { return await createDoc({ title: 'Untitled' }); } catch { toast(CANT_CREATE); return null; }
+/** What a new document starts with (createDoc's): the name, the style, the document itself. */
+export type NewDocument = NonNullable<Parameters<typeof createDoc>[0]>;
+
+async function create(init: NewDocument = {}): Promise<DocRecord | null> {
+  try { return await createDoc({ title: 'Untitled', ...init }); } catch { toast(CANT_CREATE); return null; }
 }
 
-let creating: Promise<void> | null = null;
+/** The New document requests still making their document, by what they start with. */
+const creating = new Map<string, Promise<void>>();
 
 /**
- * New document. Pressed again before the first one has opened (a double click, Enter pressed twice), it is the
- * same press: the button stays on screen until the new document opens, and one press makes one document.
+ * New document, starting with `init`. Pressed again before the first one has opened (a double click, Enter pressed
+ * twice), it is the same press: the button stays on screen until the new document opens, and one press makes one
+ * document. A request for a different start (another template) is a press of its own, so it isn't lost.
  */
-export function createAndOpen(): Promise<void> {
-  creating ??= (async () => {
-    try { const rec = await create(); if (rec) await open(rec); } finally { creating = null; }
-  })();
-  return creating;
+export function createAndOpen(init: NewDocument = {}): Promise<void> {
+  const key = JSON.stringify(init);
+  let made = creating.get(key);
+  if (!made) {
+    made = (async () => {
+      try { const rec = await create(init); if (rec) await open(rec); } finally { creating.delete(key); }
+    })();
+    creating.set(key, made);
+  }
+  return made;
 }
 
 /** A new document, opened on Write, with the import dialog already showing this file. */

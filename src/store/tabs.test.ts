@@ -132,6 +132,7 @@ test('live follow: a tab with nothing waiting shows the other tab’s save in pl
   await b.ed.flushSave();
   await vi.waitFor(() => expect(state(a).S.size).toBe(40));
   const tick = state(b).layoutTick;
+  b.ed.toast('Did it.', b.ed.undoTo(b.ed.snapshot(), 'm')); // a message whose Undo is for this version
 
   type(a, ', told again');
   await a.ed.flushSave();
@@ -139,8 +140,8 @@ test('live follow: a tab with nothing waiting shows the other tab’s save in pl
   const s = state(b);
   expect([s.writeView, s.selectedId, s.scope, s.canUndo, s.saving]).toEqual(['outline', 'm', 'box', false, 'saved']);
   expect(s.layoutTick).toBeGreaterThan(tick);
-  expect(messages(b)).toEqual([FOLLOWED]);
-  expect(b.toast.dismiss).toHaveBeenCalled(); // messages whose Undo was for the old version go
+  expect(messages(b)).toEqual(['Did it.', FOLLOWED]);
+  expect(b.toast.dismiss.mock.calls).toEqual([['Did it.']]); // messages whose Undo was for the old version go, one by one
 });
 
 test('a message’s Undo from before a follow does nothing', async () => {
@@ -212,4 +213,84 @@ test('one tab’s saves that overlap don’t stop each other', async () => {
   expect(messages(a)).toEqual([]);
   expect(state(a).saving).toBe('saved');
   void b;
+});
+
+test('a tab that missed the news reads the document again when it is shown, so its first edit after waking is kept', async () => {
+  const a = await openTab(), b = await openTab();
+  const id = await seed(a);
+  await openIn(a, id); await openIn(b, id);
+  // Another tab's save that neither heard of (B slept through it, its channel closed), written straight to storage.
+  const db = await (await import('./db')).getDb();
+  const stored = await db.get('documents', id);
+  await db.put('documents', { ...stored, doc: { ...stored.doc, boxes: [{ ...stored.doc.boxes[0], text: 'The water cycle, while B slept' }] }, rev: stored.rev + 1, savedBy: 'their-tab' });
+
+  document.dispatchEvent(new Event('visibilitychange')); // B is shown again (jsdom's page is always visible)
+  await vi.waitFor(() => expect(text(b)).toBe('The water cycle, while B slept'));
+  expect(messages(b)).toEqual([FOLLOWED]);
+  type(b, ' and B woke');
+  await b.ed.flushSave();
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, while B slept and B woke');
+  expect(messages(b)).toEqual([FOLLOWED]); // kept, not refused
+  await vi.waitFor(() => expect(text(a)).toBe('The water cycle, while B slept and B woke'));
+
+  // Shown again with nothing new (each has what storage holds: B its own write, A what it read): nothing happens.
+  const said = [messages(a).length, messages(b).length];
+  window.dispatchEvent(new Event('pageshow'));
+  document.dispatchEvent(new Event('visibilitychange'));
+  await new Promise(r => setTimeout(r, 50));
+  expect([messages(a).length, messages(b).length]).toEqual(said);
+  expect(text(b)).toBe('The water cycle, while B slept and B woke');
+});
+
+test('a page brought back from the back-forward cache reads the document again too', async () => {
+  const a = await openTab(), b = await openTab();
+  const id = await seed(a);
+  await openIn(b, id);
+  const db = await (await import('./db')).getDb();
+  const stored = await db.get('documents', id);
+  await db.put('documents', { ...stored, title: 'Renamed while away', rev: stored.rev + 1, savedBy: 'their-tab' });
+  window.dispatchEvent(new Event('pageshow'));
+  await vi.waitFor(() => expect(state(b).title).toBe('Renamed while away'));
+  void a;
+});
+
+test('after a deploy, a tab of the earlier Nib saving a record it wrote (no revision) isn’t overwritten by a new tab', async () => {
+  const a = await openTab(), b = await openTab();
+  const id = await seed(a);
+  const db = await (await import('./db')).getDb();
+  const { rev: _r, savedBy: _s, ...asLeft } = await db.get('documents', id);
+  await db.put('documents', { ...asLeft, schema: 2, updatedAt: 1000 }); // as the earlier Nib left it
+  await openIn(b, id); // the new Nib, in a tab opened after the deploy
+  // The old tab saves (it doesn't keep a revision, and says nothing to the new tabs).
+  await db.put('documents', { ...asLeft, schema: 2, updatedAt: 2000, doc: { ...asLeft.doc, boxes: [{ ...asLeft.doc.boxes[0], text: 'The water cycle, old tab' }] } });
+
+  type(b, ' new tab');
+  await b.ed.flushSave();
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, old tab');
+  await vi.waitFor(() => expect(text(b)).toBe('The water cycle, old tab'));
+  expect(messages(b)).toEqual([NOT_KEPT]);
+  type(b, ' and then');
+  await b.ed.flushSave();
+  expect(await db.get('documents', id)).toMatchObject({ rev: 1, schema: 3 });
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, old tab and then');
+  expect(messages(b)).toEqual([NOT_KEPT]);
+});
+
+test('closing a document with a change waiting, after another tab saved first, says the change wasn’t kept, with Copy', async () => {
+  const a = await openTab(), b = await openTab(false); // B doesn't hear of A's save before it closes
+  const id = await seed(a);
+  await openIn(a, id); await openIn(b, id);
+  type(a, ' theirs');
+  await a.ed.flushSave();
+  type(b, ' mine'); // waiting for the pause in typing
+  await b.ed.closeDocument(); // Home
+  expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle theirs');
+  expect(messages(b)).toEqual([NOT_KEPT]);
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  const opts = b.toast.mock.calls.at(-1)![1] as { action: { label: string; onClick: () => void } };
+  expect(opts.action.label).toBe('Copy your text');
+  opts.action.onClick();
+  await vi.waitFor(() => expect(messages(b).at(-1)).toBe('Copied your text.'));
+  expect(writeText).toHaveBeenCalledWith('The water cycle mine');
 });

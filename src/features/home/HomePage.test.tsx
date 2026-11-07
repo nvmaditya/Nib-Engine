@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Toaster, toast as sonner } from 'sonner';
-import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, renameDoc } from '@/store/documents';
+import { NewerDocumentError, deleteDoc, duplicateDoc, listDocs, onDocsChanged, renameDoc } from '@/store/documents';
 import { HomePage } from './HomePage';
 
 const mem = vi.hoisted(() => ({ docs: [] as any[] }));
@@ -110,4 +110,31 @@ test('a rename, duplicate or delete that fails says so and closes its dialog', a
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   expect(screen.getByText('A')).toBeInTheDocument();
   act(() => { sonner.dismiss(); });
+});
+
+const wait = (ms: number) => act(() => new Promise<void>(r => { setTimeout(r, ms); }));
+
+test('while someone types in another tab, Home reads the list again at most once a second, and not while it is hidden', async () => {
+  render(<HomePage />);
+  await screen.findByText('A');
+  const heard = vi.mocked(onDocsChanged).mock.calls.at(-1)![0];
+  await wait(50);
+  vi.mocked(listDocs).mockClear();
+
+  for (let rev = 2; rev < 12; rev++) act(() => heard({ type: 'saved', id: 'a1', rev })); // ten saves, close together
+  await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(1)); // the first at once
+  await wait(300);
+  expect(listDocs).toHaveBeenCalledTimes(1); // the rest wait for the second to be up
+  await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(2), { timeout: 2000 }); // then one read for all of them
+  await wait(1100);
+  expect(listDocs).toHaveBeenCalledTimes(2);
+
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  try {
+    act(() => heard({ type: 'added', id: 'c3' }));
+    await wait(1100);
+    expect(listDocs).toHaveBeenCalledTimes(2); // hidden: nothing is read
+  } finally { delete (document as { visibilityState?: string }).visibilityState; }
+  act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(3)); // shown again: what it missed, at once
 });
