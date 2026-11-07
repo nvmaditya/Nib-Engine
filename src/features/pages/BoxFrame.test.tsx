@@ -1,11 +1,12 @@
-// A block's part on the page: its name tag and keys act on the right thing.
-import { render, screen } from '@testing-library/react';
+// A block's part on the page: its name tag, keys and clicks act on the right thing.
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
+import { hitWord, segTilt, srcOffset } from '@/engine/core.js';
 import { layoutFor } from '@/features/doc/model';
 import { flushSave } from '@/store/editor';
-import { box, docOf, get, lastToast, lines, open } from '@/test/docs';
+import { box, docOf, get, lastToast, lines, open, words } from '@/test/docs';
 import { BoxFrame } from './BoxFrame';
 
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
@@ -48,6 +49,28 @@ test('Enter on a part asks for the caret where that part’s text starts', async
   frame('m', 1);
   await press('{Enter}');
   expect(get().caret).toMatchObject({ boxId: 'm', offset: lines(40).indexOf('line29') });
+});
+
+test.each(['text', 'note'] as const)('clicking the writing of a %s block puts the caret at the word under the pointer', kind => {
+  open(docOf(box({ id: 'w', kind, name: 'W', x: 300, w: 300, text: words(30) })));
+  const sg = part('w', 0), s = 0.5, paper = { left: 40, top: 30 };
+  // A point on the writing as the engine lays it out (untilted): the left of the second row, just above where row 3 begins.
+  const ux = sg.x + sg.w * 0.15, uy = sg.rows[1].ruleY + 7;
+  const flat = { ...sg, box: { ...sg.box, kind: 'text' as const } }; // the same rows without the tilt
+  const want = srcOffset(sg.box.text, hitWord(flat, ux, uy)!);
+  // Where that point is on the page once a margin note's frame turns with its writing.
+  const t = segTilt(sg), cx = sg.x + sg.w / 2, cy = (sg.top + sg.bottom) / 2;
+  const px = cx + (ux - cx) * Math.cos(t) - (uy - cy) * Math.sin(t), py = cy + (ux - cx) * Math.sin(t) + (uy - cy) * Math.cos(t);
+  if (kind === 'note') expect(srcOffset(sg.box.text, hitWord(flat, px, py)!)).not.toBe(want); // the tilt matters here
+  const { container } = render(<div data-paper="0"><BoxFrame sg={sg} s={s} gap={34} parts={1} selected={false} mode="write" /></div>);
+  container.querySelector<HTMLElement>('[data-paper]')!.getBoundingClientRect = () => ({ ...paper, right: 440, bottom: 600, width: 400, height: 570, x: 40, y: 30, toJSON: () => ({}) }) as DOMRect;
+  const at = { clientX: paper.left + px * s, clientY: paper.top + py * s };
+  const f = screen.getByRole('group', { name: 'W' });
+  fireEvent.pointerDown(f, { ...at, button: 0, pointerId: 1 });
+  fireEvent.pointerUp(f, { ...at, pointerId: 1 });
+  fireEvent.click(f, at);
+  expect(get().caret).toMatchObject({ boxId: 'w', offset: want });
+  expect(get().selectedId).toBe('w');
 });
 
 test('in Style a part moves with the arrow keys but Delete does nothing', async () => {

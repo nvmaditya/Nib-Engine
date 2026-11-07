@@ -50,7 +50,7 @@ async function main() {
 
     await step('the document opens and its first page is drawn in handwriting', async () => {
       await page.getByText('The Water Cycle').click();
-      await page.getByRole('textbox', { name: 'Block contents' }).waitFor();
+      await page.getByRole('textbox', { name: 'Main text, page 1' }).waitFor();
       // The paper is painted and, once the font file arrives (fontTick), the ink canvases get writing.
       await page.waitForFunction(() => {
         const painted = c => {

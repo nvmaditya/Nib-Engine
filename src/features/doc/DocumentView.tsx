@@ -89,7 +89,9 @@ export function DocumentView({ stage }: { stage: Stage }) {
       const s = useEditor.getState(), el = document.activeElement;
       if (e.key !== 'Escape' || !s.selectedId || s.importOpen) return;
       if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.closest('[contenteditable="true"]'))) return;
-      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return;
+      // An open dialog or menu takes it, but not one left in a hidden stage.
+      const open = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]');
+      if ([...open].some(m => !m.closest('[data-stage][hidden]'))) return;
       select(null);
     };
     document.addEventListener('keydown', onKey);

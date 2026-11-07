@@ -19,7 +19,7 @@ const UI = { save: false, layout: false } as const;
 let steps = 0;
 export const step = (kind: string): string => `${kind}:${++steps}`;
 
-/** Show a stage of the open document (editing a block from Style goes back to Write). */
+/** Show a stage of the open document (editing a block from Style goes back to the Write view used last). */
 function show(stage: Stage, onlyFrom?: Stage[]): void {
   const r = parseHash(location.hash);
   if (r.name !== 'doc' || r.stage === stage) return;
@@ -34,14 +34,14 @@ export function select(id: string | null): void {
 /** Edit a block: the caret goes to the start of its text, in Write. */
 export function editBox(id: string): void {
   placeCaret(id, 0);
-  show('write', ['style', 'export']);
+  show(get().writeView, ['style', 'export']);
 }
 
 /** Edit one page's part: the caret goes to where that page's text starts, in Write. */
 export function editFrame(sg: Seg): void {
   const box = sg.box;
   placeCaret(box.id, frameRange(box, sg.idx)[0]);
-  show('write', ['style', 'export']);
+  show(get().writeView, ['style', 'export']);
 }
 
 export function styleBox(id: string): void {
@@ -201,7 +201,7 @@ export function addBlock(kind: BlockKind, page: number): void {
   });
   if (!added) return;
   if (kind !== 'header') placeCaret(id, 0);
-  show('write', ['style', 'export']);
+  show(get().writeView, ['style', 'export']);
 }
 
 /** A new text block where the paper was double-clicked (page units). */
@@ -213,7 +213,7 @@ export function addTextBlockAt(page: number, x: number, y: number): void {
     return ADDED.text;
   });
   if (added) placeCaret(id, 0);
-  show('write', ['style', 'export']);
+  show(get().writeView, ['style', 'export']);
 }
 
 /** Rename a block; an empty name keeps the old one. */
@@ -301,6 +301,3 @@ export function openImport(file: File | null = null): void {
 export function closeImport(): void {
   update(s => { s.importOpen = false; s.importFile = null; }, UI);
 }
-
-// The pages view registers how to add a block where the reader is looking.
-export const pagesApi: { addBox: (() => void) | null } = { addBox: null };

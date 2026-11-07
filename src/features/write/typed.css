@@ -1,0 +1,73 @@
+/* A typed page in the Pages view: each part's box and name tag in its block's colour (--bc, set inline),
+   and its editor at the page's own scale, one line of text to a ruled line (--lh, set inline). Unlayered,
+   like the editor's own styles, which these adjust. */
+
+.typed-page {
+  border-radius: 2px;
+}
+.typed-page.dragging {
+  z-index: 10;
+}
+.typed-part {
+  position: absolute;
+  border: 1.5px solid color-mix(in srgb, var(--bc) 50%, transparent);
+  border-radius: 3px;
+}
+.typed-part.selected {
+  border: 2px solid var(--bc);
+  background: color-mix(in srgb, var(--bc) 5%, transparent);
+}
+.typed-page.dragging .typed-part.selected {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.typed-tag {
+  position: absolute;
+  left: -1.5px;
+  bottom: 100%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 2px 0 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--bc);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.typed-body {
+  padding: 0 0.45em;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.typed-page .nib-editor .nib-prose {
+  font-size: inherit;
+  line-height: inherit;
+  min-height: var(--lh);
+}
+.typed-page .nib-editor .nib-prose p {
+  min-height: var(--lh);
+}
+.typed-page .nib-editor .nib-prose h1 {
+  font-size: 1.3em;
+  line-height: calc(var(--lh) * 2);
+  margin: 0;
+  text-align: center;
+}
+.typed-page .nib-editor .nib-prose h2,
+.typed-page .nib-editor .nib-prose h3 {
+  font-size: 1.1em;
+  line-height: var(--lh);
+  margin: 0;
+}
+.typed-page .nib-editor .nib-prose blockquote {
+  margin: 0;
+}
+.typed-page .nib-editor .nib-break {
+  margin: 0;
+  font-size: max(10px, 0.85em);
+  line-height: var(--lh);
+}

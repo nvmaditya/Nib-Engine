@@ -94,7 +94,7 @@ test('going Home clears a message whose Undo belongs to the document', async () 
   const rec = await createDoc({ title: 'Two blocks', settings: S, doc: sampleDoc(S) });
   location.hash = `#/d/${rec.id}/write`;
   render(<App />);
-  await screen.findByRole('textbox', { name: 'Block contents' });
+  await screen.findByRole('group', { name: 'Write view' });
   act(() => deleteBlock(useEditor.getState().doc.boxes[0].id));
   expect(await screen.findByText('Deleted “Header”.')).toBeInTheDocument();
   await user.click(screen.getByRole('link', { name: 'Home' }));

@@ -1,4 +1,5 @@
 import { Profiler } from 'react';
+import type { Editor } from '@tiptap/core';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
@@ -8,14 +9,23 @@ import type { Stage } from '@/app/route';
 import { StageHost } from '@/features/doc/StageHost';
 import { ExportPanel } from '@/features/export/ExportPanel';
 import { StylePanel } from '@/features/style/StylePanel';
-import { WritePanel } from '@/features/write/WritePanel';
-import { select } from '@/features/doc/actions';
+import { PagesView } from '@/features/write/PagesView';
+import { editBox, select } from '@/features/doc/actions';
+import { offsetAt } from '@/features/editor/positions';
 import { placeCaret, update, useEditor } from '@/store/editor';
+import { fontsLoad } from '@/test/docs';
 
 let id = '';
 beforeAll(async () => {
+  // jsdom does no layout: give the pages a width, and the hands' fonts, so Write shows its typed pages.
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1200 });
+  fontsLoad();
   const S = cleanSettings(null, false);
   id = (await createDoc({ title: 'Seeded', settings: S, doc: sampleDoc(S) })).id;
+});
+afterAll(() => {
+  delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  vi.unstubAllGlobals();
 });
 
 /** The button in the Stages nav whose label ends with `name` ('1 Write' for Write). */
@@ -32,7 +42,7 @@ test('Style shows the scope switch and hides the removed options', async () => {
   expect(screen.getByRole('button', { name: /^Gel pen/ })).toBeInTheDocument();
   expect(screen.queryByText('As drawn')).toBeNull();
   expect(screen.queryByText('Fold crease')).toBeNull();
-  expect(screen.queryByRole('textbox', { name: 'Block contents' })).toBeNull();
+  expect(screen.queryByRole('textbox', { name: /^Main text/ })).toBeNull();
 });
 
 test('a document with the fold crease on can turn it off, and then the switch goes', async () => {
@@ -71,7 +81,7 @@ test('an inactive stage stays in the page but hidden', async () => {
   render(<App />);
   await search();
   await userEvent.click(stageButton('Write'));
-  expect(await screen.findByRole('textbox', { name: 'Block contents' })).toBeVisible();
+  expect(await screen.findByRole('textbox', { name: 'Main text, page 1' })).toBeVisible();
   const box = screen.getByRole('searchbox', { name: 'Search handwriting', hidden: true });
   expect(box).not.toBeVisible();
   expect(box.closest('[inert]')).not.toBeNull();
@@ -81,22 +91,32 @@ test('an inactive stage stays in the page but hidden', async () => {
 test('a caret request goes to the Write view on screen, not to a hidden one', async () => {
   location.hash = `#/d/${id}/outline`;
   render(<App />);
-  await screen.findByRole('textbox', { name: 'Block contents' });
+  await screen.findByRole('button', { name: 'Outline', pressed: true });
   await userEvent.click(stageButton('Style'));
   location.hash = `#/d/${id}/write`;
-  await waitFor(() => expect(screen.getAllByRole('textbox', { name: 'Block contents', hidden: true })).toHaveLength(2));
+  const shown = await screen.findByRole('textbox', { name: 'Main text, page 1' });
   act(() => placeCaret('b1', 5));
-  const shown = screen.getByRole('textbox', { name: 'Block contents' }) as HTMLTextAreaElement;
   await waitFor(() => expect(document.activeElement).toBe(shown));
-  expect([shown.selectionStart, shown.selectionEnd]).toEqual([5, 5]);
+  const ed = (shown as HTMLElement & { editor: Editor }).editor;
+  expect(offsetAt(ed.state.doc, useEditor.getState().doc.boxes[1].text, ed.state.selection.from)).toBe(5);
   expect(shown.closest('[data-stage]')).toHaveAttribute('data-stage', 'write');
   expect(useEditor.getState().caret).toBeNull();
+});
+
+test('editing a block from Style goes back to the Write view used last', async () => {
+  location.hash = `#/d/${id}/outline`;
+  render(<App />);
+  await screen.findByRole('button', { name: 'Outline', pressed: true });
+  await userEvent.click(stageButton('Style'));
+  await search();
+  act(() => editBox('b1'));
+  await waitFor(() => expect(location.hash).toBe(`#/d/${id}/outline`));
 });
 
 test('Escape in a rich-text editor doesn’t leave the block', async () => {
   location.hash = `#/d/${id}/write`;
   render(<App />);
-  await screen.findByRole('textbox', { name: 'Block contents' });
+  await screen.findByRole('textbox', { name: 'Main text, page 1' });
   act(() => select('b1'));
   const ed = document.createElement('div');
   ed.setAttribute('contenteditable', 'true'); ed.tabIndex = 0;
@@ -108,10 +128,24 @@ test('Escape in a rich-text editor doesn’t leave the block', async () => {
   expect(useEditor.getState().selectedId).toBeNull();
 });
 
+test('a menu left in a hidden stage doesn’t keep Escape from leaving the block', async () => {
+  location.hash = `#/d/${id}/style`;
+  render(<App />);
+  await search();
+  await userEvent.click(stageButton('Write'));
+  await screen.findByRole('group', { name: 'Show' });
+  const menu = document.createElement('div');
+  menu.setAttribute('role', 'menu');
+  document.querySelector('[data-stage="style"]')!.append(menu);
+  act(() => select('b1'));
+  await userEvent.keyboard('{Escape}');
+  expect(useEditor.getState().selectedId).toBeNull();
+});
+
 test('Write goes back to the Write view you used last', async () => {
   location.hash = `#/d/${id}/outline`;
   render(<App />);
-  await screen.findByRole('textbox', { name: 'Block contents' });
+  await screen.findByRole('button', { name: 'Outline', pressed: true });
   await userEvent.click(stageButton('Style'));
   await search();
   await userEvent.click(stageButton('Write'));
@@ -122,7 +156,7 @@ test('a hidden stage’s panel doesn’t redraw on every change', () => {
   const renders: Partial<Record<Stage, number>> = {};
   const panel = (s: Stage) => (
     <Profiler id={s} onRender={() => { renders[s] = (renders[s] ?? 0) + 1; }}>
-      {s === 'write' ? <WritePanel /> : s === 'style' ? <StylePanel /> : <ExportPanel pages={1} />}
+      {s === 'write' ? <PagesView layout={null} /> : s === 'style' ? <StylePanel /> : <ExportPanel pages={1} />}
     </Profiler>
   );
   const host = (stage: Stage) => <StageHost stage={stage} render={panel} />;

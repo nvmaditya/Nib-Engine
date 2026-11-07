@@ -32,6 +32,14 @@ export function layoutOf(doc: EngineDoc, S: Settings = cleanSettings(null, false
 
 export const open = (doc: EngineDoc): void => openDocument(rec('A', doc));
 
+/**
+ * Let the hands' font files "arrive", so the open document's pages get laid out. The bytes are not a
+ * font, so the engine measures with the canvas stub, as `layoutOf` does.
+ */
+export const fontsLoad = (): void => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+};
+
 /** The last message given to the mocked `sonner` (the test file mocks it). */
 export const lastToast = (): string | undefined => {
   const calls = vi.mocked(sonner).mock.calls;
