@@ -129,16 +129,20 @@
   .sheet.dragging {
     z-index: 10;
   }
-  /* Dim the page itself, not the checkbox button over it, so its focus ring stays visible. */
-  .sheet.left-out .paper {
-    background: transparent;
-    box-shadow: none;
+  /* A left-out page is dimmed and greyed by one overlay of the desk over it: a filter on the ink layer
+     (whose canvases blend by multiply) would drop whole words. The checkbox button stays above the
+     overlay, so its focus ring keeps its full strength. */
+  .sheet.left-out .paper::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--desk);
+    opacity: 0.65;
+    backdrop-filter: grayscale(1);
+    pointer-events: none;
   }
-  /* Greyed as well as faded: on the light desk, fading alone leaves a pale page that still looks chosen. */
-  .sheet.left-out .paper > :not(.pick) {
-    opacity: 0.35;
-    filter: grayscale(1);
-    transition: opacity 150ms, filter 150ms;
+  .paper .pick {
+    z-index: 1;
   }
   .paper {
     position: relative;
