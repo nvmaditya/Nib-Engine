@@ -277,10 +277,13 @@ export function newTextBlockAt(S: Settings, doc: EngineDoc, page: number, x: num
   return b;
 }
 
-/** Write a header field (one line; typing keeps its spaces) and the header's text with it. */
+/** A header field's value as the header keeps it: one line (typing keeps its spaces), at most 80 characters. */
+export const fieldValue = (value: string): string => value.replace(/[\r\n]+/g, ' ').slice(0, 80);
+
+/** Write a header field and the header's text with it. */
 export function setHeaderField(box: Box, key: HeaderKey, value: string): void {
   if (box.kind !== 'header') return;
-  box.fields = { ...box.fields, [key]: value.replace(/[\r\n]+/g, ' ').slice(0, 80) };
+  box.fields = { ...box.fields, [key]: fieldValue(value) };
   box.text = headerText(box.fields);
 }
 
