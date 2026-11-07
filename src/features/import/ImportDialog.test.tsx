@@ -16,10 +16,17 @@ import { useUndoShortcuts } from '@/shell/useUndoShortcuts';
 import { createDoc, listDocs } from '@/store/documents';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
 import { box, docOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
+import { newDocument } from '@/features/doc/build';
 import { ImportDialog } from './ImportDialog';
 
 vi.mock('@/engine/importers.js', async orig => ({ ...(await orig<typeof import('@/engine/importers.js')>()), readDocument: vi.fn() }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn(), getToasts: vi.fn(() => []) }), Toaster: () => null }));
+const real = vi.hoisted(() => ({ newDocument: null as unknown as typeof import('@/features/doc/build').newDocument }));
+vi.mock('@/features/doc/build', async orig => {
+  const actual = await orig<typeof import('@/features/doc/build')>();
+  real.newDocument = actual.newDocument;
+  return { ...actual, newDocument: vi.fn(actual.newDocument) };
+});
 vi.mock('@/store/documents', async orig => {
   const actual = await orig<typeof import('@/store/documents')>();
   return { ...actual, createDoc: vi.fn(actual.createDoc) };
@@ -302,4 +309,50 @@ test('on a phone the dialog fills the screen, and crossing 860 px keeps the prev
   act(() => { window.matchMedia = wideMatchMedia; width(1200); window.dispatchEvent(new Event('resize')); });
   await userEvent.click(screen.getByRole('radio', { name: 'Journal' })); // (and the dialog draws again on the wide side)
   expect(screen.getByRole('textbox', { name: 'Imported text' })).toBe(tb); expect(tb).toHaveTextContent('Draft');
+});
+
+// Focusing the pages after Write it out on a phone gives up the moment the person does something else.
+async function phoneWrite(): Promise<void> {
+  phone(); open(docOf(box({ id: 'm', name: 'Main text', text: 'mine' })));
+  render(<><ImportButton /><input aria-label="Elsewhere" /><Open /></>);
+  await userEvent.click(screen.getByRole('button', { name: 'Import' })); await ready(); await userEvent.click(writeIt());
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+}
+const drawPages = () => render(<main data-pages aria-label="Pages"><h2 data-page-heading>Page 1</h2></main>);
+const settle = () => act(() => new Promise<void>(r => setTimeout(r, 250)));
+test('on a phone, focus moved elsewhere before the pages are drawn is left alone', async () => {
+  await phoneWrite(); screen.getByLabelText('Elsewhere').focus(); drawPages(); await settle();
+  expect(screen.getByLabelText('Elsewhere')).toHaveFocus(); expect(screen.getByText('Page 1')).not.toHaveFocus();
+});
+test('on a phone, a tap before the pages are drawn stops the focus', async () => {
+  await phoneWrite(); fireEvent.pointerDown(document.body); drawPages(); await settle();
+  expect(screen.getByText('Page 1')).not.toHaveFocus();
+});
+test('on a phone, a key before the pages are drawn stops the focus', async () => {
+  await phoneWrite(); fireEvent.keyDown(document.body, { key: 'a' }); drawPages(); await settle();
+  expect(screen.getByText('Page 1')).not.toHaveFocus();
+});
+test('on a phone, leaving Write before the pages are drawn stops the focus', async () => {
+  await phoneWrite(); location.hash = '#/d/other/preview'; drawPages(); await settle();
+  expect(screen.getByText('Page 1')).not.toHaveFocus(); location.hash = '#/';
+});
+test('on a phone, the document changing before the pages are drawn stops the focus', async () => {
+  await phoneWrite(); useEditor.setState({ docId: 'another' }); drawPages(); await settle();
+  expect(screen.getByText('Page 1')).not.toHaveFocus(); useEditor.setState({ docId: null });
+});
+test('on a phone, the host unmounting before the pages are drawn stops the focus', async () => {
+  phone(); open(docOf(box({ id: 'm', name: 'Main text', text: 'mine' })));
+  const view = render(<><ImportButton /><Open /></>);
+  await userEvent.click(screen.getByRole('button', { name: 'Import' })); await ready(); await userEvent.click(writeIt());
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull()); view.unmount(); drawPages(); await settle();
+  expect(screen.getByText('Page 1')).not.toHaveFocus();
+});
+test('from Home, wide: the caret goes to the Main text, wherever it sits among the blocks', async () => {
+  location.hash = '#/';
+  vi.mocked(newDocument).mockImplementationOnce((...a) => { const d = real.newDocument(...a); return { ...d, boxes: [...d.boxes].reverse() }; });
+  render(<ImportDialog open file={essay()} target="new" onClose={vi.fn()} />); await ready();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Add a header block' })); await userEvent.click(writeIt());
+  await waitFor(() => expect(parseHash(location.hash)).toMatchObject({ name: 'doc' }));
+  const main = get().doc.boxes.find(b => b.name === 'Main text')!; expect(get().doc.boxes.at(-1)).not.toBe(main); // (the Main text is not the last block here)
+  await waitFor(() => expect(get().caret).toMatchObject({ boxId: main.id, offset: 0 }));
 });

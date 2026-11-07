@@ -62,3 +62,11 @@ test('while Import is open, a file dragged over Home lights nothing up', async (
   render(<HomePage />); await screen.findByText('A'); act(() => { fireEvent.drop(window, files(new File(['x'], 'One.txt'))); }); await screen.findByRole('dialog');
   fireEvent.dragEnter(window, { dataTransfer: { types: ['Files'] } }); expect(screen.queryByText('Drop to import this document')).toBeNull();
 });
+test('a file dropped on the open dialog’s backdrop does not replace the file being imported', async () => {
+  render(<HomePage />); await screen.findByText('A'); act(() => { fireEvent.drop(window, files(new File(['x'], 'Essay.txt'))); });
+  await screen.findByText('Essay.txt: 2 words.');
+  const ev = new Event('drop', { cancelable: true }) as Event & { dataTransfer?: unknown };
+  ev.dataTransfer = { files: [new File(['y'], 'Other.txt')], types: ['Files'] };
+  act(() => { window.dispatchEvent(ev); });
+  expect(ev.defaultPrevented).toBe(true); expect(screen.getByText('Essay.txt: 2 words.')).toBeInTheDocument(); expect(screen.queryByText(/Other\.txt/)).toBeNull();
+});

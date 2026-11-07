@@ -45,26 +45,42 @@ const NATIVE_UNDO = ['historyUndo', 'historyRedo'];
  * After Write it out on a phone the focus goes to the pages (their first heading, once drawn), never into the
  * editor: a caret there brings up the on-screen keyboard over the text just written.
  */
-function focusPages(): void {
-  let tries = 0;
+function focusPages(): () => void {
+  const at = { route: location.hash, doc: get().docId, active: document.activeElement };
+  let tries = 0, timer: ReturnType<typeof setTimeout> | undefined, done = false;
+  const stop = () => {
+    done = true; clearTimeout(timer);
+    window.removeEventListener('pointerdown', stop, true); window.removeEventListener('keydown', stop, true);
+  };
+  // Give up as soon as the person has done anything else: touched or typed, moved the focus, left Write or the document.
+  const moved = () => document.activeElement !== document.body && document.activeElement !== at.active
+    || location.hash !== at.route || get().docId !== at.doc;
+  window.addEventListener('pointerdown', stop, true); window.addEventListener('keydown', stop, true);
   const go = () => {
+    if (done) return;
+    if (moved()) { stop(); return; }
     const region = document.querySelector<HTMLElement>('[data-pages]');
     const target = region?.querySelector<HTMLElement>('[data-page-heading]') ?? (tries >= 40 ? region : null);
-    if (target) { if (!target.hasAttribute('tabindex')) target.tabIndex = -1; target.focus({ preventScroll: true }); } else if (tries++ < 40) setTimeout(go, 50);
+    if (target) { if (!target.hasAttribute('tabindex')) target.tabIndex = -1; target.focus({ preventScroll: true }); stop(); } else if (tries++ < 40) timer = setTimeout(go, 50); else stop();
   };
-  setTimeout(go, 50); // (once the dialog has let go of the focus)
+  timer = setTimeout(go, 50); // (once the dialog has let go of the focus)
+  return stop;
 }
 
 export function ImportDialog({ open, file, target, onClose }: { open: boolean; file: File | null; target: ImportTarget; onClose(): void }) {
+  // The focus on its way to the pages outlives the panel (closing is part of Write it out) but not the editor around
+  // it. (From Home the page itself goes with the navigation, which is the point: the route check handles that.)
+  const stopFocus = useRef<(() => void) | null>(null);
+  useEffect(() => () => { if (target === 'open') stopFocus.current?.(); }, [target]);
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
       {/* Mounted afresh each time it opens, so opening starts with no file and the choices where they start. */}
-      {open && <ImportPanel file={file} target={target} onClose={onClose} />}
+      {open && <ImportPanel file={file} target={target} onClose={onClose} stopFocus={stopFocus} />}
     </Dialog>
   );
 }
 
-function ImportPanel({ file, target, onClose }: { file: File | null; target: ImportTarget; onClose(): void }) {
+function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; target: ImportTarget; onClose(): void; stopFocus: { current: (() => void) | null } }) {
   const [read, setRead] = useState<Read>(IDLE);
   const [options, setOptions] = useState<ImportOptionsValue>(() => initialOptions(target, target === 'open' ? get().doc : null));
   const [base] = useState(() => (target === 'open' ? get().S : cleanSettings(null, false)));
@@ -136,7 +152,7 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
       if (matches(WIDE)) {
         const s = get(), b = s.doc.boxes.find(x => x.id === s.selectedId);
         if (b) placeCaret(b.id, b.text.endsWith(req.text) ? b.text.length - req.text.length : 0);
-      } else { toPages.current = true; focusPages(); }
+      } else { toPages.current = true; stopFocus.current = focusPages(); }
       onClose();
       return;
     }
@@ -144,8 +160,8 @@ function ImportPanel({ file, target, onClose }: { file: File | null; target: Imp
     const ok = await importAsNewDocument(req);
     setBusy(false);
     if (!ok) return;
-    // The new document is open on Write now; its caret waits at the start of the imported text (the last block).
-    if (matches(WIDE)) { const b = get().doc.boxes.at(-1); if (b) placeCaret(b.id, 0); } else { toPages.current = true; focusPages(); }
+    // The new document is open on Write now; its caret waits at the start of the imported text (its Main text).
+    if (matches(WIDE)) { const b = get().doc.boxes.find(x => x.name === 'Main text'); if (b) placeCaret(b.id, 0); } else { toPages.current = true; stopFocus.current = focusPages(); }
     onClose();
   }
 

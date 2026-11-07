@@ -76,7 +76,9 @@ export function HomePage() {
     const dover = (e: DragEvent) => { if (hasFile(e)) e.preventDefault(); };
     const drop = (e: DragEvent) => {
       if (!hasFile(e)) return;
-      e.preventDefault(); depth.current = 0; setOver(false);
+      e.preventDefault();
+      if (dialogOpen()) return; // (a file dropped on the backdrop leaves the one being imported alone)
+      depth.current = 0; setOver(false);
       const f = e.dataTransfer?.files[0];
       if (f) openImport(f);
     };
