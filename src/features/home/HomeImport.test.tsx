@@ -96,3 +96,9 @@ test('Home is laid out as the plan has it: up to 1080 px wide, a tall hero with 
   expect(hero).toHaveClass('rounded-2xl', 'border-2', 'border-dashed', 'border-line-strong', 'bg-surface', 'py-12', 'wide:py-16');
   expect(hero.querySelector('svg')).toHaveClass('size-8', 'text-primary');
 });
+test('Home’s two headings look the same: the same size, weight and colour', async () => {
+  render(<HomePage />); await screen.findByText('A');
+  const look = (h: HTMLElement) => [...h.classList].filter(c => /^(text|font)-/.test(c)).sort();
+  const [tpl, recent] = screen.getAllByRole('heading', { level: 2 });
+  expect(look(recent)).toEqual(look(tpl)); expect(look(tpl)).toEqual(['font-semibold', 'text-base']);
+});

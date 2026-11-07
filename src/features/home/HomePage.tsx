@@ -106,7 +106,7 @@ export function HomePage() {
         <TemplateGrid />
 
         <section aria-labelledby="recent-h">
-          <h2 id="recent-h" className="mb-3 text-sm font-semibold text-muted">Recent</h2>
+          <h2 id="recent-h" className="mb-3 text-base font-semibold">Recent</h2>
           {shown === null ? null : shown === 'unreadable' ? (
             <p className="rounded-xl border border-line bg-surface p-6 text-muted">Nib can’t read your documents on this device right now.</p>
           ) : shown.length === 0 ? (
