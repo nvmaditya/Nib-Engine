@@ -18,6 +18,8 @@ export function App() {
   useEffect(() => {
     let live = true;
     // Uploaded fonts are registered before any document is read, so no document loses its hand.
+    // The two run side by side because bootstrapDocuments never cleans a stored document (it only
+    // makes the first one). If it ever reads stored documents, it must wait for bootStyle first.
     void Promise.all([bootstrapDocuments(), bootStyle()]).then(([r]) => {
       if (!live) return;
       if (!r.ok) {
