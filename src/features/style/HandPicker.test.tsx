@@ -126,7 +126,7 @@ test('the preview text is yours to change, and is remembered', async () => {
   const f = screen.getByRole('textbox', { name: 'Preview' });
   expect(f).toHaveValue('The water cycle is the continuous');
   await userEvent.clear(f);
-  await userEvent.type(f, 'Dear Nani');
+  await userEvent.type(f, 'Dear Nani', { skipClick: true }); // straight over the start, selected again once the field was emptied
   expect(drawSample).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'Dear Nani', expect.any(Number));
   expect(useStylePrefs.getState().previewText).toBe('Dear Nani');
   expect(prefs.get('previewText')).toBe('Dear Nani');
@@ -135,15 +135,30 @@ test('the preview text is yours to change, and is remembered', async () => {
   expect(f).toHaveValue('The water cycle is the continuous');
 });
 
-test('the start of the document, shown when there is no preview text, is replaced by what you type', async () => {
+test('a click in the start of the document puts the caret there; emptying the field brings the start back, selected', async () => {
   await openPicker();
   const f = screen.getByRole('textbox', { name: 'Preview' });
-  await userEvent.click(f);
+  await userEvent.click(f); // the caret goes where the click lands (here, the end)
+  await userEvent.keyboard(' movement');
+  expect(f).toHaveValue('The water cycle is the continuous movement');
+  await userEvent.clear(f);
+  expect(f).toHaveValue('The water cycle is the continuous');
   await userEvent.keyboard('Hi');
   expect(f).toHaveValue('Hi');
-  await userEvent.click(f);
-  await userEvent.keyboard(' there');
-  expect(f).toHaveValue('Hi there');
+});
+
+test('a preview of only spaces counts as none', async () => {
+  useStylePrefs.setState({ previewText: '   ' }); // as if kept from before
+  await openPicker();
+  const f = screen.getByRole('textbox', { name: 'Preview' });
+  expect(f).toHaveValue('The water cycle is the continuous');
+  expect(drawSample).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ font: 'zeyada' }), 'The water cycle is the continuous', expect.any(Number));
+  await userEvent.clear(f);
+  await userEvent.keyboard('  ');
+  expect(f).toHaveValue('The water cycle is the continuous');
+  expect(useStylePrefs.getState().previewText).toBe('');
+  await userEvent.keyboard('Hi');
+  expect(f).toHaveValue('Hi');
 });
 
 test('in Only “Margin note” the picker says so and changes only that block', async () => {

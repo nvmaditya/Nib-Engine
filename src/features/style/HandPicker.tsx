@@ -32,14 +32,6 @@ function uploadMessage(r: AddFontResult): string {
     : `Added “${r.name}”. It’s in Your fonts on this device.`;
 }
 
-/**
- * With no preview text of your own, the Preview field shows the start of the document. Coming to it
- * selects that, so what you type replaces it.
- */
-function selectStandIn(el: HTMLInputElement): void {
-  if (!useStylePrefs.getState().previewText) el.select();
-}
-
 const chip = 'h-7 rounded-full border border-line bg-surface px-3 text-[12.5px] font-medium transition-colors hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring/50 aria-pressed:border-fg aria-pressed:bg-fg aria-pressed:text-surface';
 
 function HandRow({ cfg, V, text, chosen, favourite }: { cfg: FontCfg; V: Settings; text: string; chosen: boolean; favourite: boolean }) {
@@ -79,12 +71,13 @@ export function HandPicker({ open, onOpenChange, V, start, blockName, q, onQ, fi
   const previewId = useId();
 
   const hands = handList(q, filter, favourites);
-  const sample = previewText.trim() ? previewText : start;
+  // Preview text of only spaces counts as none: the field and the rows show the start of the document.
+  const preview = previewText.trim() ? previewText : start;
 
-  // Emptying the Preview field brings the start of the document back, selected again.
+  // Emptying the Preview field brings the start of the document back, selected, so what you type next replaces it.
   useLayoutEffect(() => {
     const el = fieldRef.current;
-    if (emptied && el && el.ownerDocument.activeElement === el) selectStandIn(el);
+    if (emptied && el && el.ownerDocument.activeElement === el) el.select();
   }, [emptied]);
 
   // A font just uploaded (or found again) is scrolled into view once the list shows it.
@@ -135,15 +128,14 @@ export function HandPicker({ open, onOpenChange, V, start, blockName, q, onQ, fi
         </div>
         <div className="flex items-center gap-2 border-b border-line px-4 pb-2.5">
           <label htmlFor={previewId} className="text-xs text-muted">Preview</label>
-          <Input ref={fieldRef} id={previewId} value={previewText || start} maxLength={80} autoComplete="off" className="h-8 text-[13px]"
-            onFocus={e => selectStandIn(e.currentTarget)} onClick={e => selectStandIn(e.currentTarget)}
-            onChange={e => { const v = e.target.value; void setPreviewText(v); if (!v) markEmptied(); }} />
+          <Input ref={fieldRef} id={previewId} value={preview} maxLength={80} autoComplete="off" className="h-8 text-[13px]"
+            onChange={e => { const v = e.target.value.trim() ? e.target.value : ''; void setPreviewText(v); if (!v) markEmptied(); }} />
         </div>
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
           {hands.length > 0 && (
             <ul role="list" aria-label="Handwriting" className="flex flex-col gap-0.5">
               {hands.map(cfg => (
-                <HandRow key={cfg.id} cfg={cfg} V={V} text={sample} chosen={cfg.id === V.font} favourite={favourites.includes(cfg.id)} />
+                <HandRow key={cfg.id} cfg={cfg} V={V} text={preview} chosen={cfg.id === V.font} favourite={favourites.includes(cfg.id)} />
               ))}
             </ul>
           )}
