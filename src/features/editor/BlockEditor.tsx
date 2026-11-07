@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { consumeCaret, update, useEditor } from '@/store/editor';
 import { activeEditor, setActiveEditor } from './active';
 import { editorExtensions, type SlashItem } from './extensions';
-import { fromMarkup, toMarkup } from './markup';
+import { fromMarkup, keepCounting, toMarkup } from './markup';
 import { cleanPastedHTML } from './paste';
 import { lineOf, lineStart, offsetAt, posAt } from './positions';
 import { firstDiff, replaceLines, sliceLines, type LineRange } from './slices';
@@ -161,12 +161,13 @@ export function BlockEditor(props: BlockEditorProps): JSX.Element {
     e.view.dispatch(scroll ? tr.scrollIntoView() : tr);
   };
 
-  // Each change is written into the block's lines, if the block still exists.
+  // Each change is written into the block's lines, if the block still exists. A numbered list that runs on
+  // past them keeps counting on from them.
   const write = (e: Editor) => {
     const sh = shownIn(e), b = useEditor.getState().doc.boxes.find(x => x.id === boxId);
     if (!sh || !b) return;
     const md = toMarkup(e.getJSON()), n = lineCount(md);
-    const next = sh.whole ? md : replaceLines(b.text, { first: sh.first, end: sh.end }, md);
+    const next = sh.whole ? md : keepCounting(b.text, sh.end, replaceLines(b.text, { first: sh.first, end: sh.end }, md), sh.first + n);
     shown.current = { ...sh, text: next, end: sh.first + n, slice: md };
     if (next !== b.text) update(s => { const x = s.doc.boxes.find(y => y.id === boxId); if (x) x.text = next; }, { layout: 'soon', history: 'type:' + boxId });
     live.current.onLineCount?.(n);

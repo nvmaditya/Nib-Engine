@@ -3,7 +3,7 @@ import { DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import { parseInline, parseLine, segSig, splitAtFrame, type InlinePiece } from '@/engine/core.js';
 import { SAMPLE_BODY, SAMPLE_HEAD } from '@/engine/config.js';
 import { box, docOf, layoutOf, words } from '@/test/docs';
-import { fromMarkup, inlineToMarkup, listMarkers, plainText, toMarkup, type MarkName, type Run } from './markup';
+import { fromMarkup, inlineToMarkup, keepCounting, listMarkers, plainText, toMarkup, type MarkName, type Run } from './markup';
 import { nibSchema } from './schema';
 
 // A doc with one paragraph of text `t`.
@@ -100,6 +100,17 @@ test('a line with hundreds of marked words keeps every word', () => {
 test('both halves of a mid-paragraph split round-trip', () => { const b = box({ y: 1009, text: `${words(20)} **${words(15)}** ${words(5)}` }); const L = layoutOf(docOf(b)); const nb = splitAtFrame(b, L.segs.find(s => s.idx === 1)!, 'n'); expect(rt(b.text)).toBe(b.text); expect(rt(nb.text)).toBe(nb.text); });
 test('ordered markers', () => { expect(listMarkers({ kind: '1', delim: '.', start: 3 }, [0, 0, 1, 1, 0])).toEqual(['3.', '4.', '1.', '2.', '5.']); expect(listMarkers({ kind: 'a', delim: ')', start: 1 }, [0, 0])).toEqual(['a)', 'b)']); });
 test('plain text', () => expect(plainText('## The **water** _cycle_')).toBe('The water cycle'));
+test('rewritten lines keep a list that runs on past them counting', () => {
+  // line 0 of 'a) x\nb) y\nc) z' rewritten as two items: the rest counts on from them
+  expect(keepCounting('a) x\nb) y\nc) z', 1, 'a) w\nb) x\nb) y\nc) z', 2)).toBe('a) w\nb) x\nc) y\nd) z');
+  // a list of another kind or closing, or one that did not run on, is left as it is
+  expect(keepCounting('1. x\n2. y', 1, '1) w\n1) x\n2. y', 2)).toBe('1) w\n1) x\n2. y');
+  expect(keepCounting('1. x\n1. y', 1, '1. w\n2. x\n1. y', 2)).toBe('1. w\n2. x\n1. y');
+  expect(keepCounting('1. x\n2. y', 1, 'w\n2. y', 1)).toBe('w\n2. y');
+  // only the items that ran on: a paragraph ends them
+  expect(keepCounting('1. x\n2. y\np\n3. z', 1, '2. y', 0)).toBe('2. y');
+  expect(keepCounting('1. x\n2. y\np\n3. z', 1, '1. x\n2. w\n2. y\np\n3. z', 2)).toBe('1. x\n2. w\n3. y\np\n3. z');
+});
 
 // HTML read straight through the schema (no paste cleaning): a background is a highlight unless it is
 // transparent, none or near white (every channel 240 or more), the same rule pasting uses.

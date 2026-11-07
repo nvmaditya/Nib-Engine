@@ -297,3 +297,37 @@ test('a deleted block is never written back', () => {
   act(() => { ed.commands.insertContentAt(1, 'x'); });
   expect(get().doc.boxes).toHaveLength(0);
 });
+
+/* ---------- Numbered lists that run on past a part ---------- */
+
+const numbered = (items: string[], indent: number[] = []) => items.map((t, i) => '  '.repeat(indent[i] ?? 0) + t).join('\n');
+const count = (names: string[], from = 1) => names.map((t, i) => `${from + i}. ${t}`);
+const item = (n: number) => 'item' + n;
+const upTo = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+test('a numbered list that runs on past the part keeps counting when an item is deleted or added', () => {
+  setup(count(upTo(1, 40).map(item)).join('\n'), { range: { first: 0, end: 26 } });
+  const end = (li: number) => text().split('\n').slice(0, li + 1).join('\n').length;
+  act(() => { ed.commands.deleteRange({ from: posAt(ed.state.doc, text(), end(0)), to: posAt(ed.state.doc, text(), end(1)) }); }); // item2 goes
+  expect(text()).toBe(count([1, ...upTo(3, 40)].map(item)).join('\n'));
+  select(end(0));
+  fireEvent.keyDown(ed.view.dom, { key: 'Enter' });
+  act(() => { ed.commands.insertContent('new'); });
+  expect(text()).toBe(count([item(1), 'new', ...upTo(3, 40).map(item)]).join('\n'));
+});
+
+test('a list that runs on keeps counting at each indent', () => {
+  setup(numbered(['1. a', '2. b', '1. x', '2. y', '3. c', '4. d'], [0, 0, 1, 1, 0, 0]), { range: { first: 0, end: 2 } });
+  act(() => { ed.commands.deleteRange({ from: posAt(ed.state.doc, text(), 3), to: posAt(ed.state.doc, text(), 8) }); }); // a goes
+  expect(text()).toBe(numbered(['1. b', '1. x', '2. y', '2. c', '3. d'], [0, 1, 1, 0, 0]));
+});
+
+test('a list after the part that starts its own count keeps it', () => {
+  setup('1. a\n2. b\n1. c\n2. d', { range: { first: 0, end: 2 } });
+  select(text().indexOf('\n1. c'));
+  act(() => { ed.commands.insertContent('x'); });
+  expect(text()).toBe('1. a\n2. bx\n1. c\n2. d');
+  select(text().indexOf('a') + 1);
+  fireEvent.keyDown(ed.view.dom, { key: 'Enter' });
+  expect(text()).toBe('1. a\n2. \n3. bx\n1. c\n2. d');
+});

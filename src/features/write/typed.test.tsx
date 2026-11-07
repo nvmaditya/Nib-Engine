@@ -152,3 +152,20 @@ test('coming back to the window and going somewhere else ends the freeze', async
   await settle();
   expect(textOf('Main text, page 2').split('\n')[0]).toBe('Conclusion');
 });
+
+/* ---------- A numbered list over two pages ---------- */
+
+test('deleting an item on page 1 renumbers the list where it goes on, on page 2', async () => {
+  await openWrite(docOf(m(Array.from({ length: 40 }, (_, i) => `${i + 1}. item${i + 1}`).join('\n'))));
+  vi.useFakeTimers();
+  const p1 = editorFor('Main text, page 1');
+  act(() => { p1.view.focus(); });
+  const { doc } = p1.state, endOf = (i: number) => { let at = 0; doc.descendants((n, pos) => { if (n.type.name === 'paragraph' && i-- === 0) at = pos + n.nodeSize - 1; return at === 0; }); return at; };
+  act(() => { p1.commands.deleteRange({ from: endOf(0), to: endOf(1) }); }); // item2 goes
+  act(() => { (p1.view.dom as HTMLElement).blur(); });
+  await settle();
+  const markers = (name: string) => [...textbox(name).querySelectorAll('li')].map(li => li.getAttribute('data-marker') + ' ' + li.textContent);
+  expect(markers('Main text, page 1').at(-1)).toBe('28. item29');
+  expect(markers('Main text, page 2').slice(0, 2)).toEqual(['29. item30', '30. item31']);
+  expect(stored().at(-1)).toBe('39. item40');
+});
