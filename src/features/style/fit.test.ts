@@ -191,4 +191,4 @@ test('page count never rises as the letters get smaller or the lines closer, in 
   expect(rises).toEqual([]);
   // (and the document is long enough for that to mean something)
   expect([layoutFor({ ...S, size: LIMITS.size[0] }, mixed()).pages, layoutFor({ ...S, size: LIMITS.size[1] }, mixed()).pages]).toEqual([2, 4]);
-});
+}, 30_000); // lays out every hand at every size: about 1.5 s alone, much longer on a busy machine
