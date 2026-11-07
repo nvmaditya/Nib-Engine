@@ -12,7 +12,7 @@ vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/st
 
 function Page() {
   useUndoShortcuts();
-  return <><button>Plain</button><input aria-label="Field" /><div contentEditable aria-label="Editor"><p>x</p><div contentEditable={false}><button>In a widget</button></div></div></>;
+  return <><button>Plain</button><input aria-label="Field" /><div contentEditable suppressContentEditableWarning aria-label="Editor"><p>x</p><div contentEditable={false} suppressContentEditableWarning><button>In a widget</button></div></div></>;
 }
 const text = () => get().doc.boxes[0].text;
 const press = (key: string, o: KeyboardEventInit = {}) => fireEvent.keyDown(document.activeElement ?? document.body, { key, bubbles: true, ...o });
