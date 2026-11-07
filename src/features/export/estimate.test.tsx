@@ -41,6 +41,14 @@ test('the measured canvas is released, even when encoding fails', async () => {
   expect([c.width, c.height]).toEqual([0, 0]);
 });
 
+test('the measured canvas is released after a good measurement too', async () => {
+  const c = document.createElement('canvas'); c.width = 1747; c.height = 2471;
+  vi.mocked(renderPage).mockReturnValueOnce(c);
+  open(docOf(box({ text: 'x' })));
+  await measurePage(freeze(), 0);
+  expect([c.width, c.height]).toEqual([0, 0]);
+});
+
 test('it waits for a pause, then measures the first chosen page once', async () => {
   open(docOf(box({ text: lines(40) })));
   const { result, rerender } = renderHook(({ p }) => useSizeEstimate(p), { initialProps: { p: 0 as number | null } });
@@ -82,4 +90,24 @@ test('a measurement that fails leaves no estimate', async () => {
   vi.mocked(encodeCanvas).mockRejectedValue(new Error('encode')); open(docOf(box({ text: 'x' })));
   const { result } = renderHook(() => useSizeEstimate(0));
   await act(() => vi.advanceTimersByTimeAsync(600)); expect(result.current).toBeNull();
+});
+
+test('an edit while a measurement is running does not start a second one', async () => {
+  let release!: () => void;
+  vi.mocked(encodeCanvas).mockImplementationOnce(() => new Promise(r => { release = () => r(new Uint8Array(900)); }));
+  open(docOf(box({ text: lines(40) })));
+  renderHook(() => useSizeEstimate(0));
+  await act(() => vi.advanceTimersByTimeAsync(600)); expect(renderPage).toHaveBeenCalledTimes(1);
+  act(() => update(s => { s.doc.fileName = 'a'; }, { history: false })); await act(() => vi.advanceTimersByTimeAsync(600));
+  act(() => update(s => { s.doc.fileName = 'ab'; }, { history: false })); await act(() => vi.advanceTimersByTimeAsync(600));
+  expect(renderPage).toHaveBeenCalledTimes(1);
+  release(); await act(() => vi.advanceTimersByTimeAsync(0));
+});
+
+test('a hand that arrives after the pause is measured once it is here', async () => {
+  open(docOf(box({ text: 'x', style: { font: 'zeyada' } })));
+  renderHook(() => useSizeEstimate(0));
+  await act(() => vi.advanceTimersByTimeAsync(600)); expect(renderPage).not.toHaveBeenCalled();
+  await act(async () => { await loadFont('zeyada'); update(null, { save: false, layout: false }); });
+  await act(() => vi.advanceTimersByTimeAsync(600)); expect(renderPage).toHaveBeenCalledTimes(1);
 });

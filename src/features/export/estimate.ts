@@ -10,9 +10,10 @@ import { encodeCanvas, freeze, renderPage, type Frozen } from './render';
 export const ESTIMATE_DELAY = 600;
 const KEEP = 12;
 const cache = new Map<string, Sample>();
+const inFlight = new Set<string>(); // keys being measured now, so an edit during a measurement doesn't start a second
 
 /** Forget everything measured (for tests). */
-export function clearSizeCache(): void { cache.clear(); }
+export function clearSizeCache(): void { cache.clear(); inFlight.clear(); }
 
 /** Page `i` of the frozen copy at Standard size, as a PNG and as a JPG at Standard's and Print's quality: the byte counts. */
 export async function measurePage(f: Frozen, i: number): Promise<Sample> {
@@ -44,9 +45,11 @@ export function useSizeEstimate(firstPage: number | null): Sample | null {
     let live = true;
     const t = setTimeout(() => {
       if (!fontsInUse().every(fontReady)) return; // a font arriving bumps `version`, which starts the wait again
+      if (inFlight.has(key)) return;
+      inFlight.add(key);
       measurePage(freeze(), firstPage).then(
-        s => { remember(key, s); if (live) setDone(n => n + 1); },
-        () => {},
+        s => { inFlight.delete(key); remember(key, s); if (live) setDone(n => n + 1); },
+        () => { inFlight.delete(key); },
       );
     }, ESTIMATE_DELAY);
     return () => { live = false; clearTimeout(t); };
