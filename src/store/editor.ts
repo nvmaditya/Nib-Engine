@@ -241,11 +241,11 @@ function restore(snap: string): void {
 
 export function undo(): void {
   const snap = history.undo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); }
+  if (snap !== null) { historyTick++; restore(snap); takeDownUndoMessages(); }
 }
 export function redo(): void {
   const snap = history.redo(snapshotState());
-  if (snap !== null) { historyTick++; restore(snap); }
+  if (snap !== null) { historyTick++; restore(snap); takeDownUndoMessages(); }
 }
 
 export function renameDocument(title: string): void {
@@ -253,10 +253,17 @@ export function renameDocument(title: string): void {
   update(s => { s.title = t; }, { history: 'rename', layout: false });
 }
 
-/** A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. */
+const undoMessages = new Set<string>(); // the messages showing an Undo, so undoing or redoing can take them down
+const takeDownUndoMessages = (): void => { for (const id of undoMessages) sonnerToast.dismiss(id); undoMessages.clear(); };
+
+/**
+ * A message, with an optional action. `duration` (ms) keeps it up longer than sonner's default. The text
+ * is its id, so saying the same thing again replaces the message showing instead of stacking a copy.
+ */
 export function toast(msg: string, action?: ToastAction, o: { duration?: number } = {}): void {
-  if (!action && o.duration === undefined) { sonnerToast(msg, undefined); return; }
+  if (action?.label === 'Undo') undoMessages.add(msg); else undoMessages.delete(msg);
   sonnerToast(msg, {
+    id: msg,
     ...(action && { action: { label: action.label, onClick: action.fn } }),
     ...(o.duration !== undefined && { duration: o.duration }),
   });

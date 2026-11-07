@@ -212,7 +212,7 @@ test('a refused move changes nothing and is not an undo step', () => {
   moveBlockTo('m', 1, 0);
   expect(json()).toBe(before);
   expect(get().canUndo).toBe(false);
-  expect(vi.mocked(sonner).mock.calls.every(c => c[1] === undefined)).toBe(true); // no Undo on a refusal
+  expect(vi.mocked(sonner).mock.calls.every(c => !(c[1] as { action?: unknown }).action)).toBe(true); // no Undo on a refusal
 });
 
 test('moves say where things went', () => {
@@ -289,7 +289,7 @@ test('a page that only holds a continuation can’t be merged either', () => {
   const before = json();
   mergeIntoPreviousPage(1);
   expect(lastToast()).toBe('Part 2 of Main text always follows the part before it. Split it off first to move it on its own.');
-  expect(vi.mocked(sonner).mock.calls.at(-1)![1]).toBeUndefined();
+  expect((vi.mocked(sonner).mock.calls.at(-1)![1] as { action?: unknown }).action).toBeUndefined();
   expect([json(), get().canUndo]).toEqual([before, false]);
 });
 
