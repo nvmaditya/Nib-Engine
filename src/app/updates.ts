@@ -33,6 +33,8 @@ let reload = (): void => location.reload();
 let asked = false; // this tab pressed Reload while a new version was waiting
 let reloading = false; // on its way: the last change is being written, then the page reloads
 let registration: ServiceWorkerRegistration | null = null;
+let offeredFor: ServiceWorker | null = null; // the waiting version last offered: said to wait again, it isn't offered again
+let unwatch = (): void => {};
 let fallbacks: ReturnType<typeof setTimeout>[] = []; // what Reload does if the new version it asked for doesn't take over
 let kicking: HTMLIFrameElement | null = null; // the empty page loading unseen (see `kick`)
 let stopped: ReturnType<typeof setTimeout> | undefined; // gives the page back if the reload never happens
@@ -156,15 +158,51 @@ export function startUpdates(register: Register, hooks: { reload(): void } = { r
   unfollow(); unfollow = followEditor();
   unhear(); unhear = hearTakeover();
   applyUpdate = register({
-    onNeedRefresh() { state = 'waiting'; offer(); },
+    onNeedRefresh() { found(); },
     onNeedReload() {
       state = 'active';
       if (asked) void reloadOnce(); // this tab pressed Reload
       else offer(); // another tab did: nothing changes here but the message
     },
     onOfflineReady() { toast(OFFLINE_READY); },
-    onRegisteredSW(_url, r) { if (!r) return; registration = r; checkHourly(r); },
+    onRegisteredSW(_url, r) {
+      if (!r) return;
+      registration = r;
+      if (state === 'waiting' && !offeredFor) offeredFor = r.waiting; // (one waiting before the page registered is said first)
+      unwatch(); unwatch = watchRegistration(r);
+      checkHourly(r);
+    },
   });
+}
+
+/**
+ * A new version is waiting: offer it, once. vite-plugin-pwa says so (onNeedRefresh), twice for one found in another
+ * tab; so do the registration and the hourly check, since workbox-window stops listening for new versions after the
+ * first it hears of, or after one found more than a minute after the page registered.
+ */
+function found(): void {
+  const sw = registration?.waiting ?? null;
+  if (sw && sw === offeredFor) return; // (offered already, and maybe swiped away since)
+  offeredFor = sw;
+  state = 'waiting';
+  offer();
+}
+
+/** Hear of each new version the registration installs, wherever the update was found. Returns the remover. */
+function watchRegistration(r: ServiceWorkerRegistration): () => void {
+  const onFound = () => {
+    const sw = r.installing;
+    if (!sw) return;
+    const onState = () => {
+      if (sw.state === 'installing') return;
+      sw.removeEventListener('statechange', onState);
+      // Installed with an older version in charge, it waits. (A first install has none, and goes on: no news.)
+      if (sw.state === 'installed' && r.waiting === sw && r.active) found();
+    };
+    sw.addEventListener('statechange', onState);
+  };
+  r.addEventListener('updatefound', onFound);
+  return () => r.removeEventListener('updatefound', onFound);
 }
 
 /**
@@ -217,11 +255,17 @@ function stopWaiting(): void {
   kicking?.remove(); kicking = null;
 }
 
-/** Look for a new version every hour while the page is shown, and when it is shown again an hour or more since. */
+/**
+ * Look for a new version every hour while the page is shown, and when it is shown again an hour or more since. One
+ * found waiting is offered (`found`: once).
+ */
 function checkHourly(registration: ServiceWorkerRegistration): void {
   stopChecks();
   let last = Date.now();
-  const check = () => { last = Date.now(); registration.update().catch(() => {}); }; // (offline: the next one tries again)
+  const check = () => {
+    last = Date.now();
+    registration.update().then(() => { if (registration.waiting) found(); }, () => {}); // (offline: the next one tries again)
+  };
   const shown = () => document.visibilityState === 'visible';
   const timer = setInterval(() => { if (shown()) check(); }, CHECK_EVERY);
   const onShow = () => { if (shown() && Date.now() - last >= CHECK_EVERY) check(); };
@@ -236,6 +280,7 @@ export function resetUpdatesForTests(): void {
   document.body.removeAttribute('inert');
   clearTimeout(stopped); stopped = undefined;
   stopWaiting(); registration = null;
+  unwatch(); unwatch = () => {}; offeredFor = null;
   state = 'current'; applyUpdate = null; asked = false; reloading = false;
   reload = () => location.reload();
   setReloader(() => location.reload());

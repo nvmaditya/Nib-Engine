@@ -246,6 +246,64 @@ test('checks for a new version every hour while shown', () => {
   expect(swUpdate).toHaveBeenCalledTimes(2);
 });
 
+/** A new version found (an update check here or in another tab): it installs, then waits, as the registration says. */
+function deploy(reg: FakeRegistration): FakeWorker {
+  const next = worker('installing');
+  reg.installing = next;
+  act(() => { reg.dispatchEvent(new Event('updatefound')); });
+  next.state = 'installed'; reg.installing = null;
+  if (reg.active) reg.waiting = next; else { reg.active = next; next.state = 'activating'; } // (a first install goes on)
+  act(() => { next.dispatchEvent(new Event('statechange')); });
+  return next;
+}
+const swipeAway = () => { act(() => { for (const t of sonner.getToasts()) sonner.dismiss(t.id); }); frames(500); };
+
+// workbox-window (7.4.1) stops listening for new versions after the first one it hears of, or after one found more
+// than a minute after the page registered: vite-plugin-pwa's onNeedRefresh never comes for a later deploy.
+test('a later deploy is offered too, in a tab whose first offer was swiped away', () => {
+  const reg = registered();
+  reg.waiting = worker(); act(() => opts.onNeedRefresh!()); frames(100); // deploy 2, as vite-plugin-pwa says it
+  swipeAway();
+  expect(message(NEW_VERSION)).toBeNull();
+  deploy(reg); frames(100); // deploy 3: only the registration says so
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
+  expect(updateState()).toBe('waiting');
+});
+
+test('a new version is offered once, however many say it is waiting', async () => {
+  const reg = registered();
+  deploy(reg); frames(100);
+  expect(message(NEW_VERSION)).not.toBeNull();
+  swipeAway();
+  act(() => opts.onNeedRefresh!()); frames(100); // vite-plugin-pwa, a moment later (twice, for one found in another tab)
+  act(() => opts.onNeedRefresh!()); frames(100);
+  tick(CHECK_EVERY); await settle(0); frames(100); // the hourly check finds it waiting
+  expect(reg.update).toHaveBeenCalledTimes(1);
+  expect(message(NEW_VERSION)).toBeNull(); // swiped away, it stays away
+});
+
+test('one offered before the page knew its registration isn’t offered again by the hourly check', async () => {
+  act(() => opts.onNeedRefresh!()); frames(100); // (waiting before the page registered: said first)
+  registered({ waiting: true });
+  swipeAway();
+  tick(CHECK_EVERY); await settle(0); frames(100);
+  expect(message(NEW_VERSION)).toBeNull();
+});
+
+test('the hourly check offers a new version it finds waiting that no one said was there', async () => {
+  const reg = registered();
+  reg.waiting = worker();
+  tick(CHECK_EVERY); await settle(0); frames(100);
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
+});
+
+test('the first install is not a new version', () => {
+  const reg = registered({ active: false });
+  deploy(reg); frames(100);
+  expect(message(NEW_VERSION)).toBeNull();
+  expect(updateState()).toBe('current');
+});
+
 /** The Import dialog, open while the store says so, as Home and a document show it. */
 function Import() {
   const open = useEditor(s => s.importOpen);
