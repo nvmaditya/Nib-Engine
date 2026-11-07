@@ -1,9 +1,10 @@
 // Import from Home: a file dropped anywhere, or chosen with the hero, opens the Import dialog; the document is
-// made only on Write it out.
+// made only on Write it out. Then Home around it: its layout, its headings, and the focus after Rename and Delete.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { closeImport } from '@/features/doc/actions';
 import { createDoc } from '@/store/documents';
+import { useEditor } from '@/store/editor';
 import { fontsLoad } from '@/test/docs';
 import { HomePage } from './HomePage';
 
@@ -19,7 +20,9 @@ vi.mock('@/store/documents', () => ({
   listDocs: vi.fn(async () => [...mem.docs]),
   getDoc: vi.fn(async (id: string) => mem.docs.find(d => d.id === id)),
   createDoc: vi.fn(async (init: any = {}) => { const r = { id: 'new1', title: init.title ?? 'Untitled', createdAt: 1, updatedAt: 1, settings: {}, doc: { pageCount: 1, boxes: [], fileName: '' } }; mem.docs.unshift(r); return r; }),
-  duplicateDoc: vi.fn(), deleteDoc: vi.fn(), putDoc: vi.fn(), renameDoc: vi.fn(),
+  duplicateDoc: vi.fn(), putDoc: vi.fn(),
+  deleteDoc: vi.fn(async (id: string) => { mem.docs = mem.docs.filter(d => d.id !== id); }),
+  renameDoc: vi.fn(async (id: string, title: string) => { mem.docs = mem.docs.map(d => (d.id === id ? { ...d, title } : d)); }),
   onDocsChanged: vi.fn(() => () => {}),
   MissingDocumentError: class MissingDocumentError extends Error {},
   getPref: vi.fn(async () => undefined), setPref: vi.fn(async () => {}),
@@ -69,4 +72,19 @@ test('a file dropped on the open dialog’s backdrop does not replace the file b
   ev.dataTransfer = { files: [new File(['y'], 'Other.txt')], types: ['Files'] };
   act(() => { window.dispatchEvent(ev); });
   expect(ev.defaultPrevented).toBe(true); expect(screen.getByText('Essay.txt: 2 words.')).toBeInTheDocument(); expect(screen.queryByText(/Other\.txt/)).toBeNull();
+});
+
+/** The `⋯` menu of the document titled `title`, then its item `item`. */
+async function menu(title: string, item: string): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: `More for ${title}` }));
+  await userEvent.click(await screen.findByRole('menuitem', { name: item }));
+}
+test.each([['Rename', 'dialog'], ['Delete', 'alertdialog']] as const)('a file dropped while %s is open is left alone: no Import on top of it', async (item, role) => {
+  render(<HomePage />); await screen.findByText('A'); await menu('A', item); await screen.findByRole(role);
+  fireEvent.dragEnter(window, { dataTransfer: { types: ['Files'] } }); expect(screen.queryByText('Drop to import this document')).toBeNull();
+  const ev = new Event('drop', { cancelable: true }) as Event & { dataTransfer?: unknown };
+  ev.dataTransfer = { files: [new File(['x'], 'Essay.txt')], types: ['Files'] };
+  act(() => { window.dispatchEvent(ev); });
+  expect(ev.defaultPrevented).toBe(true); // (and the browser doesn't open the file instead)
+  expect(useEditor.getState().importOpen).toBe(false); expect(screen.getAllByRole(role)).toHaveLength(1);
 });

@@ -66,11 +66,12 @@ export function HomePage() {
     : docs;
 
   // A file dropped anywhere on Home opens Import with it (nothing is made until Write it out). While the dialog is
-  // open it has its own drop zone: entering and leaving do nothing then.
+  // open it has its own drop zone: entering and leaving do nothing then. Nor do they while Rename or Delete asks
+  // something, and a drop then is ignored rather than opening Import on top.
   const depth = useRef(0);
   useEffect(() => {
     const hasFile = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-    const dialogOpen = () => useEditor.getState().importOpen;
+    const dialogOpen = () => useEditor.getState().importOpen || !!document.querySelector('[role=dialog],[role=alertdialog]');
     const enter = (e: DragEvent) => { if (hasFile(e) && !dialogOpen()) { depth.current++; setOver(true); } };
     const leave = (e: DragEvent) => { if (hasFile(e) && !dialogOpen() && --depth.current <= 0) { depth.current = 0; setOver(false); } };
     const dover = (e: DragEvent) => { if (hasFile(e)) e.preventDefault(); };
