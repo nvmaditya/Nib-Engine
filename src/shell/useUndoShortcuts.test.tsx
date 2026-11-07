@@ -1,9 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import type { Editor } from '@tiptap/core';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { BlockEditor } from '@/features/editor/BlockEditor';
 import { flushSave, openDocument, update } from '@/store/editor';
 import { get, rec } from '@/test/docs';
 import { Overlays } from './Overlays';
-import { useOverlays } from './overlays';
+import { openOverlay, useOverlays } from './overlays';
 import { useUndoShortcuts } from './useUndoShortcuts';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
@@ -46,8 +48,27 @@ test('with the shortcut sheet open, they leave the document behind it alone', ()
   press('/', { ctrlKey: true });
   const sheet = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
   expect(within(sheet).getByRole('button', { name: 'Close' })).toBe(document.activeElement);
-  press('z', { ctrlKey: true }); expect(text()).toBe('xy');
+  // (prevented too, so the browser's own Undo doesn't start and reach the editor behind)
+  expect(press('z', { ctrlKey: true })).toBe(false); expect(press('z', { metaKey: true })).toBe(false); expect(text()).toBe('xy');
   press('Escape'); press('z', { ctrlKey: true }); expect(text()).toBe('x');
   press('/', { ctrlKey: true });
-  press('Z', { ctrlKey: true, shiftKey: true }); press('y', { ctrlKey: true }); expect(text()).toBe('x');
+  expect(press('Z', { ctrlKey: true, shiftKey: true })).toBe(false); expect(press('y', { ctrlKey: true })).toBe(false); expect(text()).toBe('x');
+});
+
+test('a field in an overlay keeps its own Undo', () => {
+  render(<div data-overlay="palette"><input aria-label="Search" /></div>);
+  act(() => openOverlay('palette'));
+  screen.getByRole('textbox', { name: 'Search' }).focus();
+  expect(press('z', { ctrlKey: true })).toBe(true); expect(text()).toBe('xy');
+});
+
+test('the browser’s own Undo and Redo (its menu, or a field with nothing to undo) never reach an editor behind an overlay', () => {
+  let ed!: Editor;
+  render(<BlockEditor boxId="b1" range={null} label="Main text" onReady={e => (ed = e)} />);
+  const native = (el: Element, inputType: string) => act(() => { el.dispatchEvent(new InputEvent('beforeinput', { inputType, bubbles: true, cancelable: true })); });
+  screen.getByRole('button', { name: 'Plain' }).focus();
+  press('/', { ctrlKey: true });
+  for (const t of ['historyUndo', 'historyRedo']) { native(ed.view.dom, t); expect(text()).toBe('xy'); }
+  press('Escape');
+  native(ed.view.dom, 'historyUndo'); expect(text()).toBe('x'); // the document's again once it's closed
 });
