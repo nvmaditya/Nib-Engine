@@ -12,6 +12,8 @@ function makeContext() {
     createLinearGradient: () => ({ addColorStop: noop }),
     createRadialGradient: () => ({ addColorStop: noop }),
     createPattern: () => ({}),
+    // The glyph engine maps each letter's outline through the canvas's current transform.
+    getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
   };
   return new Proxy(target, {
     get: (t, k) => (k in t ? t[k as string] : noop),
@@ -19,6 +21,11 @@ function makeContext() {
   });
 }
 HTMLCanvasElement.prototype.getContext = function () { return makeContext(); } as unknown as HTMLCanvasElement['getContext'];
+
+// jsdom has no Path2D. The glyph engine builds each letter's outline as one, so a real hand's
+// letters can be drawn (onto the stub, which draws nothing) when a test loads its font file.
+class NoPath2D { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} }
+if (typeof globalThis.Path2D === 'undefined') globalThis.Path2D = NoPath2D as unknown as typeof Path2D;
 
 // jsdom has no ResizeObserver; Radix components and the page view observe sizes with it.
 class NoResizeObserver { observe() {} unobserve() {} disconnect() {} }

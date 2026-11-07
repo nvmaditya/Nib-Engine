@@ -1403,6 +1403,25 @@ export function fontsInUse() {
 }
 export const clearMeasureCache = () => mCache.clear();
 
+// Style's samples: the first line of markup, written by the engine itself with these settings
+// (hand, pen, ink, realism, mistakes and seed), heightPx tall. It lays out a one-block document,
+// keeps the first row and draws only that. Returns the canvas width, or null when there is no
+// text to write. The document being drawn, its layout and the engine come back as they were.
+export function drawSample(canvas, settings, markup, heightPx) {
+  if (!markup.trim()) return null;
+  const keepS = S, keepDoc = doc, keepE = ENG, keepSegs = SEGS, keepPages = PAGES;
+  try {
+    use(settings, { pageCount:1, fileName:'', boxes:[] });
+    const top = geom().top;
+    use(settings, { pageCount:1, fileName:'', boxes:[{ id:'sample', page:0, x:PAD.l, y:top, w:4000, text:markup.split('\n')[0], style:{}, shuffle:0, frames:{}, kind:'text', name:'', color:0 }] });
+    const sg = computeLayout().segs[0], r = sg && sg.rows[0];
+    if (!r || r.kind !== 'text') return null;
+    const g = geom(), one = { ...sg, w:Math.ceil(r.w) + 12, rows:[r], bottom:r.ruleY + g.gap * 0.35 };
+    renderSegment(canvas, one, heightPx / segBounds(one).h);
+    return canvas.width;
+  } finally { S = keepS; doc = keepDoc; ENG = keepE; SEGS = keepSegs; PAGES = keepPages; }
+}
+
 export {
   S as settings, fontCfg, penCfg, inkColor, inkName, familyCss, fontStr, boxSettings, hasOwnStyle, withBox,
   computeLayout, renderSegment, segBounds, paintPaper, paperKey, composePage, frameShot, applyLook,

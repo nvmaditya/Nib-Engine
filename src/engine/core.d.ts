@@ -43,6 +43,12 @@ export function segTilt(sg: Seg): number;
 export function hitWord(sg: Seg, x: number, y: number): RowSrc | null;
 export function renderSegment(canvas: HTMLCanvasElement, sg: Seg, scale: number): void;
 export function segBounds(sg: Seg): Bounds;
+/**
+ * Draw the first line of `markup` onto `canvas`, `heightPx` tall, as the engine writes it with `settings`
+ * (hand, pen, ink, realism, mistakes and seed). Returns the canvas width, or null for blank markup or a
+ * first line that isn't words. The engine's settings, document and layout are restored, even if drawing throws.
+ */
+export function drawSample(canvas: HTMLCanvasElement, settings: Settings, markup: string, heightPx: number): number | null;
 export function paintPaper(canvas: HTMLCanvasElement, i: number, pxW: number): void;
 export function paperKey(i: number, pxW: number): string;
 export function composePage(i: number, pxW: number): HTMLCanvasElement;
