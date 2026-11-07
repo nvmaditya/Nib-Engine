@@ -12,7 +12,7 @@ import { StylePanel } from '@/features/style/StylePanel';
 import { PagesView } from '@/features/write/PagesView';
 import { editBox, select } from '@/features/doc/actions';
 import { offsetAt } from '@/features/editor/positions';
-import { placeCaret, update, useEditor } from '@/store/editor';
+import { closeDocument, placeCaret, update, useEditor } from '@/store/editor';
 import { fontsLoad } from '@/test/docs';
 
 let id = '';
@@ -27,7 +27,9 @@ afterAll(() => {
   delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
   vi.unstubAllGlobals();
 });
-beforeEach(() => localStorage.removeItem('nib.styleFolds')); // every Style fold starts closed
+// Every Style fold starts closed, and every test opens the document afresh, as from Home (what was kept
+// for it while it was open, Style's picker say, goes with it).
+beforeEach(async () => { localStorage.removeItem('nib.styleFolds'); await closeDocument(); });
 
 /** The button in the Stages nav whose label ends with `name` ('1 Write' for Write). */
 const stageButton = (name: string) =>

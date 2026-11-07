@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
 import { encodeCanvas } from './images';
+import { answer } from './media';
 
 // jsdom has no canvas. The engine creates a canvas at import time, so give it a 2D context
 // whose methods do nothing and whose text measuring is a fixed 8px per character.
@@ -56,13 +57,8 @@ if (typeof document !== 'undefined' && !document.elementFromPoint) document.elem
 // `(max-width: …)` queries are answered from window.innerWidth, and every other query doesn't match.
 // A phone test puts its own in place.
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
-  const px = (v: string, unit: string) => parseFloat(v) * (unit === 'rem' || unit === 'em' ? 16 : 1);
-  window.matchMedia = (query: string) => {
-    const m = /^\(\s*(min|max)-width:\s*([\d.]+)(px|rem|em)\s*\)$/.exec(query.trim());
-    const w = window.innerWidth, matches = !!m && (m[1] === 'min' ? w >= px(m[2], m[3]) : w <= px(m[2], m[3]));
-    return {
-      matches, media: query, onchange: null,
-      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
-    } as MediaQueryList;
-  };
+  window.matchMedia = (query: string) => ({
+    matches: answer(query, window.innerWidth), media: query, onchange: null,
+    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+  }) as MediaQueryList;
 }

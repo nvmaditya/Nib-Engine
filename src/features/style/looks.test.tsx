@@ -122,6 +122,15 @@ test('a saved look can be removed, and Undo puts it back', async () => {
   act(() => lastToastAction()!());
   await screen.findByRole('button', { name: 'Mine' });
 });
+test('…and when the device can’t store the removal, Style says so, with Undo', async () => {
+  open(docOf(box())); await addSavedLook('Mine', { font: 'kalam' }); render(<Live />);
+  vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
+  await userEvent.click(screen.getByRole('button', { name: 'Remove Mine' }));
+  await waitFor(() => expect(lastToast()).toBe('Removed “Mine” here, but this device couldn’t save that, so it may come back.'));
+  expect(screen.queryByRole('button', { name: 'Mine' })).toBeNull();
+  act(() => lastToastAction()!());
+  await screen.findByRole('button', { name: 'Mine' });
+});
 test('the save dialog doesn’t stay open over another stage', async () => {
   open(docOf(box()));
   const r = (stage: 'style' | 'write') => <StageHost stage={stage} render={s => s === 'style' ? <Live /> : <p>write</p>} />;
