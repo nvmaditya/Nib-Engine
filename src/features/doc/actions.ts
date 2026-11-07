@@ -1,15 +1,14 @@
 // Things people do to the document, ported from the handlers in Nib's earlier version, Longhand. The engine's boxes are called blocks in the interface.
 import { navigate, parseHash, type Stage } from '@/app/route';
-import { BOX_KEYS, uid } from '@/engine/doc.js';
-import { boxSettings, clearMeasureCache, frameRange, geom, hasOwnStyle, snapY } from '@/engine/core.js';
+import { BOX_KEYS } from '@/engine/doc.js';
+import { boxSettings, clearMeasureCache, frameRange, hasOwnStyle } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, HeaderKey, Seg, Settings } from '@/engine/types';
-import { newBlockName, nextColor } from '@/features/doc/blocks';
 import {
   appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage,
   newBlock, newTextBlockAt, pageRefusal, removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, type Refused,
 } from '@/features/doc/model';
 import {
-  docAction, placeCaret, selectedBox, snapshot, toast, undoTo, update, useEditor, type EditorState, type ToastAction, type UpdateOptions,
+  docAction, placeCaret, selectedBox, snapshot, toast, undoTo, update, useEditor, type EditorState, type UpdateOptions,
 } from '@/store/editor';
 
 const get = useEditor.getState;
@@ -280,23 +279,6 @@ export function resetBoxStyle(): void {
     clearMeasureCache();
   }, { history: step('match-undo') }));
   toast('This block matches the document again.', undoMatch);
-}
-
-// An imported document becomes one block that flows over as many pages as it needs.
-export function writeOut(text: string, where: 'replace' | 'append', name: string | undefined, pages: number): { box: Box; undo: ToastAction } {
-  const g = geom();
-  const doc = get().doc;
-  const box: Box = {
-    id: uid(), page: 0, x: g.left, y: snapY(g.top - g.gap, g), w: g.right - g.left, text, style: {}, shuffle: 0, frames: {},
-    kind: 'text', name: where === 'replace' ? 'Main text' : newBlockName(doc, 'text'), color: where === 'replace' ? 0 : nextColor(doc),
-  };
-  const snap = snapshot();
-  update(s => {
-    if (where === 'append') { box.page = pages; s.doc.boxes.push(box); s.doc.pageCount = pages + 1; }
-    else s.doc = { pageCount: 1, boxes: [box], fileName: name || '' };
-    s.selectedId = box.id; s.scope = 'all'; s.scrollToPage = box.page;
-  }, { history: step('import') });
-  return { box, undo: undoTo(snap, null) };
 }
 
 export function openImport(file: File | null = null): void {
