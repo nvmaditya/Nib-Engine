@@ -9,8 +9,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "typecheck": "tsc -b",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "npm run test:browser && node scripts/smoke.mjs"
   },
   "dependencies": {
     "@fontsource-variable/figtree": "5.3.0",
