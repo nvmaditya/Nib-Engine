@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { navigate, type Route } from '@/app/route';
 import { cn } from '@/lib/utils';
 import { useEditor, undo, redo, renameDocument } from '@/store/editor';
+import { AppMenu } from './AppMenu';
 import { StageNav } from './StageNav';
 import { useUndoShortcuts } from './useUndoShortcuts';
 import { openImportPicker } from '@/features/home/actions';
@@ -58,6 +59,7 @@ function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name
         <Button variant="ghost" size="icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!ready || !canUndo} onClick={undo}><Undo2 /></Button>
         <Button variant="ghost" size="icon" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!ready || !canRedo} onClick={redo}><Redo2 /></Button>
       </div>
+      <AppMenu />
       <Button className="hidden wide:inline-flex" onClick={() => navigate({ name: 'doc', id, stage: 'export' })}>Export</Button>
     </>
   );
@@ -66,13 +68,15 @@ function DocBar({ id, stage, ready }: { id: string; stage: Extract<Route, { name
 /** `ready`: the document named by the route is the one open in the editor. */
 export function TopBar({ route, ready }: { route: Route; ready: boolean }) {
   return (
-    <header className="flex min-h-14 flex-none flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface px-4 py-2 wide:h-14 wide:flex-nowrap wide:py-0">
+    <header className="flex min-h-14 flex-none flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface px-4 py-2 wide:h-14 wide:flex-nowrap wide:gap-x-3 wide:py-0">
       {route.name === 'home' ? (
         <>
           <a href="#/" className="flex items-center gap-2 text-xl"><Logo size={30} /><Wordmark /></a>
           <div className="flex-1" />
-          <Button variant="outline" onClick={openImportPicker}>Import a file</Button>
+          {/* Narrow screens have only the Import hero for this, so the bar stays one row at 320 px. */}
+          <Button variant="outline" className="hidden sm:inline-flex" onClick={openImportPicker}>Import a file</Button>
           <Button onClick={() => { void openTemplate('blank'); }}>New document</Button>
+          <AppMenu />
         </>
       ) : <DocBar id={route.id} stage={route.stage} ready={ready} />}
     </header>

@@ -96,12 +96,34 @@ async function wait(S: Settings, doc: EngineDoc): Promise<boolean> {
   } catch { return false; }
 }
 
+/** How long the page must have gone without scrolling before a thumbnail is drawn (ms). */
+export const SCROLL_QUIET = 150;
+
+// When the page, or any box in it, last scrolled (heard on the way down, since a box's scroll doesn't bubble).
+// Listened to from the first thumbnail on, so a scroll that has just stopped is known when the next one's turn comes.
+let lastScroll = -Infinity, hearing = false;
+const heard = (): void => { lastScroll = performance.now(); };
+
+/**
+ * Waits for a moment to draw a thumbnail in: idle time (at most 500 ms away), then until nothing has scrolled for
+ * SCROLL_QUIET ms. A drawing takes 50 to 100 ms on the main thread, which would stall a scroll that is going on.
+ */
+export async function drawSlot(): Promise<void> {
+  if (!hearing) { hearing = true; window.addEventListener('scroll', heard, { capture: true, passive: true }); }
+  await new Promise<void>(r => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(() => r(), { timeout: 500 });
+    else setTimeout(r, 0);
+  });
+  for (let left; (left = lastScroll + SCROLL_QUIET - performance.now()) > 0;) await new Promise<void>(r => setTimeout(r, left));
+}
+
 let queue: Promise<unknown> = Promise.resolve();
 
 async function job(owner: string, S: Settings, doc: EngineDoc, px: number, sig: string, wants: () => boolean): Promise<Thumb | null> {
-  await new Promise<void>(r => setTimeout(r, 0));
+  await drawSlot();
   if (!wants()) return null;
   if (!(await ready(S, doc))) return null;
+  await drawSlot(); // a hand still on its way can arrive once a scroll has begun
   if (!wants()) return null;
   const { canvas, pages } = drawThumb(S, doc, px);
   let jpeg: Uint8Array;
