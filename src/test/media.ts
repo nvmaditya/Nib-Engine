@@ -1,9 +1,10 @@
 // A window whose width a test changes, as when a tablet is turned or a window resized. Its `matchMedia`
-// answers `(min-width: …)` and `(max-width: …)` from the width now (every other query doesn't match, as in
-// setup.ts), and on a resize each `change` listener whose answer changed hears it, as in a browser.
+// answers `(min-width: …)` and `(max-width: …)` from the width now, as setup.ts's stub does (every other
+// query doesn't match), and on a resize each `change` listener whose answer changed hears it, as in a browser.
 
 const px = (v: string, unit: string) => parseFloat(v) * (unit === 'rem' || unit === 'em' ? 16 : 1);
-function answer(query: string, width: number): boolean {
+/** Whether `query` matches a window `width` px wide: `(min-width: …)` and `(max-width: …)` in px, rem or em; anything else doesn't. */
+export function answer(query: string, width: number): boolean {
   const m = /^\(\s*(min|max)-width:\s*([\d.]+)(px|rem|em)\s*\)$/.exec(query.trim());
   return !!m && (m[1] === 'min' ? width >= px(m[2], m[3]) : width <= px(m[2], m[3]));
 }
