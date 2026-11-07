@@ -18,7 +18,7 @@ export interface Thumb { url: string; pages: number }
 interface Stored { sig: string; jpeg: Uint8Array; pages: number }
 
 const keep = new Map<string, { sig: string; thumb: Thumb }>();
-export const clearThumbMemory = (): void => { keep.clear(); };
+export const clearThumbMemory = (): void => { keep.clear(); lastScroll = -Infinity; };
 
 /** FNV-1a (32 bits) of what page 1 is drawn from, as 8 hex digits. A rename doesn't change it. */
 export function thumbSig(S: Settings, doc: EngineDoc, px: number): string {
@@ -120,6 +120,7 @@ export async function drawSlot(): Promise<void> {
 let queue: Promise<unknown> = Promise.resolve();
 
 async function job(owner: string, S: Settings, doc: EngineDoc, px: number, sig: string, wants: () => boolean): Promise<Thumb | null> {
+  if (!wants()) return null; // a tile scrolled past doesn't hold up the ones after it
   await drawSlot();
   if (!wants()) return null;
   if (!(await ready(S, doc))) return null;

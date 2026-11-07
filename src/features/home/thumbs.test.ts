@@ -160,7 +160,6 @@ test('a thumbnail whose hand arrives while the page scrolls is drawn only once t
   let release!: () => void;
   vi.stubGlobal('fetch', vi.fn(() => new Promise(r => { release = () => r({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }); })));
   try {
-    await vi.advanceTimersByTimeAsync(5000); // (each fake clock starts at 0: this one goes past the scrolls of the test before)
     const p = thumbFor('doc:late', { ...S, font: 'cedarville' }, two(), 156);
     await vi.advanceTimersByTimeAsync(10); expect(fetch).toHaveBeenCalled(); // its turn came, and its hand is on the way
     for (let t = 0; t < 500; t += 100) {
@@ -174,4 +173,22 @@ test('a thumbnail whose hand arrives while the page scrolls is drawn only once t
     await vi.advanceTimersByTimeAsync(1); expect(composePage).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(100); expect(await p).not.toBeNull();
   } finally { vi.useRealTimers(); }
+});
+test('a tile already scrolled past gives up its turn at once, without waiting for idle time', async () => {
+  const idle: IdleRequestCallback[] = [];
+  const ric = vi.fn((cb: IdleRequestCallback, _o?: IdleRequestOptions) => idle.push(cb)); // idle time never comes
+  vi.stubGlobal('requestIdleCallback', ric);
+  const gone = thumbFor('doc:gone', S, two(), 156, () => false);
+  const next = thumbFor('doc:next-in-view', S, two(), 156);
+  try {
+    expect(await Promise.race([gone, new Promise(r => setTimeout(() => r('still waiting'), 50))])).toBeNull();
+    await vi.waitFor(() => expect(ric).toHaveBeenCalledTimes(1)); // the next tile is waiting for its own idle time
+    expect(composePage).not.toHaveBeenCalled();
+  } finally {
+    // Idle time at last, until the next tile is drawn (so the queue is free for the tests after this one).
+    let done = false;
+    void next.finally(() => { done = true; });
+    while (!done) { idle.splice(0).forEach(cb => cb({ didTimeout: false, timeRemaining: () => 40 })); await new Promise(r => setTimeout(r, 5)); }
+  }
+  expect(await next).not.toBeNull();
 });
