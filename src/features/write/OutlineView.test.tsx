@@ -448,6 +448,8 @@ describe('on a phone', () => {
     handle().focus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(room()).toBe('631px'));
+    // (vaul moves the sheet in an effect of its own, after the height the pages make room for has changed)
+    await waitFor(() => expect(sheet().style.transform).toBe('translate3d(0px, 137px, 0px)'));
     const at = sheet().style.transform;
     /**
      * A mouse drag that starts on `el`, whose capture of the pointer takes it out of `el`, and drops on
@@ -473,7 +475,7 @@ describe('on a phone', () => {
     expect(lastToast()).toMatch(/^Moved page 1 to position 2\./);
   });
 
-  test('the sheet goes with the stage, and Tab goes on out of it, both ways', async () => {
+  test('the sheet goes with the stage and the view, and Tab goes on out of it, both ways', async () => {
     await outline(docOf(m()));
     const controls = [...sheet().querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]')];
     controls[controls.length - 1].focus();
@@ -486,5 +488,13 @@ describe('on a phone', () => {
     expect(screen.queryByRole('dialog', { name: 'Outline', hidden: true })).toBeNull();
     await userEvent.click(within(screen.getByRole('group', { name: 'Write view' })).getByRole('button', { name: 'Outline' }));
     expect(await screen.findByRole('dialog', { name: 'Outline' })).toBeInTheDocument();
+    // another stage hides Outline's, and its sheet with it; Write comes back to Outline
+    const stageButton = (name: string) => within(screen.getByRole('navigation', { name: 'Stages' })).getByRole('button', { name: new RegExp(`${name}$`) });
+    await userEvent.click(stageButton('Style'));
+    expect(await screen.findByRole('dialog', { name: 'Style' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Outline', hidden: true })).toBeNull();
+    await userEvent.click(stageButton('Write'));
+    expect(await screen.findByRole('dialog', { name: 'Outline' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Style' })).toBeNull();
   });
 });
