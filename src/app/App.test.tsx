@@ -5,10 +5,11 @@ import { FONTS } from '@/engine/config.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import { addFontFile, FONT_KEY_PREFIX, fontId } from '@/features/style/fonts';
 import { useStylePrefs } from '@/features/style/prefs';
-import { fontFile } from '@/test/fonts';
+import { box, docOf } from '@/test/docs';
+import { fontFile, paragraphs, realFonts } from '@/test/fonts';
 import { deleteBlock } from '@/features/doc/actions';
 import { createDoc, getDoc, setPref } from '@/store/documents';
-import { flushSave, useEditor } from '@/store/editor';
+import { flushSave, update, useEditor } from '@/store/editor';
 import { TopBar } from '@/shell/TopBar';
 import { App } from './App';
 import { parseHash } from './route';
@@ -161,4 +162,29 @@ test('coming back to the tab shows the looks another tab saved', async () => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
   act(() => { document.dispatchEvent(new Event('visibilitychange')); });
   await waitFor(() => expect(useStylePrefs.getState().looks.map(l => l.name)).toEqual(['Theirs']));
+});
+
+// (Last: it loads a real hand's file, which stays loaded.)
+test('typing that adds a page, then Style before the pages are laid out again: no page notice for it', async () => {
+  realFonts();
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1200 }); // room for the pages
+  try {
+    const rec = await createDoc({ title: 'Fit', settings: { ...cleanSettings(null, false), size: 34 }, doc: docOf(box({ id: 'm', name: 'Main text', text: paragraphs(7) })) });
+    const go = (stage: string) => act(() => { location.hash = `#/d/${rec.id}/${stage}`; window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    location.hash = `#/d/${rec.id}/style`;
+    render(<App />);
+    await screen.findAllByText('Page 2 of 2');
+    go('write');
+    act(() => { // a paragraph typed, and Style pressed within the pause typing waits for
+      update(s => { s.doc.boxes[0].text += '\n' + paragraphs(1); }, { layout: 'soon', history: 'type:m' });
+      go('style');
+    });
+    expect(await screen.findAllByText('Page 3 of 3')).not.toHaveLength(0);
+    await act(() => new Promise(r => setTimeout(r, 200)));
+    expect(screen.queryByText(/^Now \d pages? \(was \d\)$/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Fit back/ })).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  }
 });

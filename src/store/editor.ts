@@ -5,7 +5,7 @@ import { toast as sonnerToast } from 'sonner';
 import { cleanDoc, cleanSettings, loadSaved } from '@/engine/doc.js';
 import { clearMeasureCache, use } from '@/engine/core.js';
 import type { Box, EngineDoc, Settings } from '@/engine/types';
-import { MEMORY_ID } from '@/app/route';
+import { MEMORY_ID, beforeRouteChange } from '@/app/route';
 import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { forgetDb } from './db';
 import { History } from './history';
@@ -75,6 +75,7 @@ let createdAt = 0;
 /** Counts every change to the undo history (a step recorded, undone, redone or cleared), so a gesture can tell something else happened mid-drag. */
 let historyTick = 0;
 let layoutTimer: ReturnType<typeof setTimeout> | undefined;
+const cancelLayout = () => { clearTimeout(layoutTimer); layoutTimer = undefined; };
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savePending = false;
 
@@ -139,7 +140,7 @@ export function flushSave(): Promise<void> {
 
 export function openDocument(rec: DocRecord): void {
   if (savePending) void saveNow(); // don't lose the last edits of the document being left
-  clearTimeout(layoutTimer);
+  cancelLayout();
   sonnerToast.dismiss(); // a message's Undo belongs to the document it was shown in
   const S = cleanSettings(rec.settings, false);
   const doc = cleanDoc(rec.doc) ?? emptyDoc();
@@ -167,8 +168,7 @@ export function closeDocument(): Promise<void> {
   const s = get();
   if (s.docId === null || s.docId === MEMORY_ID) return Promise.resolve();
   const saved = flushSave(); // takes what to write now, before the state below changes
-  clearTimeout(layoutTimer);
-  layoutTimer = undefined;
+  cancelLayout();
   sonnerToast.dismiss();
   history.clear(); historyTick++;
   failing = null;
@@ -205,17 +205,27 @@ export function update(fn: ((s: EditorState) => void) | null, opts: UpdateOption
   const s = get();
   use(s.S, s.doc);
   const next: Partial<EditorState> = { version: s.version + 1, ...historyFlags() };
-  if (layout === 'now') { clearTimeout(layoutTimer); next.layoutTick = s.layoutTick + 1; }
+  if (layout === 'now') { cancelLayout(); next.layoutTick = s.layoutTick + 1; }
   else if (layout === 'soon') {
     clearTimeout(layoutTimer);
-    layoutTimer = setTimeout(() => {
-      const t = get();
-      useEditor.setState({ layoutTick: t.layoutTick + 1, version: t.version + 1 });
-    }, 140);
+    layoutTimer = setTimeout(flushLayout, 140);
   }
   if (save && stored(s.docId)) { next.saving = 'saving'; saveSoon(); }
   useEditor.setState(next);
 }
+
+/**
+ * Lay out now a change still waiting for a pause in typing. The route runs this before the app hears
+ * that the address changed, so the stage shown next starts from the pages as they are (Style takes the
+ * page count it compares with from them).
+ */
+export function flushLayout(): void {
+  if (layoutTimer === undefined) return;
+  cancelLayout();
+  const t = get();
+  useEditor.setState({ layoutTick: t.layoutTick + 1, version: t.version + 1 });
+}
+beforeRouteChange(flushLayout);
 
 function restore(snap: string): void {
   const o = JSON.parse(snap) as { S: unknown; doc: unknown; title: string };

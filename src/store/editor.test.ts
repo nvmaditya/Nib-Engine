@@ -5,7 +5,7 @@ import { cleanSettings } from '@/engine/doc.js';
 import { resetBoxStyle } from '@/features/doc/actions';
 import { NewerDocumentError, putDoc, type DocRecord } from '@/store/documents';
 import { box, docOf, rec as mkRec, open } from '@/test/docs';
-import { SAVE_FAILED, closeDocument, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, undo, undoTo, update, useEditor } from './editor';
+import { SAVE_FAILED, closeDocument, flushLayout, flushSave, gesture, installFlushOnHide, openDocument, redo, renameDocument, snapshot, undo, undoTo, update, useEditor } from './editor';
 
 const get = useEditor.getState;
 
@@ -239,6 +239,19 @@ test('hiding the tab writes it too', () => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
   expect(putDoc).toHaveBeenCalledTimes(1);
   off();
+});
+
+test('a change waiting for a pause in typing can be laid out at once, and only once', () => {
+  vi.useFakeTimers();
+  open(docOf(box()));
+  const t = get().layoutTick;
+  update(s => { s.doc.boxes[0].text = 'x'; }, { layout: 'soon', history: 'type:b1' });
+  expect(get().layoutTick).toBe(t);
+  flushLayout();
+  expect(get().layoutTick).toBe(t + 1);
+  vi.advanceTimersByTime(500);
+  flushLayout();
+  expect(get().layoutTick).toBe(t + 1); // nothing was waiting any more
 });
 
 test('a gesture is one undo step however long it pauses', () => {
