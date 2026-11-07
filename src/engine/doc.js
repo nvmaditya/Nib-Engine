@@ -39,8 +39,11 @@ export const HEADER_FIELDS = [['name', 'Name'], ['class', 'Class'], ['subject', 
 export const DEFAULT_NAMES = { text:'Text block', header:'Header', note:'Margin note' };
 const KINDS = ['text', 'header', 'note'];
 // One line per field present, in the fixed order. An empty value leaves a label to fill in.
+// Values are written with markup characters escaped, so they show as typed.
+const escapeValue = v => v.replace(/[\\*_~=`\[]/g, '\\$&');
+const unescapeValue = v => v.replace(/\\([!-\/:-@\[-`{-~])/g, '$1');
 export function headerText(f) {
-  return HEADER_FIELDS.filter(([k]) => typeof f[k] === 'string').map(([k, label]) => (f[k] ? `${label}: ${f[k]}` : `${label}:`)).join('\n');
+  return HEADER_FIELDS.filter(([k]) => typeof f[k] === 'string').map(([k, label]) => (f[k] ? `${label}: ${escapeValue(f[k])}` : `${label}:`)).join('\n');
 }
 function cleanFields(f) {
   const o = {};
@@ -51,17 +54,21 @@ const HEADER_LINE = /^(Name|Class|Subject|Roll no\.|Date):[ \t]*(.*)$/;
 // Documents saved before blocks had kinds: the block of Name:/Class:/Date: lines is the Header, the longest text block the Main text.
 export function migrateDoc(doc, fromSchema) {
   if (fromSchema >= 2) return doc;
-  const boxes = doc.boxes.map(b => {
-    if (b.kind !== 'text') return b;
+  // The first block that looks like a header (lowest page, then highest on it) becomes the Header; a document has one.
+  const found = new Map();
+  for (const b of doc.boxes) {
+    if (b.kind !== 'text') continue;
     const ls = b.text.split('\n').filter(l => l.trim());
     const ms = ls.map(l => HEADER_LINE.exec(l));
-    if (ls.length < 2 || ms.some(m => !m || m[2].length > 80 || m[2] !== m[2].trimEnd())) return b;
-    if (new Set(ms.map(m => m[1])).size !== ms.length) return b;
+    if (ls.length < 2 || ms.some(m => !m || m[2].length > 80 || m[2] !== m[2].trimEnd())) continue;
+    if (new Set(ms.map(m => m[1])).size !== ms.length) continue;
     const fields = {};
-    for (const m of ms) fields[HEADER_FIELDS.find(([, label]) => label === m[1])[0]] = m[2];
-    const f = cleanFields(fields);
-    return { ...b, kind:'header', name:DEFAULT_NAMES.header, fields:f, text:headerText(f) };
-  });
+    for (const m of ms) fields[HEADER_FIELDS.find(([, label]) => label === m[1])[0]] = unescapeValue(m[2]);
+    found.set(b, cleanFields(fields));
+  }
+  let first = null;
+  for (const b of found.keys()) if (!first || b.page < first.page || (b.page === first.page && b.y < first.y)) first = b;
+  const boxes = doc.boxes.map(b => (b === first ? { ...b, kind:'header', name:DEFAULT_NAMES.header, fields:found.get(b), text:headerText(found.get(b)) } : b));
   let main = null;
   for (const b of boxes) if (b.kind === 'text' && b.name === DEFAULT_NAMES.text && (!main || b.text.length > main.text.length)) main = b;
   return { ...doc, boxes:boxes.map(b => (b === main ? { ...b, name:'Main text' } : b)) };
@@ -135,7 +142,7 @@ export function loadSaved() {
     if (oldText !== null) { use(S, { pageCount:1, boxes:[] }); const g = geom(); doc = { pageCount:1, fileName:'', boxes:[{ id:'b1', page:0, x:g.left, y:g.top, w:g.right - g.left, text:oldText, style:{}, shuffle:0, frames:{} }] }; doc = cleanDoc(doc); }
     else doc = sampleDoc(S);
   }
-  if (rawDoc && doc) doc = migrateDoc(doc, 1);
+  doc = migrateDoc(doc, 1); // the oldest save, and the example, go through it too
   return { S, doc };
 }
 let saveTimer = 0;
