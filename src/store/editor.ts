@@ -32,6 +32,7 @@ export interface EditorState {
   canRedo: boolean;
   importOpen: boolean;
   importFile: File | null;
+  importOpener: HTMLElement | null; // what Import gives the focus back to, when not what had it as it opened
   scrollToPage: number | null;
   caret: CaretRequest | null;
   writeView: 'write' | 'outline'; // the Write view shown last; the Write stage button goes back to it
@@ -65,6 +66,7 @@ export const useEditor = create<EditorState>(() => ({
   canRedo: false,
   importOpen: false,
   importFile: null,
+  importOpener: null,
   scrollToPage: null,
   caret: null,
   writeView: 'write',
@@ -342,7 +344,7 @@ export function openDocument(rec: DocRecord): void {
     docId: rec.id, title: rec.title, S, doc,
     version: s.version + 1, layoutTick: s.layoutTick + 1,
     selectedId: longestBox(doc)?.id ?? null, scope: 'all', saving: stored(rec.id) ? 'saved' : 'unsaved',
-    importOpen: false, importFile: null, scrollToPage: null, caret: null, writeView: 'write',
+    importOpen: false, importFile: null, importOpener: null, scrollToPage: null, caret: null, writeView: 'write',
     ...historyFlags(),
   });
 }
@@ -363,7 +365,7 @@ export function closeDocument(): Promise<void> {
   followSeq++; // a look at storage for it is dropped
   useEditor.setState({
     docId: null, title: '', version: s.version + 1, selectedId: null, scope: 'all', saving: 'saved',
-    importOpen: false, importFile: null, scrollToPage: null, caret: null,
+    importOpen: false, importFile: null, importOpener: null, scrollToPage: null, caret: null,
     ...historyFlags(),
   });
   return saved;

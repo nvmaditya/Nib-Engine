@@ -1,6 +1,6 @@
 // The command palette (Ctrl+K, ⌘K): open a document, go to a stage, use a look on the whole document, export, or
 // change the theme. Mounted once with the other overlays, outside the stages.
-import { Fragment, useEffect, useLayoutEffect, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { defaultFilter, useCommandState } from 'cmdk';
 import { MEMORY_ID, useRoute } from '@/app/route';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command';
@@ -10,7 +10,7 @@ import { useThemePref } from '@/lib/theme';
 import { listDocs } from '@/store/documents';
 import { useEditor } from '@/store/editor';
 import { paletteCommands, type CommandContext, type CommandGroupName, type PaletteCommand } from './commands';
-import { focusBack, otherModalOpen } from './overlays';
+import { focusBack } from './overlays';
 
 const NAME = 'Search commands and documents';
 
@@ -78,28 +78,41 @@ function giveBack(e: Event, went: boolean): void {
 }
 
 // A command that goes to another stage, document or Home is only on screen once the address change has been
-// heard, so the focus goes back on the next frame. A dialog the command opened (Import, in a document) has it
-// first: it comes back here once that closes, if the dialog gives it to nothing (Import gives it back to what
-// opened it, which was the palette's field).
+// heard, so the focus goes back on the next frame. A dialog the command opened (Import, in a document) keeps it,
+// and gives it back itself to what had it before the palette (focusBack stands aside; openImport's opener).
 let chosenAt: string | null = null; // the address when the command chosen ran
 let frame = 0;
-let watch: MutationObserver | null = null;
-function stopFocus(): void { cancelAnimationFrame(frame); watch?.disconnect(); watch = null; }
+const stopFocus = (): void => cancelAnimationFrame(frame);
 function closeFocus(e: Event): void {
   e.preventDefault();
   const from = chosenAt;
   chosenAt = null;
   stopFocus();
-  frame = requestAnimationFrame(() => {
-    const went = from !== null && location.hash !== from;
-    if (!otherModalOpen()) { giveBack(e, went); return; }
-    watch = new MutationObserver(() => {
-      if (otherModalOpen()) return;
-      stopFocus();
-      frame = requestAnimationFrame(() => { if (document.activeElement === document.body) giveBack(e, went); });
-    });
-    watch.observe(document.body, { childList: true });
-  });
+  frame = requestAnimationFrame(() => giveBack(e, from !== null && location.hash !== from));
+}
+
+/**
+ * cmdk 1.1.1 names the chosen option in `aria-activedescendant` a step late, or not at all: it reads which item
+ * is chosen before React has drawn the new choice (none on opening; after `Ess`, the one chosen before). So once
+ * the list has been drawn, the field and the list name the option that is chosen, and when React writes cmdk's
+ * late value again, it is put right after it.
+ */
+function useActiveDescendant(root: RefObject<HTMLDivElement | null>): void {
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const sync = () => {
+      const id = el.querySelector('[cmdk-item][aria-selected="true"]')?.id;
+      for (const t of el.querySelectorAll('[cmdk-input], [cmdk-list]')) {
+        if (!id) t.removeAttribute('aria-activedescendant');
+        else if (t.getAttribute('aria-activedescendant') !== id) t.setAttribute('aria-activedescendant', id);
+      }
+    };
+    const watch = new MutationObserver(sync);
+    watch.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-selected', 'aria-activedescendant'] });
+    sync();
+    return () => watch.disconnect();
+  }, [root]);
 }
 
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
@@ -139,9 +152,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 /** What the palette shows while open (mounted afresh each time, so nothing is chosen or typed yet). */
 function Palette({ groups, choose }: { groups: Group[]; choose(c: PaletteCommand): void }) {
   const [value, setValue] = useState(''); // the item chosen: cmdk's, so the documents arriving can choose again
+  const root = useRef<HTMLDivElement>(null);
+  useActiveDescendant(root);
   return (
     // No Ctrl+K/J/N/P moving through the list (cmdk's vim keys): Ctrl+K closes the palette, as it opened it.
-    <Command label={NAME} loop vimBindings={false} filter={filter} value={value} onValueChange={setValue}>
+    <Command ref={root} label={NAME} loop vimBindings={false} filter={filter} value={value} onValueChange={setValue}>
       <CommandInput placeholder={NAME} />
       <CommandList label={NAME}>
         <CommandEmpty>Nothing matches that.</CommandEmpty>

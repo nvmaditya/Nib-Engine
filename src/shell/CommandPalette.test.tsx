@@ -1,5 +1,5 @@
 // The command palette in the app: Ctrl+K, a few letters, Enter.
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast as sonner } from 'sonner';
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
@@ -12,8 +12,9 @@ import { createDoc, setPref, type DocRecord } from '@/store/documents';
 import { closeDocument, flushSave, openDocument, undo, update, useEditor } from '@/store/editor';
 import { loadFont } from '@/engine/core.js';
 import { fontsLoad, rec } from '@/test/docs';
+import { resizableWindow } from '@/test/media';
 import { CommandPalette } from './CommandPalette';
-import { useOverlays } from './overlays';
+import { focusBeforeOverlay, useOverlays } from './overlays';
 
 const NAME = 'Search commands and documents';
 let essay: DocRecord, here: DocRecord;
@@ -256,6 +257,108 @@ test('closing that Import gives the focus back to what had it before the palette
   await u.keyboard('{Escape}');
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   await waitFor(() => expect(name).toHaveFocus());
+});
+
+test('what takes the focus as the palette closes keeps it (New document’s caret in its Main text, say)', async () => {
+  const u = user();
+  await openApp();
+  const name = await docName();
+  name.focus();
+  const write = within(stages()).getByRole('button', { name: '1 Write' });
+  const field = await openPalette(u);
+  fireEvent.keyDown(field, { key: 'Escape' });
+  expect(palette()).not.toBeInTheDocument();
+  act(() => write.focus()); // before the palette's closing focus has had its frame
+  await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+  expect(write).toHaveFocus();
+  expect(focusBeforeOverlay()).toBeNull(); // nor kept for later
+});
+
+/** Import, from the palette: a short text file read, then Write it out. */
+async function importFromPalette(u: ReturnType<typeof user>) {
+  await openPalette(u);
+  await choose(u, 'Import');
+  const dlg = await screen.findByRole('dialog', { name: 'Import a document' });
+  fireEvent.change(dlg.querySelector('input[type="file"]')!, { target: { files: [new File(['A short imported note.'], 'note.txt', { type: 'text/plain' })] } });
+  const write = within(dlg).getByRole('button', { name: 'Write it out' });
+  await waitFor(() => expect(write).toBeEnabled());
+  await u.click(write);
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Import a document' })).not.toBeInTheDocument());
+}
+
+test('on a phone, Write it out from the palette’s Import puts the focus on the pages, as from the Write bar (no keyboard)', async () => {
+  const u = user();
+  const win = resizableWindow(390);
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 390 }); // (the phone's page is drawn to its width)
+  try {
+    await openApp();
+    (await docName()).focus(); // (given back to it, the on-screen keyboard would come up)
+    await importFromPalette(u);
+    await waitFor(() => expect(document.activeElement).toHaveAttribute('data-page-heading'));
+    await act(async () => { await new Promise(r => setTimeout(r, 200)); }); // nothing takes it after
+    expect(document.activeElement).toHaveAttribute('data-page-heading');
+    expect(useEditor.getState().caret).toBeNull();
+  } finally { win.restore(); delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth; }
+});
+
+test('once Import has taken over from the palette, what had the focus before is Import’s to give back: nothing keeps it for later', async () => {
+  const u = user();
+  await openApp();
+  const name = await docName();
+  name.focus();
+  await openPalette(u);
+  await choose(u, 'Import');
+  await screen.findByRole('dialog', { name: 'Import a document' });
+  await act(async () => { await new Promise(r => setTimeout(r, 50)); }); // the palette's closing focus has had its frame
+  expect(focusBeforeOverlay()).toBeNull();
+  await u.keyboard('{Escape}');
+  await waitFor(() => expect(name).toHaveFocus()); // (Import's own)
+  // The focus on the page itself, then the shortcut sheet opened and closed: there was nothing to give back.
+  act(() => { name.blur(); });
+  await u.keyboard('{Control>}/{/Control}');
+  await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+  await u.keyboard('{Escape}');
+  await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+  expect(document.activeElement).toBe(document.body);
+});
+
+test('the field names the chosen option for screen readers: on opening, as you type, and when the documents arrive', async () => {
+  const u = user();
+  location.hash = '#/';
+  render(<App />);
+  await screen.findByRole('button', { name: 'New document' });
+  const field = await openPalette(u); // on Home: the documents arrive after it opens, and come first
+  const list = palette()!.querySelector('[cmdk-list]')!;
+  const chosen = () => palette()!.querySelector('[cmdk-item][aria-selected="true"]');
+  const agree = (value: string) => {
+    expect(chosen()).toHaveAttribute('data-value', value);
+    expect(field).toHaveAttribute('aria-activedescendant', chosen()!.id);
+    expect(list).toHaveAttribute('aria-activedescendant', chosen()!.id);
+  };
+  agree(`doc:${here.id}`);
+  await u.keyboard('E');
+  agree(palette()!.querySelector('[cmdk-item]')!.getAttribute('data-value')!);
+  await u.keyboard('ss');
+  agree(`doc:${essay.id}`);
+  await u.keyboard('zzzz');
+  expect(chosen()).toBeNull();
+  expect(field).not.toHaveAttribute('aria-activedescendant');
+  await u.clear(field);
+  agree(`doc:${here.id}`);
+});
+
+test('…in a document too', async () => {
+  const u = user();
+  await openApp();
+  const field = await openPalette(u);
+  const chosenId = () => palette()!.querySelector('[cmdk-item][aria-selected="true"]')!.id;
+  expect(field).toHaveAttribute('aria-activedescendant', chosenId());
+  expect(document.getElementById(chosenId())).toHaveTextContent('Outline');
+  await u.keyboard('Ess');
+  expect(field).toHaveAttribute('aria-activedescendant', chosenId());
+  expect(document.getElementById(chosenId())).toHaveTextContent('Essay');
+  await u.keyboard('{ArrowDown}');
+  expect(field).toHaveAttribute('aria-activedescendant', chosenId());
 });
 
 test('the documents are read afresh each time it opens', async () => {

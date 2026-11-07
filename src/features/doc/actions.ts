@@ -299,10 +299,14 @@ export function resetBoxStyle(): void {
   toast('This block matches the document again.', undoMatch);
 }
 
-export function openImport(file: File | null = null): void {
-  update(s => { s.importOpen = true; s.importFile = file; }, UI);
+/**
+ * Open Import, with `file` read at once if given. `opener` is what gets the focus back when it closes, for an
+ * opener that is gone once Import shows (the palette); by default it is what has the focus as it opens.
+ */
+export function openImport(file: File | null = null, opener: HTMLElement | null = null): void {
+  update(s => { s.importOpen = true; s.importFile = file; s.importOpener = opener; }, UI);
 }
 
 export function closeImport(): void {
-  update(s => { s.importOpen = false; s.importFile = null; }, UI);
+  update(s => { s.importOpen = false; s.importFile = null; s.importOpener = null; }, UI);
 }

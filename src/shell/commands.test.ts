@@ -8,7 +8,7 @@ import { setThemePref } from '@/lib/theme';
 import { get, rec } from '@/test/docs';
 import { flushSave, openDocument } from '@/store/editor';
 import { paletteCommands, type CommandContext } from './commands';
-import { useOverlays } from './overlays';
+import { closeOverlay, openOverlay, useOverlays } from './overlays';
 
 vi.mock('@/features/doc/actions', async orig => ({ ...(await orig<typeof import('@/features/doc/actions')>()), openImport: vi.fn() }));
 vi.mock('@/features/home/actions', async orig => ({ ...(await orig<typeof import('@/features/home/actions')>()), openImportPicker: vi.fn() }));
@@ -95,6 +95,15 @@ test('Import a file… opens Import in a document, and the file picker on Home',
   expect(openImport).toHaveBeenCalledTimes(1); expect(openImportPicker).not.toHaveBeenCalled();
   run({ name: 'home' }, 'import');
   expect(openImportPicker).toHaveBeenCalledTimes(1); expect(openImport).toHaveBeenCalledTimes(1);
+});
+
+test('…and Import gives the focus back to what had it before the palette, not to the palette’s field', () => {
+  const had = document.body.appendChild(document.createElement('button'));
+  had.focus();
+  openOverlay('palette');
+  run(inDoc(), 'import');
+  expect(openImport).toHaveBeenCalledWith(null, had);
+  closeOverlay(); had.remove();
 });
 
 test('Export as… chooses the format, then goes to Export', () => {

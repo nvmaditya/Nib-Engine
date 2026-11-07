@@ -10,7 +10,7 @@ import { openTemplate } from '@/features/home/templates';
 import { pickDocumentLook, STYLE_LOOKS } from '@/features/style/looks';
 import type { SavedLook } from '@/features/style/prefs';
 import { setThemePref, type ThemePref } from '@/lib/theme';
-import { openOverlay } from './overlays';
+import { focusBeforeOverlay, openOverlay } from './overlays';
 
 export type CommandGroupName = 'Go to' | 'Documents' | 'Create' | 'Export' | 'Looks for the whole document' | 'Theme' | 'Help';
 
@@ -60,7 +60,7 @@ export function paletteCommands(ctx: CommandContext): PaletteCommand[] {
     if (d.id !== doc?.id) add('Documents', `doc:${d.id}`, d.title, () => navigate({ name: 'doc', id: d.id, stage: 'write' }), { meta: relativeTime(d.updatedAt, ctx.now) });
   }
   add('Create', 'new', 'New document', () => { void openTemplate('blank'); }, { words: 'blank page' });
-  add('Create', 'import', 'Import a file…', () => (doc ? openImport() : openImportPicker()), { words: 'pdf word docx text' });
+  add('Create', 'import', 'Import a file…', () => (doc ? openImport(null, focusBeforeOverlay()) : openImportPicker()), { words: 'pdf word docx text' });
   if (doc) {
     for (const [format, name] of FORMATS) add('Export', `export:${format}`, `Export as ${name}`, () => { setExportPrefs({ format }); navigate({ ...doc, stage: 'export' }); });
     for (const look of [...STYLE_LOOKS, ...ctx.looks]) add('Looks for the whole document', `look:${look.id}`, look.name, () => pickDocumentLook(look));

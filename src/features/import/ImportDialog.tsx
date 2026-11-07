@@ -91,8 +91,9 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
   const reading = useRef(0); // only the last file read wins
   const toPages = useRef(false); // written out into the open document on a phone: the focus goes to the pages
   // What had the focus when it opened (the Write bar's Import, say): it gets it back on closing. The dialog is
-  // opened from the store, not by a Radix trigger, so Radix itself has nothing to give it back to.
-  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  // opened from the store, not by a Radix trigger, so Radix itself has nothing to give it back to. Opened from the
+  // palette, it is what had the focus before the palette, whose field is gone by then.
+  const [opener] = useState(() => get().importOpener ?? document.activeElement as HTMLElement | null);
 
   // An earlier import's message would sit over the footer (on phones, over Write it out): put away each one
   // showing, by its own id (dismissing them all at once can swallow a new message that reuses an id).
