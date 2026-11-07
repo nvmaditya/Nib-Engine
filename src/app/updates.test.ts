@@ -260,6 +260,18 @@ test('Import puts the message away while it is open, and closing it brings the m
   expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
 });
 
+test('a new version found while Import is open waits for it to close, so nothing covers its buttons on a phone', () => {
+  render(createElement(Import));
+  act(() => openImport()); frames(500);
+  act(() => opts.onNeedRefresh!()); frames(500);
+  expect(message(NEW_VERSION)).toBeNull(); // (it would sit over Cancel and Write it out, under the dialog's cover)
+  act(() => opts.onNeedReload!()); frames(500); // and another tab taking it, the same
+  expect(message(NEW_VERSION)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); frames(500);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(reloadIn(NEW_VERSION)).toBeInTheDocument();
+});
+
 test('a new version message swiped away stays away when Import opens and closes', () => {
   render(createElement(Import));
   act(() => opts.onNeedRefresh!()); frames(100);

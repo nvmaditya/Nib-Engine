@@ -51,11 +51,13 @@ const inMemory = (): boolean => useEditor.getState().docId === MEMORY_ID;
 
 /**
  * Say a new version is ready, with Reload. It stays up until pressed or swiped away, whatever document opens or
- * closes; put away by the Import dialog, it comes back when the dialog closes.
+ * closes; put away by the Import dialog, or said while it is open, it comes back when the dialog closes. (Over the
+ * dialog, it would cover Cancel and Write it out on a phone, where the dialog's cover lets nothing press or swipe it.)
  */
 function offer(): void {
   putAway = false;
   if (inMemory()) return;
+  if (useEditor.getState().importOpen) { putAway = true; return; }
   toast(NEW_VERSION, reloadAction(), {
     keep: true, duration: Infinity,
     onDismiss: () => { if (useEditor.getState().importOpen) putAway = true; }, // (not swiped away by the person)
