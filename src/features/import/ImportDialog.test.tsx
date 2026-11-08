@@ -192,6 +192,24 @@ test('…and outside a text field the keys do nothing at all, so the browser’s
   expect([screen.getByRole('radio', { name: 'Journal' }), screen.getByRole('button', { name: 'Cancel' }), screen.getByLabelText('Choose another file'), await dialog()].map(z)).toEqual([false, false, false, false]);
   expect(z(screen.getByRole('textbox', { name: 'Name' }))).toBe(true); // a field keeps its own undo
 });
+test('…and in its header’s value and name inputs, Undo and Redo are theirs: the open document and its history are left alone', async () => {
+  const fields = fieldsOf({ name: 'Old', class: '7B', date: '1 May 2026' });
+  open(docOf(box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields }), box({ id: 'm', name: 'Main text', y: 178, text: 'mine' })));
+  setV({ size: 40 }); setV({ size: 44 }); undo(); // a step to undo, and one to redo
+  const user = userEvent.setup(), state = () => [get().S.size, get().canUndo, get().canRedo, get().doc.boxes[0].fields];
+  openImport(); render(<><Shortcuts /><Open /></>); await ready();
+  const keys = async (el: HTMLElement) => {
+    for (const k of ['{Control>}z{/Control}', '{Control>}{Shift>}z{/Shift}{/Control}', '{Control>}y{/Control}']) {
+      await user.keyboard(k);
+      expect([document.activeElement === el, ...state()]).toEqual([true, 40, true, true, fields]);
+    }
+    expect(fireEvent.keyDown(el, { key: 'z', ctrlKey: true })).toBe(true); // the input's own undo
+  };
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), '!');
+  await keys(screen.getByRole('textbox', { name: 'Name' }));
+  await user.click(screen.getByRole('button', { name: 'Rename “Class”' })); await user.keyboard('Sec');
+  await keys(screen.getByRole('textbox', { name: 'Field name' })); // (and it stays open)
+});
 test('the browser’s own Undo (Ctrl+Z in a field with nothing to undo of its own, or the Edit menu) never reaches an editor behind the dialog', async () => {
   open(docOf(box({ id: 'm', text: 'mine' }))); let behind!: Editor;
   render(<><BlockEditor boxId="m" range={null} label="Main text" onReady={e => (behind = e)} /><Open /></>);

@@ -1,6 +1,6 @@
 // A header block's fields (Name, Class and Date to start with), each written as one line of the header, and
 // the editor that adds, renames, removes and reorders them.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { GripVertical, Plus } from 'lucide-react';
 import { HEADER_LIMITS } from '@/engine/doc.js';
 import type { HeaderField } from '@/engine/types';
@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { addField, moveField, removeField, renameField, setField } from '@/features/doc/actions';
+import { isApple, isModKey } from '@/lib/keys';
 import { cn } from '@/lib/utils';
-import { useEditor } from '@/store/editor';
+import { redo, undo, useEditor } from '@/store/editor';
 import { OptionsButton } from './BlockMenu';
 import { dragGhost, dropClass, gripClass, pageDropIndex, rowAt, startDrag } from './dnd';
 
@@ -27,6 +28,7 @@ export function HeaderFields({ boxId, compact = false }: { boxId: string; compac
     rename: (id, label) => renameField(boxId, id, label),
     remove: id => removeField(boxId, id),
     move: (id, to) => moveField(boxId, id, to),
+    history: again => (again ? redo : undo)(),
   }), [boxId]);
   if (!fields) return null;
   return <FieldEditor fields={fields} ops={ops} compact={compact} />;
@@ -42,6 +44,19 @@ export interface FieldOps {
   rename(id: string, label: string): void;
   remove(id: string): void;
   move(id: string, to: number): void;
+  /**
+   * Undo (false) or Redo (true) in the history the changes go to, for the document's keys (`historyKey`) pressed
+   * in a field's value or name: the input's own undo would be a change of its own, and clear Redo. Left out
+   * (Import's copy of a header, whose dialog owns those keys), the inputs keep their own undo.
+   */
+  history?(again: boolean): void;
+}
+
+/** Undo (false) or Redo (true), for Mod+Z, Mod+Shift+Z or (off Apple) Ctrl+Y; null for any other key. */
+function historyKey(e: ReactKeyboardEvent): boolean | null {
+  if (!isModKey(e.nativeEvent) || e.altKey) return null;
+  const k = e.key.toLowerCase();
+  return k === 'z' ? e.shiftKey : k === 'y' && !isApple() ? true : null;
 }
 
 /** What Add field offers, in this order, leaving out those the header has (by label, trimmed, ignoring case). */
@@ -151,6 +166,14 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
     if (back) focusTo.current = { id, part: 'label' };
     setRenaming(r => (r?.id === id ? null : r));
   };
+  // The document's Undo and Redo keys in a value or a name go to `ops.history`, when there is one; whether they did.
+  const historyKeys = (e: ReactKeyboardEvent): boolean => {
+    const again = historyKey(e);
+    if (again === null || !ops.history) return false;
+    e.preventDefault();
+    ops.history(again);
+    return true;
+  };
   const add = (field: { label: string; today?: true }, then: 'value' | 'name') => {
     const id = ops.add(field);
     if (id === null) return; // nothing added: the menu gives the focus back to Add field
@@ -217,7 +240,7 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
             </span>
             {renaming?.id === f.id ? (
               <NameInput id={f.id} label={f.label} compact={compact} has={() => latest.current.some(x => x.id === f.id)}
-                end={(draft, back) => endName(f.id, draft, back)} />
+                end={(draft, back) => endName(f.id, draft, back)} historyKeys={historyKeys} />
             ) : (
               <button type="button" aria-label={`Rename “${f.label}”`} title={f.label} data-field-label={f.id} onClick={() => openName(f.id, false)}
                 className={cn('min-w-0 cursor-text truncate rounded-sm text-left text-muted hover:text-fg', ring,
@@ -226,7 +249,7 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
               </button>
             )}
             <Input aria-label={f.label} data-field-value={f.id} value={f.value} maxLength={80} autoComplete="off"
-              onChange={e => ops.setValue(f.id, e.target.value)} className={compact ? cn(COMPACT_INPUT, OVER_SQUARES) : 'focus-visible:ring-ring/50'} />
+              onChange={e => ops.setValue(f.id, e.target.value)} onKeyDown={historyKeys} className={compact ? cn(COMPACT_INPUT, OVER_SQUARES) : 'focus-visible:ring-ring/50'} />
             <DropdownMenu open={menuFor === f.id} onOpenChange={o => setMenuFor(cur => (o ? f.id : cur === f.id ? null : cur))}>
               <DropdownMenuTrigger asChild onPointerDown={e => {
                 const at = fieldAt(e.clientY);
@@ -267,18 +290,23 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
  * old name back, both giving the focus back to the name (and the key goes no further); leaving it keeps what was
  * typed. If it goes while still open (its editor is closed, or another block is pressed in Outline), what was
  * typed is kept, as the block name field does, unless its field went first. Whichever comes first ends it: the
- * name is sent once at most.
+ * name is sent once at most. Its field renamed while it is open (an Undo or Redo pressed in it, say) shows the
+ * name it has now, as the block name field does, so leaving it doesn't put the other one back.
  */
-function NameInput({ label, id, compact, has, end }: {
+function NameInput({ label, id, compact, has, end, historyKeys }: {
   label: string; id: string; compact: boolean;
   /** Whether its field is still in the list. */
   has(): boolean;
   /** It ended: the name to keep (null: keep the old one), and whether the focus goes back to the name. */
   end(draft: string | null, back: boolean): void;
+  /** The document's Undo and Redo keys, when they are the editor's to send on; whether this one was. */
+  historyKeys(e: ReactKeyboardEvent): boolean;
 }) {
   const [draft, setDraft] = useState(label);
+  const [shown, setShown] = useState(label);
+  if (shown !== label) { setShown(label); setDraft(label); }
   const live = useRef({ draft, label, has, end, done: false });
-  Object.assign(live.current, { draft, has, end });
+  Object.assign(live.current, { draft, label, has, end });
   const finish = (keep: boolean, back: boolean) => {
     const s = live.current;
     if (s.done) return;
@@ -294,7 +322,7 @@ function NameInput({ label, id, compact, has, end }: {
       onChange={e => setDraft(e.target.value)}
       onBlur={() => finish(true, false)}
       onKeyDown={e => {
-        if (e.key !== 'Enter' && e.key !== 'Escape') return;
+        if (historyKeys(e) || (e.key !== 'Enter' && e.key !== 'Escape')) return;
         e.preventDefault();
         e.stopPropagation();
         finish(e.key === 'Enter', true);

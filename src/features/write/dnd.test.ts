@@ -104,8 +104,11 @@ test('a field row is the one whose line the point is on, even where a later row�
   expect(drop).toHaveBeenCalledWith({ page: 0, after: false });
 });
 
-/** Three field rows 40 px tall and 300 px wide (y 0–120), the grip in the first, a hint under them (y 120–160). */
-function fieldRows() {
+/**
+ * Three field rows 40 px tall and 300 px wide (y 0–120), the grip in the first, a hint under them (y 120–160).
+ * With `sheet`, they are in a list that scrolls, from y `top` to `bottom` on the screen (Outline's phone sheet).
+ */
+function fieldRows(sheet?: { top: number; bottom: number }) {
   const grid = document.createElement('div'), hint = document.createElement('p');
   const rows = [0, 1, 2].map(i => {
     const row = document.createElement('div');
@@ -115,7 +118,14 @@ function fieldRows() {
     grid.append(row);
     return row;
   });
-  document.body.append(grid, hint);
+  if (sheet) {
+    const list = document.createElement('div');
+    list.style.overflowY = 'auto';
+    Object.defineProperties(list, { scrollHeight: { value: 1000 }, clientHeight: { value: sheet.bottom - sheet.top } });
+    list.getBoundingClientRect = () => ({ x: 0, y: sheet.top, ...sheet, left: 0, right: 300, width: 300, height: sheet.bottom - sheet.top, toJSON: () => ({}) }) as DOMRect;
+    list.append(grid, hint);
+    document.body.append(list);
+  } else document.body.append(grid, hint);
   vi.spyOn(document, 'elementFromPoint').mockImplementation((x, y) => (x < 0 || x > 300 ? null : y >= 0 && y < 120 ? rows[Math.floor(y / 40)].firstElementChild : y >= 120 && y < 160 ? hint : null));
   const drop = vi.fn();
   render(createElement('button', {
@@ -167,6 +177,24 @@ test('held in the edge where a drag scrolls the list, a field drag keeps aiming 
   expect(marks()).toEqual([undefined, undefined, undefined]);
   up(10, innerHeight - 8);
   expect(drop.mock.calls).toEqual([[{ page: 2, after: true }], [null]]);
+});
+
+test('…but let go past the edge, off the list that scrolls them (on the handwritten page above a phone’s sheet), it drops on nothing', () => {
+  const { drop, marks } = fieldRows({ top: -40, bottom: 400 }); // its edges are y -40 to 8, over the first row, and 352 to 400
+  down('touch', 10, 20); move(10, 100); move(10, 60); move(10, 5); // across the rows, up into the top edge
+  const inTop = marks();
+  move(10, -260); // on up, 220 px above the list
+  const above = marks();
+  up(10, -260);
+  down('touch', 10, 20); move(10, 100); move(10, 380); // into the bottom edge
+  const inBottom = marks();
+  move(10, 600); // on down, 200 px below the list
+  const below = marks();
+  up(10, 600);
+  expect([inTop, above, inBottom, below]).toEqual([
+    ['before', undefined, undefined], [undefined, undefined, undefined], [undefined, undefined, 'before'], [undefined, undefined, undefined],
+  ]);
+  expect(drop.mock.calls).toEqual([[null], [null]]);
 });
 
 test('of some rows, the one whose line a point is on, or the nearest', () => {

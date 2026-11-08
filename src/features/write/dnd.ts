@@ -139,12 +139,26 @@ if (typeof window !== 'undefined') {
 
 let busy = false; // one drag at a time
 
-/** How far into `scroller`'s top (-1…0) or bottom (0…1) edge a point is (EDGE px deep); 0 outside them. */
-function edgePull(scroller: HTMLElement, x: number, y: number): number {
+/** Where `scroller` is on the screen (the window, for the page's own scroll). */
+function rectOf(scroller: HTMLElement): { top: number; bottom: number; left: number; right: number } {
   const root = scroller === document.scrollingElement || scroller === document.documentElement;
-  const r = root ? { top: 0, bottom: innerHeight, left: 0, right: innerWidth } : scroller.getBoundingClientRect();
+  return root ? { top: 0, bottom: innerHeight, left: 0, right: innerWidth } : scroller.getBoundingClientRect();
+}
+
+/**
+ * How far into `scroller`'s top (-1…0) or bottom (0…1) edge a point is (EDGE px deep), at full pull past it; 0
+ * beside it, or between the edges.
+ */
+function edgePull(scroller: HTMLElement, x: number, y: number): number {
+  const r = rectOf(scroller);
   if (x < r.left || x > r.right) return 0;
   return y < r.top + EDGE ? -Math.min(1, (r.top + EDGE - y) / EDGE) : y > r.bottom - EDGE ? Math.min(1, (y - r.bottom + EDGE) / EDGE) : 0;
+}
+
+/** Whether a point is in `scroller`'s top or bottom edge (EDGE px deep), inside it: not past it. */
+function inEdge(scroller: HTMLElement, x: number, y: number): boolean {
+  const r = rectOf(scroller);
+  return y >= r.top && y <= r.bottom && edgePull(scroller, x, y) !== 0;
 }
 
 /**
@@ -196,8 +210,9 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
   const retarget = () => {
     let h = hit(x, y, targets, own);
     // Held in the edge where the drag scrolls the list, a field drag off the rows keeps aiming where it last did: the
-    // rows it was carried past may have scrolled away from the finger.
-    if (!h && own && marked && target && scroller && edgePull(scroller, x, y)) h = { el: marked, t: target };
+    // rows it was carried past may have scrolled away from the finger. Past the edge, off the list (on the
+    // handwritten page above a phone's sheet, say), it aims at nothing: letting go there means never mind.
+    if (!h && own && marked && target && scroller && inEdge(scroller, x, y)) h = { el: marked, t: target };
     const t = h?.t ?? null;
     const mark = !h ? null : opts.kind === 'item' ? 'on' : h.t.after ? 'after' : 'before';
     if (marked && (marked !== h?.el || marked.dataset.drop !== mark)) delete marked.dataset.drop;
