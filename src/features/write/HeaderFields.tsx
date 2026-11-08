@@ -64,11 +64,15 @@ const COMPACT_HIT = 'relative before:absolute before:top-1/2 before:left-1/2 bef
 /** The squares stop 3 px past the first and last lines (room for the focus rings), and well past the sides. */
 const COMPACT_CLIP = '[clip-path:inset(-3px_-24px)]';
 /**
- * The typed page's columns: grip, label, value, ⋯. The label column takes at most 45% of what the label and the value
- * share (the row less the grip and the ⋯, 1em each, and the three 0.4em gaps), so the value always keeps 55% of it;
- * a longer label is cut short with an ellipsis.
+ * The columns, in every editor: grip, label, value, ⋯. The label column takes at most 45% of what the label and the
+ * value share (the row less `--fixed`: the grip, the ⋯ and the three gaps), so the value always keeps 55% of it; a
+ * longer label is cut short with an ellipsis, its full name in its title.
  */
-const COMPACT_COLS = 'grid-cols-[auto_fit-content(calc((100%_-_3.2em)*0.45))_minmax(0,1fr)_auto] gap-x-[0.4em]';
+const COLS = 'grid-cols-[auto_fit-content(calc((100%_-_var(--fixed))*0.45))_minmax(0,1fr)_auto]';
+/** The typed page: a 1em grip and ⋯, 0.4em gaps. */
+const COMPACT_COLS = cn(COLS, 'gap-x-[0.4em] [--fixed:3.2em]');
+/** Outline and Import: on phones a 44 px grip and ⋯, from wide 26 and 28 px; 12 px gaps. */
+const NORMAL_COLS = cn(COLS, 'gap-x-3 gap-y-2 [--fixed:124px] wide:[--fixed:90px]');
 /** On the typed page, the label, name and value are above those squares: a press on them is theirs. */
 const OVER_SQUARES = 'relative z-[1]';
 /** On the typed page, the grip and the ⋯ show while their row has the pointer or the focus, and always where there is no hover. */
@@ -202,7 +206,7 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
 
   return (
     <div ref={root} className="group/fields relative">
-      <div className={cn('grid items-center', compact ? cn(COMPACT_COLS, COMPACT_CLIP) : 'grid-cols-[auto_fit-content(40%)_minmax(0,1fr)_auto] gap-x-3 gap-y-2')}>
+      <div className={cn('grid items-center', compact ? cn(COMPACT_COLS, COMPACT_CLIP) : NORMAL_COLS)}>
         {fields.map((f, i) => (
           <div key={f.id} data-drop-field={i} className={cn('group/row col-span-full grid grid-cols-subgrid items-center', compact ? 'h-lh' : 'rounded-md', dropClass)}>
             <span role="img" aria-label={`Move “${f.label}”`} data-vaul-no-drag="" onPointerDown={e => drag(e, f)}

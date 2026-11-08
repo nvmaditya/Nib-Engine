@@ -104,8 +104,8 @@ test('a field row is the one whose line the point is on, even where a later row�
   expect(drop).toHaveBeenCalledWith({ page: 0, after: false });
 });
 
-test('a field drag ending past its own header’s rows (on the hint under them, or where the list scrolled away) drops on the end row there', () => {
-  // Three rows 40 px tall, the dragged row's grip in the first; a hint under them (y 120–160); nothing beyond.
+/** Three field rows 40 px tall and 300 px wide (y 0–120), the grip in the first, a hint under them (y 120–160). */
+function fieldRows() {
   const grid = document.createElement('div'), hint = document.createElement('p');
   const rows = [0, 1, 2].map(i => {
     const row = document.createElement('div');
@@ -116,24 +116,57 @@ test('a field drag ending past its own header’s rows (on the hint under them, 
     return row;
   });
   document.body.append(grid, hint);
-  vi.spyOn(document, 'elementFromPoint').mockImplementation((_x, y) => (y >= 0 && y < 120 ? rows[Math.floor(y / 40)].firstElementChild : y >= 120 && y < 160 ? hint : null));
+  vi.spyOn(document, 'elementFromPoint').mockImplementation((x, y) => (x < 0 || x > 300 ? null : y >= 0 && y < 120 ? rows[Math.floor(y / 40)].firstElementChild : y >= 120 && y < 160 ? hint : null));
   const drop = vi.fn();
   render(createElement('button', {
     type: 'button',
     onPointerDown: (e: ReactPointerEvent) => startDrag(e, { kind: 'grip', targets: 'field', ghost: () => document.createElement('div'), onDrop: drop }),
   }, 'grip'), { container: rows[0] });
-  down('touch', 10, 20); move(10, 132);
-  expect(rows.map(r => r.dataset.drop)).toEqual([undefined, undefined, 'after']);
+  const marks = () => rows.map(r => r.dataset.drop);
+  return { drop, marks };
+}
+
+test('a field drag let go just past its header’s rows (up to 48 px above or below, over them sideways) drops on the end row there', () => {
+  const { drop, marks } = fieldRows();
+  down('touch', 10, 20); move(10, 132); // 12 px under the last row, on the hint
+  expect(marks()).toEqual([undefined, undefined, 'after']);
   up(10, 132);
-  down('touch', 10, 20); move(10, 90); move(10, 600); // into the edge: the list scrolled, nothing under the finger
-  expect(rows.map(r => r.dataset.drop)).toEqual([undefined, undefined, 'after']);
-  up(10, 600);
-  down('touch', 10, 20); move(10, -30); // above the first row: the first row
-  expect(rows.map(r => r.dataset.drop)).toEqual(['before', undefined, undefined]);
+  down('touch', 10, 20); move(10, 168); // 48 px under it
+  expect(marks()).toEqual([undefined, undefined, 'after']);
+  up(10, 168);
+  down('touch', 10, 20); move(10, -30); // 30 px above the first row
+  expect(marks()).toEqual(['before', undefined, undefined]);
   up(10, -30);
   expect(drop.mock.calls).toEqual([[{ page: 2, after: true }], [{ page: 2, after: true }], [{ page: 0, after: false }]]);
-  // A grip outside any header's rows still drops on nothing there.
-  expect(targetAt(5, 600, 'field')).toBeNull();
+});
+
+test('…but let go farther away, or beside the rows, it drops on nothing: never mind', () => {
+  const { drop, marks } = fieldRows();
+  down('touch', 10, 20); move(10, 132); move(10, 320); // 200 px under the last row
+  expect(marks()).toEqual([undefined, undefined, undefined]);
+  up(10, 320);
+  down('touch', 10, 20); move(10, 169); // just over 48 px under it
+  up(10, 169);
+  down('touch', 10, 20); move(10, 132); move(400, 132); // level with the rows, but beside them
+  expect(marks()).toEqual([undefined, undefined, undefined]);
+  up(400, 132);
+  down('touch', 10, 20); move(10, -49); // just over 48 px above the first row
+  up(10, -49);
+  expect(drop.mock.calls).toEqual([[null], [null], [null], [null]]);
+  // A grip outside any header's rows drops on nothing off them, near or not.
+  expect(targetAt(5, 132, 'field')).toBeNull();
+});
+
+test('held in the edge where a drag scrolls the list, a field drag keeps aiming where it last did, rows scrolled away or not', () => {
+  // (jsdom lays nothing out, so the scroller is the page: its edge is the last 48 px of the window's height.)
+  const { drop, marks } = fieldRows();
+  down('touch', 10, 20); move(10, 132); move(10, innerHeight - 8); // on past the end row, into the edge
+  expect(marks()).toEqual([undefined, undefined, 'after']);
+  up(10, innerHeight - 8);
+  down('touch', 10, 20); move(10, 132); move(10, 320); move(10, innerHeight - 8); // let go of first, far from the rows
+  expect(marks()).toEqual([undefined, undefined, undefined]);
+  up(10, innerHeight - 8);
+  expect(drop.mock.calls).toEqual([[{ page: 2, after: true }], [null]]);
 });
 
 test('of some rows, the one whose line a point is on, or the nearest', () => {
