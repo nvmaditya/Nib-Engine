@@ -408,6 +408,34 @@ test('the squares are only clipped on the typed page', () => {
   expect(document.querySelector('[data-drop-field]')!.parentElement).not.toHaveClass('[clip-path:inset(-3px_-24px)]');
 });
 
+test('a long label is cut short with an ellipsis, its full name its title, and the value keeps at least 55% of the row, in every editor', () => {
+  const long = 'Registration number for school'; // 30 characters, the most a label holds
+  // The label column is at most 45% of what the label and the value share: the row less `--fixed`, the grip, the ⋯
+  // and the three gaps between the four columns.
+  const cols = 'grid-cols-[auto_fit-content(calc((100%_-_var(--fixed))*0.45))_minmax(0,1fr)_auto]';
+  for (const compact of [false, true]) {
+    const { unmount } = render(<Harness start={F(long, 'Name')} compact={compact} />);
+    const label = button(`Rename “${long}”`); // (the name it is pressed by is unchanged)
+    expect(label).toHaveTextContent(long);
+    expect(label).toHaveAttribute('title', long);
+    expect(label).toHaveClass('min-w-0', 'truncate');
+    const grid = document.querySelector('[data-drop-field]')!.parentElement!;
+    const grip = screen.getByRole('img', { name: `Move “${long}”` }), menu = button(`More for “${long}”`);
+    expect(grid).toHaveClass(cols);
+    if (compact) {
+      // The typed page: the grip and the ⋯ 1em each, gaps of 0.4em.
+      expect(grid).toHaveClass('gap-x-[0.4em]', '[--fixed:3.2em]');
+      expect([grip, menu].every(el => el.classList.contains('size-[1em]'))).toBe(true);
+    } else {
+      // Outline and Import: on phones a 44 px grip and ⋯ (124 px with the gaps), from wide 26 and 28 px (90 px), gaps of 12 px.
+      expect(grid).toHaveClass('gap-x-3', '[--fixed:124px]', 'wide:[--fixed:90px]');
+      expect(grip).toHaveClass('size-11', 'wide:size-[26px]');
+      expect(menu).toHaveClass('size-11', 'wide:size-7');
+    }
+    unmount();
+  }
+});
+
 test('compact: Add field sits just under the fields, shown while they have the focus or the pointer, or the header is selected', () => {
   const { container } = render(<Harness start={F('Name', 'Class')} compact />);
   expect(container.firstElementChild).toHaveClass('relative', 'group/fields');

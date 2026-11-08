@@ -12,7 +12,7 @@ import { deleteBlock, deletePageAt, removePart, select, splitAt } from '@/featur
 import { offsetAt } from '@/features/editor/positions';
 import { createDoc } from '@/store/documents';
 import { flushSave, placeCaret, undo } from '@/store/editor';
-import { box, docOf, fieldsOf, get, lastToast, lines, words } from '@/test/docs';
+import { box, docOf, fieldsOf, forgetHeader, get, lastToast, lines, words } from '@/test/docs';
 import { OUTLINE_PEEK } from './OutlineView';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
@@ -294,6 +294,21 @@ test('a header shows its fields and the hint, and its item the filled-in fields'
   expect(within(insp()).getByText('New documents fill in today’s date.')).toBeInTheDocument();
   expect(within(insp()).queryByRole('toolbar', { name: 'Formatting' })).toBeNull();
   expect(within(insp()).queryByRole('textbox', { name: /all pages/ })).toBeNull();
+});
+
+test('Outline’s header editor adds a field, and the header’s item shows its value', async () => {
+  try {
+    await outline(docOf(h(), box({ id: 'm', name: 'Main text', y: 178, text: 'x' })));
+    await userEvent.click(item('Header'));
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Teacher' }));
+    await waitFor(() => expect(within(insp()).getByRole('textbox', { name: 'Teacher' })).toHaveFocus());
+    await userEvent.keyboard('Ms Rao');
+    expect(get().doc.boxes.find(b => b.id === 'h')!.text).toBe('Name: Riya\nClass:\nDate: 6 November 2026\nTeacher: Ms Rao');
+    expect(within(ol()).getByText('Riya · 6 November 2026 · Ms Rao')).toBeInTheDocument();
+  } finally {
+    await forgetHeader();
+  }
 });
 
 test('a clicked word’s caret goes to the inspector’s editor', async () => {

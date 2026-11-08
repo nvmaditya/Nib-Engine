@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import { cleanFields, cleanSettings } from '@/engine/doc.js';
 import { computeLayout, use } from '@/engine/core.js';
 import type { Box, EngineDoc, HeaderField, HeaderKey, Layout, Settings } from '@/engine/types';
+import { HEADER_DEFAULT, flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { getDb } from '@/store/db';
 import * as documents from '@/store/documents';
 import type { DocRecord } from '@/store/documents';
@@ -83,3 +84,13 @@ export const lastToastAction = (): (() => void) | undefined => {
   const a = calls.length ? calls[calls.length - 1][1]?.action : undefined;
   return a && typeof a === 'object' && 'onClick' in a ? (a.onClick as () => void) : undefined;
 };
+
+/**
+ * Forget the header a test changed, in this tab and in storage (a test file whose storage is real), so the next
+ * test's new headers start from Name, Class and Date again.
+ */
+export async function forgetHeader(): Promise<void> {
+  await flushHeaderDefault();
+  await documents.setPref(HEADER_DEFAULT, null);
+  useHeaderDefault.setState({ fields: null });
+}

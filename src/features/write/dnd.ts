@@ -62,13 +62,32 @@ export function rowAt<T extends Pick<Element, 'getBoundingClientRect'>>(rows: It
   return near;
 }
 
-function hit(x: number, y: number, targets: DropTargets): { el: HTMLElement; t: DropTarget } | null {
+/** How far above a header's first row or below its last a field drag still drops on that end row (px). */
+const ROWS_REACH = 48;
+
+/** Whether a point is over `rows` sideways, and at most ROWS_REACH px above the first or below the last. */
+function nearRows(rows: HTMLElement[], x: number, y: number): boolean {
+  const boxes = rows.map(r => r.getBoundingClientRect()).filter(b => b.bottom > b.top);
+  if (!boxes.length) return false;
+  const left = Math.min(...boxes.map(b => b.left)), right = Math.max(...boxes.map(b => b.right));
+  const top = Math.min(...boxes.map(b => b.top)), bottom = Math.max(...boxes.map(b => b.bottom));
+  return x >= left && x <= right && y >= top - ROWS_REACH && y <= bottom + ROWS_REACH;
+}
+
+/**
+ * The target under a point. For field rows, `own` is the rows of the header being dragged in: a point just off them
+ * (past the last row on its Add field, say, within ROWS_REACH) is for the end row there. Farther away, or beside
+ * them, it is nothing: letting go there means never mind.
+ */
+function hit(x: number, y: number, targets: DropTargets, own: HTMLElement | null = null): { el: HTMLElement; t: DropTarget } | null {
   const at = document.elementFromPoint(x, y);
   let el = at instanceof Element ? at.closest<HTMLElement>(targets === 'field' ? '[data-drop-field]' : '[data-drop-page]') : null;
   // On a phone's typed page a header's rows are closer together than the 44 px squares their grips are pressed in,
   // and a later row's square is on top over the line before it: the row is the one whose line the point is on.
-  if (el && targets === 'field' && el.parentElement) {
-    el = rowAt([...el.parentElement.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.dataset.dropField !== undefined), y) ?? el;
+  const parent = targets === 'field' ? (el?.parentElement ?? own) : null;
+  if (parent) {
+    const rows = [...parent.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.dataset.dropField !== undefined);
+    if (el || nearRows(rows, x, y)) el = rowAt(rows, y) ?? el;
   }
   const page = el ? Number(targets === 'field' ? el.dataset.dropField : el.dataset.dropPage) : NaN;
   if (!el || !Number.isInteger(page)) return null;
@@ -120,15 +139,20 @@ if (typeof window !== 'undefined') {
 
 let busy = false; // one drag at a time
 
+/** How far into `scroller`'s top (-1…0) or bottom (0…1) edge a point is (EDGE px deep); 0 outside them. */
+function edgePull(scroller: HTMLElement, x: number, y: number): number {
+  const root = scroller === document.scrollingElement || scroller === document.documentElement;
+  const r = root ? { top: 0, bottom: innerHeight, left: 0, right: innerWidth } : scroller.getBoundingClientRect();
+  if (x < r.left || x > r.right) return 0;
+  return y < r.top + EDGE ? -Math.min(1, (r.top + EDGE - y) / EDGE) : y > r.bottom - EDGE ? Math.min(1, (y - r.bottom + EDGE) / EDGE) : 0;
+}
+
 /**
  * Near `scroller`'s top or bottom edge (EDGE px), scroll it a step, faster the closer (`x`, `y` is the pointer;
  * the page's own scroll if `scroller` is the document's). Returns whether it moved. Call it once a frame.
  */
 export function edgeScroll(scroller: HTMLElement, x: number, y: number): boolean {
-  const root = scroller === document.scrollingElement || scroller === document.documentElement;
-  const r = root ? { top: 0, bottom: innerHeight, left: 0, right: innerWidth } : scroller.getBoundingClientRect();
-  if (x < r.left || x > r.right) return false;
-  const v = y < r.top + EDGE ? -Math.min(1, (r.top + EDGE - y) / EDGE) : y > r.bottom - EDGE ? Math.min(1, (y - r.bottom + EDGE) / EDGE) : 0;
+  const v = edgePull(scroller, x, y);
   if (!v) return false;
   const before = scroller.scrollTop;
   scroller.scrollTop += Math.round(v * MAX_SPEED) || Math.sign(v);
@@ -160,6 +184,8 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
   if (busy || (touch && !e.isPrimary) || (e.pointerType === 'mouse' && e.button !== 0)) return; // one finger, the main button
   busy = true;
   const src = e.currentTarget as HTMLElement, id = e.pointerId, targets = opts.targets ?? 'page';
+  // A field row's grip: the rows of its own header, which a drop off every header's rows falls back to.
+  const own = targets === 'field' ? src.closest<HTMLElement>('[data-drop-field]')?.parentElement ?? null : null;
   const x0 = e.clientX, y0 = e.clientY, t0 = performance.now(), g = gate(opts.kind, e.pointerType);
   const body = document.body, bodyStyle = { userSelect: body.style.userSelect, cursor: body.style.cursor };
   let x = x0, y = y0, active = false, raf = 0;
@@ -168,7 +194,11 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
 
   const place = () => { if (ghost) ghost.style.transform = `translate3d(${x + 12}px, ${y + 12}px, 0)`; };
   const retarget = () => {
-    const h = hit(x, y, targets), t = h?.t ?? null;
+    let h = hit(x, y, targets, own);
+    // Held in the edge where the drag scrolls the list, a field drag off the rows keeps aiming where it last did: the
+    // rows it was carried past may have scrolled away from the finger.
+    if (!h && own && marked && target && scroller && edgePull(scroller, x, y)) h = { el: marked, t: target };
+    const t = h?.t ?? null;
     const mark = !h ? null : opts.kind === 'item' ? 'on' : h.t.after ? 'after' : 'before';
     if (marked && (marked !== h?.el || marked.dataset.drop !== mark)) delete marked.dataset.drop;
     marked = h?.el ?? null;
@@ -218,7 +248,8 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
     if (ev.pointerId !== id) return;
     const was = active;
     x = ev.clientX; y = ev.clientY;
-    const t = was ? targetAt(x, y, targets) : null;
+    if (was) retarget();
+    const t = was ? target : null;
     end();
     if (!was) return;
     swallowClick();

@@ -9,6 +9,7 @@ import { parseHash } from '@/app/route';
 import { importError, readDocument } from '@/engine/importers.js';
 import type { ReadResult } from '@/engine/types';
 import { closeImport, openImport, setV } from '@/features/doc/actions';
+import { flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { today } from '@/features/doc/model';
 import { BlockEditor } from '@/features/editor/BlockEditor';
 import { offsetAt } from '@/features/editor/positions';
@@ -17,6 +18,7 @@ import { createDoc, listDocs, type DocRecord } from '@/store/documents';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
 import { box, docOf, fieldsOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
 import { newDocument } from '@/features/doc/build';
+import { TEMPLATES, templateRecord } from '@/features/home/templates';
 import { ImportDialog } from './ImportDialog';
 
 vi.mock('@/engine/importers.js', async orig => ({ ...(await orig<typeof import('@/engine/importers.js')>()), readDocument: vi.fn() }));
@@ -56,12 +58,12 @@ const dialog = () => screen.findByRole('dialog', { name: 'Import a document' }),
 const ready = () => screen.findByText('Essay.docx: 24 words.');
 
 beforeEach(async () => {
-  await flushSave(); vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear(); vi.mocked(sonner.getToasts).mockReset().mockReturnValue([]); vi.mocked(createDoc).mockClear();
+  await flushSave(); await flushHeaderDefault(); useHeaderDefault.setState({ fields: null }); vi.mocked(sonner).mockClear(); vi.mocked(sonner.dismiss).mockClear(); vi.mocked(sonner.getToasts).mockReset().mockReturnValue([]); vi.mocked(createDoc).mockClear();
   vi.mocked(readDocument).mockReset().mockResolvedValue(ESSAY);
 });
 // (unmounted first: closing it under a mounted dialog would update the dialog after the test, outside act)
 afterEach(() => { cleanup(); window.matchMedia = wideMatchMedia; width(1200); closeImport(); });
-afterAll(async () => { await flushSave(); delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth; vi.unstubAllGlobals(); });
+afterAll(async () => { await flushSave(); await flushHeaderDefault(); delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth; vi.unstubAllGlobals(); });
 
 test('a chosen file is read and shown as it will come across', async () => {
   open(docOf(box({ id: 'm', text: 'old' }))); openImport(); render(<Open />); await dialog();
@@ -106,6 +108,44 @@ test('a header block with Name, Class and today’s Date', async () => {
   await userEvent.click(screen.getByRole('checkbox', { name: 'Add a header block' })); await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Asha'); await userEvent.click(writeIt());
   expect(get().doc.boxes.map(b => b.kind)).toEqual(['header', 'text']); expect(get().doc.boxes[0].fields!.map(f => [f.label, f.value])).toEqual([['Name', 'Asha'], ['Class', ''], ['Date', today()]]);
 });
+/** Chooses `name` from the menu `menu` opens, and lets the moment pass in which the closed menu would put the focus back on its button. */
+async function choose(menu: string, name: string) {
+  await userEvent.click(screen.getByRole('button', { name: menu })); await userEvent.click(screen.getByRole('menuitem', { name }));
+  await act(() => new Promise(r => setTimeout(r, 0)));
+}
+const labelsOf = (fields: { label: string }[] | null | undefined) => fields?.map(f => f.label);
+test('Esc in a field’s name puts the old name back and leaves the dialog open', async () => {
+  open(docOf(box())); openImport(); render(<Open />); await ready();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Add a header block' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Sec{Escape}');
+  expect(await dialog()).toBeInTheDocument(); expect(get().importOpen).toBe(true);
+  expect(screen.getByRole('button', { name: 'Rename “Class”' })).toHaveFocus(); expect(screen.queryByRole('textbox', { name: 'Field name' })).toBeNull();
+  await userEvent.keyboard('{Escape}'); expect(get().importOpen).toBe(false); // Esc anywhere else still closes it
+});
+test('a header edited in Import is written out as edited, as one undo step, and new headers start from it', async () => {
+  const fields = fieldsOf({ name: 'Old', class: '7B', date: '1 May 2026' });
+  open(docOf(box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields }), box({ id: 'm', name: 'Main text', y: 178, text: 'mine' })));
+  openImport(); render(<Open />); await ready();
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Section{Enter}');
+  await choose('Add field', 'Teacher'); await userEvent.keyboard('Ms Rao');
+  expect([get().doc.boxes[0].fields, get().canUndo]).toEqual([fields, false]); // nothing written yet
+  await userEvent.click(writeIt());
+  const header = get().doc.boxes.find(b => b.kind === 'header')!;
+  expect(header.fields!.map(f => [f.label, f.value])).toEqual([['Name', 'Old'], ['Section', '7B'], ['Date', '1 May 2026'], ['Teacher', 'Ms Rao']]);
+  expect(header.text).toBe('Name: Old\nSection: 7B\nDate: 1 May 2026\nTeacher: Ms Rao');
+  expect(labelsOf(useHeaderDefault.getState().fields)).toEqual(['Name', 'Section', 'Date', 'Teacher']);
+  undo();
+  expect(get().doc.boxes.filter(b => b.kind === 'header').map(b => b.fields)).toEqual([fields]); expect(get().canUndo).toBe(false);
+});
+test('from Home, a header written out is the one new headers start from: a new Assignment has its Section', async () => {
+  location.hash = '#/'; render(<ImportDialog open file={essay()} target="new" onClose={vi.fn()} />); await ready();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Add a header block' })); await choose('Add field', 'Section'); await userEvent.keyboard('B');
+  expect(useHeaderDefault.getState().fields).toBeNull(); // (not before Write it out)
+  await userEvent.click(writeIt()); await waitFor(() => expect(parseHash(location.hash)).toMatchObject({ name: 'doc' }));
+  expect(labelsOf(get().doc.boxes.find(b => b.kind === 'header')!.fields)).toEqual(['Name', 'Class', 'Date', 'Section']);
+  const assignment = templateRecord(TEMPLATES.find(t => t.id === 'assignment')!).doc.boxes.find(b => b.kind === 'header')!;
+  expect(assignment.fields!.map(f => [f.label, f.value])).toEqual([['Name', ''], ['Class', ''], ['Date', today()], ['Section', 'B']]);
+});
 test('Add after the last page never writes a header, even one ticked and filled in before choosing it', async () => {
   open(docOf(box({ id: 'm', name: 'Main text', text: 'mine' }))); openImport(); render(<Open />); await ready();
   await userEvent.click(screen.getByRole('checkbox', { name: 'Add a header block' })); await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Asha');
@@ -120,6 +160,7 @@ test('…and the open document’s own header stays as it is, never a second one
   const name = screen.getByRole('textbox', { name: 'Name' }); await userEvent.clear(name); await userEvent.type(name, 'New');
   await userEvent.click(screen.getByRole('radio', { name: 'Add after the last page' })); await userEvent.click(writeIt());
   const headers = get().doc.boxes.filter(b => b.kind === 'header'); expect(headers).toHaveLength(1); expect(headers[0].fields).toEqual(fields);
+  expect(useHeaderDefault.getState().fields).toBeNull(); // no header was written, so none is remembered
 });
 test('edits in the preview are what is written', async () => {
   open(docOf(box())); openImport(); render(<Open />); const tb = await screen.findByRole('textbox', { name: 'Imported text' });
