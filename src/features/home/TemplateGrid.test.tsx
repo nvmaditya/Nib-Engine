@@ -1,5 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useHeaderDefault } from '@/features/doc/headerDefault';
+import { today } from '@/features/doc/model';
 import { TemplateGrid } from './TemplateGrid';
 import { openTemplate, TEMPLATES } from './templates';
 import { thumbFor, thumbSig } from './thumbs';
@@ -30,6 +32,20 @@ test('Home shown again asks for the same pictures, so they come from the device 
   render(<TemplateGrid />); await waitFor(() => expect(thumbFor).toHaveBeenCalledTimes(6));
   expect(sigs()).toEqual(before);
   await waitFor(() => expect(document.querySelectorAll('img[src^="data:image/jpeg"]')).toHaveLength(6));
+});
+
+test('a newly remembered header draws the Assignment card again, and only it', async () => {
+  const pictures = () => document.querySelectorAll('img[src^="data:image/jpeg"]');
+  vi.mocked(thumbFor).mockClear();
+  const view = render(<TemplateGrid />);
+  try {
+    await waitFor(() => expect(pictures()).toHaveLength(6));
+    expect(thumbFor).toHaveBeenCalledTimes(6);
+    act(() => useHeaderDefault.setState({ fields: [{ label: 'Name', value: 'Asha' }, { label: 'Section', value: 'B' }, { label: 'Due', value: '1 May 2026', today: true }] }));
+    await waitFor(() => { expect(thumbFor).toHaveBeenCalledTimes(7); expect(pictures()).toHaveLength(6); });
+    const [owner, , doc] = vi.mocked(thumbFor).mock.calls[6];
+    expect([owner, doc.boxes[0].text]).toEqual(['tpl:assignment', `Name: Asha\nSection: B\nDue: ${today()}`]);
+  } finally { view.unmount(); useHeaderDefault.setState({ fields: null }); }
 });
 
 test('a card makes that template’s document, and meanwhile the cards wait', async () => {

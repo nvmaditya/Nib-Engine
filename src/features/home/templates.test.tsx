@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { parseHash } from '@/app/route';
 import { TopBar } from '@/shell/TopBar';
 import { matchLook, STYLE_LOOKS } from '@/features/style/looks';
+import { useHeaderDefault } from '@/features/doc/headerDefault';
 import { createDoc, getDoc, listDocs } from '@/store/documents';
 import { get, lastToast } from '@/test/docs';
 import { openTemplate, TEMPLATES, templateRecord, templateSettings, type TemplateId } from './templates';
@@ -38,6 +39,17 @@ test('…and the content it implies', () => {
   expect(r('journal')).toEqual([['text', 'Main text', '7 November 2026\n\n', 112, 76]]);
   expect(r('card')).toEqual([['text', 'Main text', '# Happy birthday!', 74, 416]]);
   expect(TEMPLATES.map(t => templateRecord(t, NOW).title)).toEqual(['Untitled', 'Assignment', 'Class notes', 'Letter', 'Journal page', 'Card']);
+});
+
+test('the Assignment header starts from the remembered default, and a template’s fields have the same ids each time', () => {
+  useHeaderDefault.setState({ fields: [{ label: 'Name', value: 'Asha' }, { label: 'Section', value: 'B' }, { label: 'Due', value: '1 May 2026', today: true }] });
+  try {
+    const head = () => templateRecord(T('assignment'), NOW).doc.boxes[0];
+    expect([head().kind, head().text]).toEqual(['header', 'Name: Asha\nSection: B\nDue: 7 November 2026']);
+    expect(head().fields).toEqual(head().fields);
+    expect(head().fields!.map(f => f.id)).toEqual(['f1', 'f2', 'f3']);
+  } finally { useHeaderDefault.setState({ fields: null }); }
+  expect(templateRecord(T('assignment'), NOW).doc.boxes[0].text).toBe('Name:\nClass:\nDate: 7 November 2026');
 });
 
 test('a template opens as a new document on Write, the caret at the end of its main text, with nothing to undo', async () => {

@@ -4,10 +4,12 @@ import { BOX_KEYS } from '@/engine/doc.js';
 import { boxSettings, clearMeasureCache, frameRange, hasOwnStyle } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, Seg, Settings } from '@/engine/types';
 import {
-  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage,
-  newBlock, newTextBlockAt, pageRefusal, removeBlock, removeBlockPart, setHeaderField, splitBlock, type Refused,
+  addHeaderField, appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, moveHeaderField, movePage,
+  newBlock, newTextBlockAt, pageRefusal, removeBlock, removeBlockPart, removeHeaderField, renameHeaderField, setHeaderField, splitBlock,
+  type Refused,
 } from '@/features/doc/model';
 import { defaultHeaderFields } from '@/features/doc/headerDefault';
+import type { NewField } from '@/features/doc/headerFields';
 import {
   docAction, placeCaret, selectedBox, snapshot, toast, undoTo, update, useEditor, type EditorState, type UpdateOptions,
 } from '@/store/editor';
@@ -250,6 +252,41 @@ export function setField(boxId: string, fieldId: string, value: string): void {
   const before = snapshot();
   setHeaderField(b, fieldId, value);
   commit(before, { history: `field:${boxId}:${fieldId}`, layout: 'soon' });
+}
+
+/**
+ * Add a field at the end of a header (a date: today's): one undo step. The new field's id, or null when none was
+ * added (a header holds up to 12 fields).
+ */
+export function addField(boxId: string, field: NewField): string | null {
+  const b = boxById(boxId);
+  if (!b) return null;
+  const before = snapshot(), f = addHeaderField(b, field);
+  return f && commit(before, { history: step('field-add') }) ? f.id : null;
+}
+
+/** Rename a header's field (one line, at most 30; empty is `Field`): one undo step. */
+export function renameField(boxId: string, fieldId: string, label: string): void {
+  const b = boxById(boxId);
+  if (!b) return;
+  const before = snapshot();
+  if (renameHeaderField(b, fieldId, label)) commit(before, { history: step('field-rename') });
+}
+
+/** Move a header's field to row `to` (0-based): one undo step. */
+export function moveField(boxId: string, fieldId: string, to: number): void {
+  const b = boxById(boxId);
+  if (!b) return;
+  const before = snapshot();
+  if (moveHeaderField(b, fieldId, to)) commit(before, { history: step('field-move') });
+}
+
+/** Remove a header's field (never its only one): one undo step, and a message whose Undo puts it back where it was. */
+export function removeField(boxId: string, fieldId: string): void {
+  restructure('field-remove', s => {
+    const b = s.doc.boxes.find(x => x.id === boxId), gone = b && removeHeaderField(b, fieldId);
+    return gone ? `Removed “${gone.field.label}”.` : null;
+  });
 }
 
 // What the Style panel shows and edits: the selected block's own settings, or the document's.

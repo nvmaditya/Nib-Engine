@@ -9,7 +9,7 @@ import { cleanFields, headerText, uid } from '@/engine/doc.js';
 import { computeLayout, frameRange, geom, snapX, snapY, splitAtFrame, textWithoutFrame, use } from '@/engine/core.js';
 import type { BlockKind, Box, EngineDoc, FrameRect, HeaderField, Layout, Seg, Settings } from '@/engine/types';
 import { continuedName, newBlockName, nextColor } from './blocks';
-import { listSetValue } from './headerFields';
+import { listAdd, listMove, listRemove, listRename, listSetValue, type NewField } from './headerFields';
 
 export { fieldValue, today } from './headerFields';
 
@@ -321,11 +321,41 @@ export function newTextBlockAt(S: Settings, doc: EngineDoc, page: number, x: num
   return b;
 }
 
-/** Write the value of the header's field `fieldId`, and the header's text with it. */
-export function setHeaderField(box: Box, fieldId: string, value: string): void {
-  if (box.kind !== 'header' || !box.fields) return;
-  const next = listSetValue(box.fields, fieldId, value);
-  if (!next) return;
+// A header's fields. Each change below does nothing to a block that isn't a header, or when the list would stay as it
+// is (the limits of 1 and 12 fields included). After a change, the header's text is written from its fields again.
+
+/** The header's fields that `change` gives from its own (null: none), with its text written from them. */
+function changeFields(box: Box, change: (list: HeaderField[]) => HeaderField[] | null): boolean {
+  if (box.kind !== 'header' || !box.fields) return false;
+  const next = change(box.fields);
+  if (!next) return false;
   box.fields = next;
   box.text = headerText(next);
+  return true;
+}
+
+/** Write the value of the header's field `fieldId`, and the header's text with it. */
+export function setHeaderField(box: Box, fieldId: string, value: string): void {
+  changeFields(box, list => listSetValue(list, fieldId, value));
+}
+
+/** A field added at the end of the header (a date: today's), or null at 12. */
+export function addHeaderField(box: Box, field: NewField, now?: Date): HeaderField | null {
+  return changeFields(box, list => listAdd(list, field, now)) ? box.fields!.at(-1)! : null;
+}
+
+/** Rename the header's field `fieldId` (one line, at most 30, empty is `Field`); a date keeps its mark. */
+export function renameHeaderField(box: Box, fieldId: string, label: string): boolean {
+  return changeFields(box, list => listRename(list, fieldId, label));
+}
+
+/** The field that went and where it was; null for the header's only field. */
+export function removeHeaderField(box: Box, fieldId: string): { field: HeaderField; index: number } | null {
+  const r = box.kind === 'header' && box.fields ? listRemove(box.fields, fieldId) : null;
+  return r && changeFields(box, () => r.list) ? { field: r.field, index: r.index } : null;
+}
+
+/** Move the header's field `fieldId` to row `to` (0-based). */
+export function moveHeaderField(box: Box, fieldId: string, to: number): boolean {
+  return changeFields(box, list => listMove(list, fieldId, to));
 }

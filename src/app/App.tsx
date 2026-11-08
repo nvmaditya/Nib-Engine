@@ -3,6 +3,7 @@ import { Toaster } from 'sonner';
 import { installFocusMemory } from '@/lib/focus';
 import { useDarkTheme } from '@/lib/theme';
 import { sampleDoc, cleanSettings } from '@/engine/doc.js';
+import { installHeaderMemory, loadHeaderDefault } from '@/features/doc/headerDefault';
 import { loadUploadedFonts } from '@/features/style/fonts';
 import { bootStyle, refreshStylePrefsOnShow } from '@/features/style/prefs';
 import { bootstrapDocuments } from '@/store/bootstrap';
@@ -25,7 +26,8 @@ export function App() {
     // Uploaded fonts are registered before any document is read, so no document loses its hand.
     // The two run side by side because bootstrapDocuments never cleans a stored document (it only
     // makes the first one). If it ever reads stored documents, it must wait for bootStyle first.
-    void Promise.all([bootstrapDocuments(), bootStyle()]).then(([r]) => {
+    // The remembered header is read alongside, so the first new header already starts from it.
+    void Promise.all([bootstrapDocuments(), bootStyle(), loadHeaderDefault()]).then(([r]) => {
       if (!live) return;
       if (!r.ok) {
         const S = cleanSettings(null, false);
@@ -42,6 +44,7 @@ export function App() {
   useEffect(() => installFocusMemory(), []); // a message's action gives the focus back to what had it
   useEffect(() => installDocFollow(), []); // another tab's saves, renames and deletes of the open document
   useEffect(() => refreshStylePrefsOnShow(), []);
+  useEffect(() => installHeaderMemory(), []); // a header changed in the open document is what new headers start from
 
   const wantId = route.name === 'doc' ? route.id : null;
   useEffect(() => {
