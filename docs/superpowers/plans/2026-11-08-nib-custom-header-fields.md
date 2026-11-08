@@ -84,6 +84,7 @@ Existing copy this plan touches:
 
 - **A tab on the previous version (schema 3) never writes a schema-4 record.** Its `rewrite` refuses with `NewerDocumentError`, and it says M1's message with **Reload**, which applies the waiting version (M6 `reloadAction`). This is shipped code. Task 1 pins it by running e8e0610's own `documents.ts` and `doc.js` against a record this version wrote (`versions.browser.test.ts`).
 - Until it reloads, that tab shows a schema-4 header as Name, Class and Date with no values, because its `cleanFields` can't read a list. Its saves are refused, so the record stays as it is. Accepted: shipped code can't change, and Reload fixes it.
+- That tab's Home **Duplicate** of a schema-4 document makes a new schema-3 copy whose header is blank Name, Class and Date (its `createDoc` writes a new record, so no refusal applies). The original is never touched. Accepted for the same reason (found in Task 1's review).
 - **This version reads every older record.**
   - `cleanDoc` turns an object-shaped `fields` into the list: old order, only the keys present, ids `name`/`class`/`subject`/`roll`/`date`, and `today: true` on `date`. The header text comes out the same.
   - Its first save writes schema 4.
