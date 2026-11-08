@@ -439,13 +439,16 @@ test('adding, renaming, removing and moving a field are one undo step each, and 
   const snaps = [JSON.parse(snapshot())];
   const take = () => snaps.push(JSON.parse(snapshot()));
   const id = addField('h', { label: 'Registration no.' })!; take();
+  addField('h', { label: 'Teacher' }); take(); // a second add straight after: a step of its own
   setField('h', id, '1'); setField('h', id, '12'); take(); // typing: one step
   renameField('h', 'class', 'Section'); take();
+  renameField('h', 'class', 'Group'); take(); // a second rename straight after: a step of its own
   moveField('h', id, 0); take();
   moveField('h', id, 1); take();
   removeField('h', 'class'); take();
-  expect(head().text).toBe('Name:\nRegistration no.: 12\nDate: d');
-  expect(head().fields!.map(f => f.label)).toEqual(['Name', 'Registration no.', 'Date']);
+  expect(snaps).toHaveLength(9);
+  expect(head().text).toBe('Name:\nRegistration no.: 12\nDate: d\nTeacher:');
+  expect(head().fields!.map(f => f.label)).toEqual(['Name', 'Registration no.', 'Date', 'Teacher']);
   for (let i = snaps.length - 2; i >= 0; i--) { undo(); expect(JSON.parse(snapshot()), `undo to ${i}`).toEqual(snaps[i]); }
   expect(get().canUndo).toBe(false);
   for (let i = 1; i < snaps.length; i++) { redo(); expect(JSON.parse(snapshot()), `redo to ${i}`).toEqual(snaps[i]); }

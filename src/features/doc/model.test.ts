@@ -1,11 +1,10 @@
 // Restructuring, on documents laid out by the engine (8 px per character; 28 lines fill page 1).
 import { expect, test } from 'vitest';
-import { cleanSettings } from '@/engine/doc.js';
+import { cleanSettings, headerText } from '@/engine/doc.js';
 import { computeLayout, framesOf } from '@/engine/core.js';
 import type { Box, EngineDoc } from '@/engine/types';
 import { box, docOf, fieldsOf, lines, words } from '@/test/docs';
 import { defaultHeaderFields } from './headerDefault';
-import { headerText } from '@/engine/doc.js';
 import {
   addHeaderField, appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, moveHeaderField, movePage,
   newBlock, pageRefusal, removeBlock, removeBlockPart, removeHeaderField, renameHeaderField, setHeaderField, splitBlock, today,

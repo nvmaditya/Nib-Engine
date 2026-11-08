@@ -120,7 +120,7 @@ test('leaving the page writes a waiting change at once', () => {
   expect(setPref).toHaveBeenCalledTimes(2);
 });
 
-test('a failed write is ignored, and this tab keeps what it remembered', async () => {
+test('a failed write is ignored, and this tab keeps its copy until it next reads the stored one', async () => {
   vi.mocked(setPref).mockRejectedValueOnce(new Error('quota'));
   open(docOf(hdr()));
   renameField('h', 'class', 'Section');

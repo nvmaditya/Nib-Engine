@@ -64,10 +64,10 @@ export function defaultHeaderFields(now: Date = new Date()): HeaderField[] {
   return fieldsFrom(useHeaderDefault.getState().fields, now);
 }
 
-/** The open document's header as it is remembered (fields without ids, as JSON), or null when it has none. */
-const headerOf = (s: EditorState): string | null => {
-  const h = s.doc.boxes.find(b => b.kind === 'header');
-  return h?.fields ? JSON.stringify(withoutIds(h.fields)) : null;
+/** The open document's header fields, and them as they are remembered (without ids, as JSON); null when it has none. */
+const headerOf = (s: EditorState): { fields: HeaderField[]; json: string } | null => {
+  const fields = s.doc.boxes.find(b => b.kind === 'header')?.fields;
+  return fields ? { fields, json: JSON.stringify(withoutIds(fields)) } : null;
 };
 
 /**
@@ -78,13 +78,11 @@ const headerOf = (s: EditorState): string | null => {
  * unless a change of this tab's is still waiting. Returns the remover.
  */
 export function installHeaderMemory(): () => void {
-  let seen = { docId: useEditor.getState().docId, json: headerOf(useEditor.getState()) };
+  let seen = { docId: useEditor.getState().docId, json: headerOf(useEditor.getState())?.json ?? null };
   const off = useEditor.subscribe(s => {
-    const json = headerOf(s);
-    if (s.docId !== null && s.docId === seen.docId && json !== null && json !== seen.json) {
-      rememberHeader(s.doc.boxes.find(b => b.kind === 'header')!.fields!);
-    }
-    seen = { docId: s.docId, json };
+    const h = headerOf(s);
+    if (h && s.docId !== null && s.docId === seen.docId && h.json !== seen.json) rememberHeader(h.fields);
+    seen = { docId: s.docId, json: h?.json ?? null };
   });
   const write = () => { void flushHeaderDefault(); };
   const read = () => { if (!waiting) void loadHeaderDefault(); };
