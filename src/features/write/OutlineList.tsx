@@ -92,8 +92,10 @@ function PageSection({ i, pages, segs, parts, selectedId }: { i: number; pages: 
   return (
     <div data-drop-page={i} className={cn('rounded-[10px] pt-0.5 pb-1.5', dropClass)}>
       <div className="flex items-center gap-1 py-1 pr-0.5">
+        {/* (Its style while pressed makes Chromium count it as something to tap, so a finger on it isn't moved onto the
+            heading or a block's item beside it.) */}
         <span role="img" aria-label={`Drag to move page ${i + 1}`} title="Drag to move this page" onPointerDown={onGrip} data-vaul-no-drag=""
-          className={cn(gripClass, 'inline-grid size-[26px] flex-none place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-fg [&_svg]:size-4')}>
+          className={cn(gripClass, 'inline-grid size-[26px] flex-none place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-fg active:text-fg [&_svg]:size-4')}>
           <GripVertical aria-hidden />
         </span>
         <h3 tabIndex={-1} data-page-heading={i}
