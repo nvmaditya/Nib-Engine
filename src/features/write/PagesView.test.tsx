@@ -14,7 +14,7 @@ import { layoutFor } from '@/features/doc/model';
 import { offsetAt } from '@/features/editor/positions';
 import { createDoc } from '@/store/documents';
 import { flushSave, update } from '@/store/editor';
-import { box, docOf, fontsLoad, get, lines, words } from '@/test/docs';
+import { box, docOf, fieldsOf, fontsLoad, get, lines, words } from '@/test/docs';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
 
@@ -320,7 +320,7 @@ test('a block’s ⋯ is on its typed tag, and on its handwritten tag only when 
 });
 
 test('a header on two pages shows its fields once, on its first part', async () => {
-  await openWrite(docOf(box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: { name: 'A', class: 'B', date: 'C' } })));
+  await openWrite(docOf(box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }) })));
   const later = typed(1).querySelector<HTMLElement>('[data-part="h:1"]')!;
   expect(later).not.toBeNull(); // the header really runs onto page 2
   expect(screen.getAllByRole('textbox', { name: 'Name' })).toHaveLength(1);

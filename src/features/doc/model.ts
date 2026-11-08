@@ -5,10 +5,13 @@
 // A block "starts on" the page its first part is shown on. Pushing (layout rule 2) can show that part
 // on a later page than the one the block is stored on (box.page). Moving, merging and deleting pages go by
 // what each page shows (see the comment above pageRefusal).
-import { headerText, uid } from '@/engine/doc.js';
+import { cleanFields, headerText, uid } from '@/engine/doc.js';
 import { computeLayout, frameRange, geom, snapX, snapY, splitAtFrame, textWithoutFrame, use } from '@/engine/core.js';
-import type { BlockKind, Box, EngineDoc, FrameRect, HeaderKey, Layout, Seg, Settings } from '@/engine/types';
+import type { BlockKind, Box, EngineDoc, FrameRect, HeaderField, Layout, Seg, Settings } from '@/engine/types';
 import { continuedName, newBlockName, nextColor } from './blocks';
+import { listSetValue } from './headerFields';
+
+export { fieldValue, today } from './headerFields';
 
 export type Refused = { ok: false; part: number; name: string };
 
@@ -270,10 +273,6 @@ export function insertPage(S: Settings, doc: EngineDoc, at: number): number {
   return where;
 }
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-/** A date the way a header writes it: 6 November 2026. */
-export const today = (now: Date = new Date()): string => `${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-
 /** An empty block of `kind` (not yet in the document), named and coloured for it. */
 function blockAt(doc: EngineDoc, kind: BlockKind, page: number, x: number, y: number, w: number): Box {
   return { id: uid(), page, x, y, w, text: '', style: {}, shuffle: 0, frames: {}, kind, name: newBlockName(doc, kind), color: nextColor(doc) };
@@ -289,15 +288,16 @@ function freeLine(L: Layout, page: number, x: number, w: number): number {
 
 /**
  * A new, empty block. Text blocks start at the left margin and margin notes at the right edge, each on
- * the first free line of `page`; the header goes at the top right of page 1, and a document has one.
+ * the first free line of `page`; the header goes at the top right of page 1, and a document has one. A header
+ * has `fields`, or the three blank ones when none are given.
  */
-export function newBlock(S: Settings, doc: EngineDoc, kind: BlockKind, page: number): Box | 'header-exists' {
+export function newBlock(S: Settings, doc: EngineDoc, kind: BlockKind, page: number, fields?: HeaderField[]): Box | 'header-exists' {
   if (kind === 'header') {
     if (doc.boxes.some(b => b.kind === 'header')) return 'header-exists';
     use(S, doc);
     const g = geom();
     const h = blockAt(doc, 'header', 0, 446, g.top - g.gap, 320);
-    h.fields = { name: '', class: '', date: today() };
+    h.fields = fields ?? cleanFields(null);
     h.text = headerText(h.fields);
     doc.boxes.push(h);
     return h;
@@ -321,22 +321,11 @@ export function newTextBlockAt(S: Settings, doc: EngineDoc, page: number, x: num
   return b;
 }
 
-/** A header field's value as the header keeps it: one line (typing keeps its spaces), at most 80 characters. */
-export const fieldValue = (value: string): string => value.replace(/[\r\n]+/g, ' ').slice(0, 80);
-
-/** Write a header field and the header's text with it. */
-export function setHeaderField(box: Box, key: HeaderKey, value: string): void {
-  if (box.kind !== 'header') return;
-  box.fields = { ...box.fields, [key]: fieldValue(value) };
-  box.text = headerText(box.fields);
-}
-
-/** Add or remove a header's Subject or Roll no. line. */
-export function showHeaderField(box: Box, key: 'subject' | 'roll', on: boolean): void {
-  if (box.kind !== 'header') return;
-  const f = { ...box.fields };
-  if (!on) delete f[key];
-  else if (typeof f[key] !== 'string') f[key] = '';
-  box.fields = f;
-  box.text = headerText(f);
+/** Write the value of the header's field `fieldId`, and the header's text with it. */
+export function setHeaderField(box: Box, fieldId: string, value: string): void {
+  if (box.kind !== 'header' || !box.fields) return;
+  const next = listSetValue(box.fields, fieldId, value);
+  if (!next) return;
+  box.fields = next;
+  box.text = headerText(next);
 }

@@ -6,7 +6,7 @@ import { box, docOf, get, lastToast, lines, open } from '@/test/docs';
 import { flushSave, redo, undo } from '@/store/editor';
 import {
   addBlock, addPageAt, addTextBlockAt, addToEndOf, deleteBlock, deletePageAt, joinBackBlock, mergeIntoPreviousPage,
-  moveBlockTo, movePageTo, removePart, renameBlock, resetBoxStyle, select, setField, setV, showField, shuffleBox, splitAt,
+  moveBlockTo, movePageTo, removePart, renameBlock, resetBoxStyle, select, setField, setV, shuffleBox, splitAt,
 } from './actions';
 import { layoutFor, today } from './model';
 
@@ -239,7 +239,7 @@ test('repeating an action, or one with nothing to act on, records nothing and sa
   deletePageAt(0); deletePageAt(0); mergeIntoPreviousPage(1); movePageTo(0, 1);
   open(long());
   const text = json();
-  setField('m', 'name', 'x'); showField('m', 'roll', true); // not a header
+  setField('m', 'name', 'x'); // not a header
   expect(json()).toBe(text);
   expect(get().canUndo).toBe(false);
   expect(toasts()).toBe(0);
@@ -409,22 +409,18 @@ test('renaming a block', () => {
   expect(get().canUndo).toBe(false);
 });
 
-test('header fields: typing is one step per field, and fields can be shown and hidden', () => {
+test('header fields: typing is one step per field', () => {
   open(long());
   addBlock('header', 0);
   const h = get().doc.boxes[1].id;
   const head = () => get().doc.boxes.find(b => b.id === h)!;
-  setField(h, 'name', 'R');
-  setField(h, 'name', 'Riya');
+  const nameId = head().fields!.find(f => f.label === 'Name')!.id;
+  setField(h, nameId, 'R');
+  setField(h, nameId, 'Riya');
   expect(head().text).toBe(`Name: Riya\nClass:\nDate: ${today()}`);
   undo();
-  expect(head().fields!.name).toBe('');
-  showField(h, 'subject', true);
-  expect(head().text).toBe(`Name:\nClass:\nSubject:\nDate: ${today()}`);
-  showField(h, 'subject', false);
-  expect(head().fields!.subject).toBeUndefined();
-  undo();
-  expect(head().fields!.subject).toBe('');
+  expect(head().fields!.find(f => f.id === nameId)!.value).toBe('');
+  expect(head().text).toBe(`Name:\nClass:\nDate: ${today()}`);
   setField('m', 'name', 'x'); // not a header
   expect(get().doc.boxes[0].fields).toBeUndefined();
 });

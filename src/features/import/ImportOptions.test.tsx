@@ -8,7 +8,7 @@ import { drawSample, loadFont } from '@/engine/core.js';
 import { cleanSettings } from '@/engine/doc.js';
 import { paperTint } from '@/features/style/HandSample';
 import { useStylePrefs } from '@/features/style/prefs';
-import { box, docOf, fontsLoad, get, open } from '@/test/docs';
+import { box, docOf, fieldsOf, fontsLoad, get, open } from '@/test/docs';
 import { ImportOptions } from './ImportOptions';
 import { initialOptions, lookById, type ImportOptionsValue, type ImportTarget } from './options';
 
@@ -53,13 +53,13 @@ test('Start a new page where the file does: only for a file with pages of its ow
 test('Add a header block: Name, Class and today’s Date, and what was typed comes back', async () => {
   render(<Harness target="new" />); const tick = screen.getByRole('checkbox', { name: 'Add a header block' }); await userEvent.click(tick);
   expect(screen.getByRole('textbox', { name: 'Date' })).toHaveValue('7 November 2026'); await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Asha');
-  expect(value.header).toEqual({ name: 'Asha', class: '', date: '7 November 2026' }); expect(screen.getByText('At the top right of page 1.')).toBeInTheDocument();
-  await userEvent.click(tick); expect(value.header).toBeNull(); await userEvent.click(tick); expect(value.header?.name).toBe('Asha');
+  expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Asha'], ['Class', ''], ['Date', '7 November 2026']]); expect(screen.getByText('At the top right of page 1.')).toBeInTheDocument();
+  await userEvent.click(tick); expect(value.header).toBeNull(); await userEvent.click(tick); expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Asha'], ['Class', ''], ['Date', '7 November 2026']]);
 });
 test('an open document with a header starts with it, fields and all', () => {
-  open(docOf(box({ kind: 'header', name: 'Header', fields: { name: 'Ravi', class: '9', subject: 'Art', date: '1 May 2026' }, text: 'x' }))); render(<Harness target="open" />);
+  open(docOf(box({ kind: 'header', name: 'Header', fields: fieldsOf({ name: 'Ravi', class: '9', subject: 'Art', date: '1 May 2026' }), text: 'x' }))); render(<Harness target="open" />);
   expect(screen.getByRole('checkbox', { name: 'Add a header block' })).toBeChecked(); expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Ravi');
-  expect(value.header).toEqual({ name: 'Ravi', class: '9', subject: 'Art', date: '1 May 2026' });
+  expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Ravi'], ['Class', '9'], ['Subject', 'Art'], ['Date', '1 May 2026']]);
 });
 test('each look is written in its own hand on its own paper', () => {
   render(<Harness target="new" />); const card = screen.getByRole('radio', { name: 'Journal' });

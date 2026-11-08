@@ -4,7 +4,6 @@
 // list's, not the sheet's (`data-vaul-no-drag`): the sheet doesn't follow them or move when they start.
 import { memo, useId, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { GripVertical, Plus } from 'lucide-react';
-import { HEADER_FIELDS } from '@/engine/doc.js';
 import { frameRange, hasOwnStyle } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
 import { Button } from '@/components/ui/button';
@@ -35,7 +34,7 @@ function snippetOf(markup: string): string {
 /** What a part's item shows under its name: its text, or a header's filled-in fields. */
 function partSnippet(sg: Seg): string {
   const b = sg.box;
-  if (b.kind === 'header') return HEADER_FIELDS.map(([k]) => b.fields?.[k]?.trim()).filter(Boolean).join(' · ');
+  if (b.kind === 'header') return b.fields?.map(f => f.value.trim()).filter(Boolean).join(' · ') ?? '';
   const [from, to] = frameRange(b, sg.idx);
   return snippetOf(b.text.slice(from, to));
 }

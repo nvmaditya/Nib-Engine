@@ -12,7 +12,7 @@ import { deleteBlock, deletePageAt, removePart, select, splitAt } from '@/featur
 import { offsetAt } from '@/features/editor/positions';
 import { createDoc } from '@/store/documents';
 import { flushSave, placeCaret, undo } from '@/store/editor';
-import { box, docOf, get, lastToast, lines, words } from '@/test/docs';
+import { box, docOf, fieldsOf, get, lastToast, lines, words } from '@/test/docs';
 import { OUTLINE_PEEK } from './OutlineView';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
@@ -27,7 +27,7 @@ const m = () => box({ id: 'm', name: 'Main text', text: lines(40) }); // pages 1
 const n = (p: Partial<Box> = {}) => box({ id: 'n', name: 'Answers', page: 1, y: 900, color: 2, text: 'x', shuffle: 7, ...p }); // own style, page 2
 const h = () => box({
   id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, color: 1,
-  fields: { name: 'Riya', class: '', date: '6 November 2026' }, text: 'Name: Riya\nClass:\nDate: 6 November 2026',
+  fields: fieldsOf({ name: 'Riya', class: '', date: '6 November 2026' }), text: 'Name: Riya\nClass:\nDate: 6 November 2026',
 });
 
 const ol = () => screen.getByRole('region', { name: 'Outline' });
@@ -291,7 +291,7 @@ test('a header shows its fields and the hint, and its item the filled-in fields'
   expect(within(ol()).getByText('Riya · 6 November 2026')).toBeInTheDocument();
   await userEvent.click(item('Header'));
   expect(within(insp()).getByRole('textbox', { name: 'Name' })).toHaveValue('Riya');
-  expect(within(insp()).getByText('New documents fill in today’s date. Add Subject or Roll no. from ⋯.')).toBeInTheDocument();
+  expect(within(insp()).getByText('New documents fill in today’s date.')).toBeInTheDocument();
   expect(within(insp()).queryByRole('toolbar', { name: 'Formatting' })).toBeNull();
   expect(within(insp()).queryByRole('textbox', { name: /all pages/ })).toBeNull();
 });

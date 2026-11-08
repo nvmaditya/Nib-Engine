@@ -297,7 +297,7 @@ test('after a deploy, a tab of the earlier Nib saving a record it wrote (no revi
   expect(messages(b)).toEqual([NOT_KEPT]);
   type(b, ' and then');
   await b.ed.flushSave();
-  expect(await db.get('documents', id)).toMatchObject({ rev: 1, schema: 3 });
+  expect(await db.get('documents', id)).toMatchObject({ rev: 1, schema: b.docs.DOC_SCHEMA });
   expect((await a.docs.getDoc(id))!.doc.boxes[0].text).toBe('The water cycle, old tab and then');
   expect(messages(b)).toEqual([NOT_KEPT]);
 });

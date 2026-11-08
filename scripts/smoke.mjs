@@ -477,7 +477,7 @@ async function main() {
         const expected = boxes();
         if (JSON.stringify(kinds) !== JSON.stringify(expected)) fail(`${name}: boxes are ${JSON.stringify(kinds)}`);
         const header = rec.doc.boxes.find(b => b.kind === 'header');
-        if (header && header.fields.date !== todayText()) fail(`${name}: the header date is "${header.fields.date}"`);
+        if (header && header.fields.find(f => f.today)?.value !== todayText()) fail(`${name}: the header date is "${header.fields.find(f => f.today)?.value}"`);
         await styleNav().click();
         if (name === 'Class notes') {
           await page.getByText(/^Patrick Hand · /).first().waitFor({ timeout: 10000 });
@@ -527,7 +527,7 @@ async function main() {
       await page.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
       const rec = await newest();
       if (rec.doc.boxes.map(b => b.kind).join() !== 'header,text') fail(`the boxes are ${rec.doc.boxes.map(b => b.kind)}`);
-      if (rec.doc.boxes[0].fields.name !== 'Asha') fail('the header does not say Asha');
+      if (rec.doc.boxes[0].fields.find(f => f.label === 'Name')?.value !== 'Asha') fail('the header does not say Asha');
       if (!rec.doc.boxes[1].text.includes('\\newpage\n## Conclusion')) fail('Main text has no \\newpage before Conclusion');
       if (rec.settings.font !== 'patrick') fail(`the hand is ${rec.settings.font}, not patrick`);
       const bad = requests.filter(r => r.method !== 'GET' || !r.url.startsWith(BASE));

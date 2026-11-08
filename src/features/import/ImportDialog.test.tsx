@@ -15,7 +15,7 @@ import { offsetAt } from '@/features/editor/positions';
 import { useUndoShortcuts } from '@/shell/useUndoShortcuts';
 import { createDoc, listDocs, type DocRecord } from '@/store/documents';
 import { flushSave, openDocument, undo, useEditor } from '@/store/editor';
-import { box, docOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
+import { box, docOf, fieldsOf, fontsLoad, get, lines, open, rec } from '@/test/docs';
 import { newDocument } from '@/features/doc/build';
 import { ImportDialog } from './ImportDialog';
 
@@ -104,7 +104,7 @@ test('an Untitled document takes the file’s name, and the same undo step gives
 test('a header block with Name, Class and today’s Date', async () => {
   open(docOf(box())); openImport(); render(<Open />); await screen.findByText('Essay.docx: 24 words.');
   await userEvent.click(screen.getByRole('checkbox', { name: 'Add a header block' })); await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Asha'); await userEvent.click(writeIt());
-  expect(get().doc.boxes.map(b => b.kind)).toEqual(['header', 'text']); expect(get().doc.boxes[0].fields).toEqual({ name: 'Asha', class: '', date: today() });
+  expect(get().doc.boxes.map(b => b.kind)).toEqual(['header', 'text']); expect(get().doc.boxes[0].fields!.map(f => [f.label, f.value])).toEqual([['Name', 'Asha'], ['Class', ''], ['Date', today()]]);
 });
 test('Add after the last page never writes a header, even one ticked and filled in before choosing it', async () => {
   open(docOf(box({ id: 'm', name: 'Main text', text: 'mine' }))); openImport(); render(<Open />); await ready();
@@ -114,7 +114,7 @@ test('Add after the last page never writes a header, even one ticked and filled 
   expect(get().doc.boxes.map(b => b.kind)).toEqual(['text']); expect(get().doc.boxes[0].text).toBe('mine\n\\newpage\n' + ESSAY.parts.join('\n\n'));
 });
 test('…and the open document’s own header stays as it is, never a second one', async () => {
-  const fields = { name: 'Old', class: '7B', date: '1 May 2026' };
+  const fields = fieldsOf({ name: 'Old', class: '7B', date: '1 May 2026' });
   open(docOf(box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields }), box({ id: 'm', name: 'Main text', y: 178, text: 'mine' })));
   openImport(); render(<Open />); await ready();
   const name = screen.getByRole('textbox', { name: 'Name' }); await userEvent.clear(name); await userEvent.type(name, 'New');

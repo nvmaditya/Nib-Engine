@@ -5,8 +5,9 @@ import { getDb } from './db';
 export interface DocRecord {
   id: string; title: string; createdAt: number; updatedAt: number; settings: Settings; doc: EngineDoc;
   /**
-   * 3 since documents carry a revision; 2 from Nib's Write milestone; records without it are Longhand-era (1).
-   * A Nib that writes 2 doesn't keep the revision, so it must not overwrite a 3 (it refuses newer records).
+   * 4 since a header's fields are a list; 3 since documents carry a revision; 2 from Nib's Write milestone; records
+   * without it are Longhand-era (1). A Nib that writes 2 doesn't keep the revision, so it must not overwrite a 3, and one
+   * that writes 3 can't read a header's list, so it must not overwrite a 4 (it refuses newer records).
    */
   schema?: number;
   /** Bumps on every write (records without it are 0). A write is refused if storage moved on since its copy was read. */
@@ -19,7 +20,7 @@ export interface DocRecord {
  */
 type StoredDoc = DocRecord & { savedBy?: string };
 
-export const DOC_SCHEMA = 3;
+export const DOC_SCHEMA = 4;
 
 /** A record in storage was written by a newer Nib; this older copy must not overwrite it. */
 export class NewerDocumentError extends Error {

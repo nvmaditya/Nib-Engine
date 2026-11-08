@@ -2,11 +2,12 @@
 import { navigate, parseHash, type Stage } from '@/app/route';
 import { BOX_KEYS } from '@/engine/doc.js';
 import { boxSettings, clearMeasureCache, frameRange, hasOwnStyle } from '@/engine/core.js';
-import type { BlockKind, Box, EngineDoc, HeaderKey, Seg, Settings } from '@/engine/types';
+import type { BlockKind, Box, EngineDoc, Seg, Settings } from '@/engine/types';
 import {
   appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage,
-  newBlock, newTextBlockAt, pageRefusal, removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, type Refused,
+  newBlock, newTextBlockAt, pageRefusal, removeBlock, removeBlockPart, setHeaderField, splitBlock, type Refused,
 } from '@/features/doc/model';
+import { defaultHeaderFields } from '@/features/doc/headerDefault';
 import {
   docAction, placeCaret, selectedBox, snapshot, toast, undoTo, update, useEditor, type EditorState, type UpdateOptions,
 } from '@/store/editor';
@@ -209,7 +210,7 @@ const ADDED: Record<BlockKind, string> = { text: 'Added a text block.', note: 'A
 export function addBlock(kind: BlockKind, page: number): void {
   let id = '';
   const added = restructure('add-block', s => {
-    const b = newBlock(s.S, s.doc, kind, page);
+    const b = newBlock(s.S, s.doc, kind, page, kind === 'header' ? defaultHeaderFields() : undefined);
     if (b === 'header-exists') return refuse('This document already has a header block.');
     s.selectedId = id = b.id;
     if (kind === 'header') return ADDED.header;
@@ -242,22 +243,13 @@ export function renameBlock(boxId: string, name: string): void {
   commit(before, { history: step('rename'), layout: false });
 }
 
-/** Type into a header field: one undo step per burst of typing in that field. */
-export function setField(boxId: string, key: HeaderKey, value: string): void {
+/** Type into a header's field `fieldId`: one undo step per burst of typing in that field. */
+export function setField(boxId: string, fieldId: string, value: string): void {
   const b = boxById(boxId);
   if (!b) return;
   const before = snapshot();
-  setHeaderField(b, key, value);
-  commit(before, { history: 'field:' + boxId + ':' + key, layout: 'soon' });
-}
-
-/** Add or remove a header's Subject or Roll no. */
-export function showField(boxId: string, key: 'subject' | 'roll', on: boolean): void {
-  const b = boxById(boxId);
-  if (!b) return;
-  const before = snapshot();
-  showHeaderField(b, key, on);
-  commit(before, { history: step('field') });
+  setHeaderField(b, fieldId, value);
+  commit(before, { history: `field:${boxId}:${fieldId}`, layout: 'soon' });
 }
 
 // What the Style panel shows and edits: the selected block's own settings, or the document's.

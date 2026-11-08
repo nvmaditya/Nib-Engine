@@ -1,12 +1,13 @@
 // The Import dialog's options: where it goes, the file's pages, a look drawn in its own hand, and a header block.
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { RadioGroup as RadioGroupPrimitive } from 'radix-ui';
-import type { HeaderFields, Settings } from '@/engine/types';
+import type { HeaderField, Settings } from '@/engine/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { today } from '@/features/doc/model';
+import { defaultHeaderFields } from '@/features/doc/headerDefault';
+import { listSetValue } from '@/features/doc/headerFields';
 import { HandSample, paperTint } from '@/features/style/HandSample';
 import { lookPatch, STYLE_LOOKS } from '@/features/style/looks';
 import { Group, Hint } from '@/features/style/parts';
@@ -14,17 +15,17 @@ import { useStylePrefs } from '@/features/style/prefs';
 import type { ImportOptionsValue, ImportTarget } from './options';
 
 const KEEP = 'keep';
-const FIELDS = [['name', 'Name'], ['class', 'Class'], ['date', 'Date']] as const;
 
 export function ImportOptions({ target, value, onChange, fileParts, base }: {
   target: ImportTarget; value: ImportOptionsValue; onChange(v: ImportOptionsValue): void; fileParts: number; base: Settings;
 }) {
   const saved = useStylePrefs(s => s.looks);
-  const typed = useRef<HeaderFields | null>(value.header);
+  const fieldId = useId();
+  const typed = useRef<HeaderField[] | null>(value.header);
   if (value.header) typed.current = value.header;
   const set = (patch: Partial<ImportOptionsValue>) => onChange({ ...value, ...patch });
-  const setField = (k: (typeof FIELDS)[number][0], v: string) => set({ header: { ...value.header, [k]: v } });
-  const tickHeader = (on: boolean) => set({ header: on ? typed.current ?? { name: '', class: '', date: today() } : null });
+  const setField = (id: string, v: string) => { const next = value.header && listSetValue(value.header, id, v); if (next) set({ header: next }); };
+  const tickHeader = (on: boolean) => set({ header: on ? typed.current ?? defaultHeaderFields() : null });
 
   const cards = [...STYLE_LOOKS, ...saved].map(look => ({ id: look.id, name: look.name, paper: look.v.paper ?? base.paper, settings: { ...base, ...lookPatch(look, false) } }));
   if (target === 'open') cards.unshift({ id: KEEP, name: 'Keep this document’s look', paper: base.paper, settings: base });
@@ -69,10 +70,10 @@ export function ImportOptions({ target, value, onChange, fileParts, base }: {
           {value.header && (
             <>
               <div className="mt-3 grid gap-3">
-                {FIELDS.map(([k, label]) => (
-                  <div key={k} className="grid gap-1.5">
-                    <Label htmlFor={`import-header-${k}`}>{label}</Label>
-                    <Input id={`import-header-${k}`} value={value.header?.[k] ?? ''} maxLength={80} autoComplete="off" onChange={e => setField(k, e.target.value)} />
+                {value.header.map(f => (
+                  <div key={f.id} className="grid gap-1.5">
+                    <Label htmlFor={fieldId + f.id}>{f.label}</Label>
+                    <Input id={fieldId + f.id} value={f.value} maxLength={80} autoComplete="off" onChange={e => setField(f.id, e.target.value)} />
                   </div>
                 ))}
               </div>
