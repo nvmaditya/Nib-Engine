@@ -2,7 +2,7 @@
 import { createElement, type PointerEvent as ReactPointerEvent } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { dragGhost, gate, pageDropIndex, startDrag, targetAt, type DragKind } from './dnd';
+import { dragGhost, gate, pageDropIndex, rowAt, startDrag, targetAt, type DragKind } from './dnd';
 
 // The click swallowed after a drop is only the one that comes straight after it: let that moment pass.
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); document.body.innerHTML = ''; await new Promise(r => setTimeout(r, 0)); });
@@ -71,6 +71,46 @@ test('a field row drag finds the row under the pointer, never the page around it
   up(10, 130);
   expect(drop).toHaveBeenCalledWith({ page: 1, after: true });
   expect(row.dataset.drop).toBeUndefined();
+});
+
+test('a field row is the one whose line the point is on, even where a later row’s part is on top there', () => {
+  // Two rows 15 px tall, and on top of both, and 6 px past them, a part of the second (a phone's 44 px square).
+  const grid = document.createElement('div');
+  const rows = [0, 1].map(i => {
+    const row = document.createElement('div');
+    row.dataset.dropField = String(i);
+    row.innerHTML = '<span></span>';
+    row.getBoundingClientRect = () => ({ x: 0, y: i * 15, top: i * 15, bottom: i * 15 + 15, left: 0, right: 300, width: 300, height: 15, toJSON: () => ({}) }) as DOMRect;
+    grid.append(row);
+    return row;
+  });
+  document.body.append(grid);
+  vi.spyOn(document, 'elementFromPoint').mockImplementation((_x, y) => (y >= -6 && y < 36 ? rows[1].firstElementChild : null));
+  expect(targetAt(5, 4, 'field')).toEqual({ page: 0, after: false });
+  expect(targetAt(5, 12, 'field')).toEqual({ page: 0, after: true });
+  expect(targetAt(5, 18, 'field')).toEqual({ page: 1, after: false });
+  expect(targetAt(5, -3, 'field')).toEqual({ page: 0, after: false }); // past the first line: the first row
+  expect(targetAt(5, 33, 'field')).toEqual({ page: 1, after: true }); // past the last: the last
+  expect(targetAt(5, 40, 'field')).toBeNull();
+  // A drag marks that row.
+  const drop = vi.fn();
+  render(createElement('button', {
+    type: 'button',
+    onPointerDown: (e: ReactPointerEvent) => startDrag(e, { kind: 'grip', targets: 'field', ghost: () => document.createElement('div'), onDrop: drop }),
+  }, 'grip'));
+  down(); move(10, 4);
+  expect(rows.map(r => r.dataset.drop)).toEqual(['before', undefined]);
+  up(10, 4);
+  expect(drop).toHaveBeenCalledWith({ page: 0, after: false });
+});
+
+test('of some rows, the one whose line a point is on, or the nearest', () => {
+  const rows = [0, 1, 3].map(top => ({ getBoundingClientRect: () => ({ top: top * 10, bottom: top * 10 + 10 }) as DOMRect }));
+  expect([-5, 0, 9, 10, 19.9, 22, 28, 35, 60].map(y => rows.indexOf(rowAt(rows, y)!))).toEqual([0, 0, 0, 1, 1, 1, 2, 2, 2]);
+  expect(rowAt([], 5)).toBeUndefined();
+  const flat = { getBoundingClientRect: () => ({ top: 0, bottom: 0 }) as DOMRect };
+  expect(rowAt([flat], 0)).toBeUndefined(); // no height: not laid out
+  expect(rowAt([flat, rows[1]], 0)).toBe(rows[1]);
 });
 
 test('a drag’s ghost shows its name, after a dot of its colour if it has one', () => {

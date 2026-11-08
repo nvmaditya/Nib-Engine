@@ -11,7 +11,7 @@ import { setField } from '@/features/doc/actions';
 import { cn } from '@/lib/utils';
 import { useEditor } from '@/store/editor';
 import { OptionsButton } from './BlockMenu';
-import { dragGhost, dropClass, gripClass, pageDropIndex, startDrag } from './dnd';
+import { dragGhost, dropClass, gripClass, pageDropIndex, rowAt, startDrag } from './dnd';
 
 /**
  * Labelled inputs for the fields the header has, in the order it writes them. `compact` is for the typed
@@ -59,8 +59,13 @@ interface FocusTo { id: string; part: Part; menu?: true }
 const ring = 'focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none';
 /** The typed page's value input (and name input): no box, a rule under it, the page's text size and line height. */
 const COMPACT_INPUT = 'h-auto rounded-sm border-0 border-b border-line bg-transparent px-[0.25em] py-0 text-[length:inherit] leading-[inherit] focus-visible:ring-2 focus-visible:ring-ring/50';
-/** On the typed page, an icon at the text's size, with a 44 px square to press below `wide:`. */
+/**
+ * On the typed page, an icon at the text's size, with a 44 px square to press below `wide:`. The rows' grid clips
+ * the squares at its first and last lines (`COMPACT_CLIP`), so a block under the header keeps its taps.
+ */
 const COMPACT_HIT = 'relative before:absolute before:top-1/2 before:left-1/2 before:size-11 before:-translate-x-1/2 before:-translate-y-1/2 wide:before:hidden';
+/** The squares stop 3 px past the first and last lines (room for the focus rings), and well past the sides. */
+const COMPACT_CLIP = '[clip-path:inset(-3px_-24px)]';
 /** On the typed page, the label, name and value are above those squares: a press on them is theirs. */
 const OVER_SQUARES = 'relative z-[1]';
 /** On the typed page, the grip and the ⋯ show while their row has the pointer or the focus, and always where there is no hover. */
@@ -147,13 +152,13 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
   };
 
   /**
-   * The field whose row is on the line at `y`. On a phone's typed page the rows are closer together than the 44 px
-   * squares their grip and ⋯ are pressed in, so a square reaches over the lines next to its own, where the later
-   * row's is on top: a press is for the row whose line it lands on.
+   * The field whose row is on the line at `y`, or past the first or last line the row at that end. On a phone's
+   * typed page the rows are closer together than the 44 px squares their grip and ⋯ are pressed in, so a square
+   * reaches over the lines next to its own, where the later row's is on top: a press is for the row whose line it
+   * lands on (a drop finds its row the same way).
    */
   const fieldAt = (y: number): HeaderField | undefined => {
-    const rows = root.current ? [...root.current.querySelectorAll<HTMLElement>('[data-drop-field]')] : [];
-    const row = rows.find(r => { const b = r.getBoundingClientRect(); return y >= b.top && y < b.bottom; });
+    const row = root.current ? rowAt(root.current.querySelectorAll<HTMLElement>('[data-drop-field]'), y) : undefined;
     return row ? latest.current[Number(row.dataset.dropField)] : undefined;
   };
 
@@ -180,9 +185,9 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
 
   const addButton = compact ? (
     <button type="button" title={full ? 'A header holds up to 12 fields.' : undefined}
-      className={cn('invisible absolute top-full left-0 z-10 inline-flex h-5 items-center gap-0.5 rounded-[4px] bg-[var(--bc,var(--primary))] py-0 pr-1.5 pl-1 text-[11px] leading-none font-medium whitespace-nowrap text-white',
+      className={cn('invisible absolute top-full left-0 z-10 inline-flex h-6 items-center gap-0.5 rounded-[4px] bg-[var(--bc,var(--primary))] py-0 pr-1.5 pl-1 text-[11px] leading-none font-medium whitespace-nowrap text-white',
         'group-hover/fields:visible group-focus-within/fields:visible data-[state=open]:visible in-[.selected]:visible',
-        'hover:brightness-110 disabled:pointer-events-auto disabled:opacity-60 [&_svg]:size-3', ring)}>
+        'hover:brightness-110 disabled:pointer-events-auto disabled:opacity-60 wide:h-5 [&_svg]:size-3', ring)}>
       <Plus aria-hidden />Add field
     </button>
   ) : (
@@ -194,7 +199,7 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
 
   return (
     <div ref={root} className="group/fields relative">
-      <div className={cn('grid items-center', compact ? 'grid-cols-[auto_fit-content(45%)_minmax(0,1fr)_auto] gap-x-[0.4em]' : 'grid-cols-[auto_fit-content(40%)_minmax(0,1fr)_auto] gap-x-3 gap-y-2')}>
+      <div className={cn('grid items-center', compact ? cn('grid-cols-[auto_fit-content(45%)_minmax(0,1fr)_auto] gap-x-[0.4em]', COMPACT_CLIP) : 'grid-cols-[auto_fit-content(40%)_minmax(0,1fr)_auto] gap-x-3 gap-y-2')}>
         {fields.map((f, i) => (
           <div key={f.id} data-drop-field={i} className={cn('group/row col-span-full grid grid-cols-subgrid items-center', compact ? 'h-lh' : 'rounded-md', dropClass)}>
             <span role="img" aria-label={`Move “${f.label}”`} data-vaul-no-drag="" onPointerDown={e => drag(e, f)}

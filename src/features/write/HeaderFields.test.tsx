@@ -233,13 +233,27 @@ test('at 12 fields Add field is off and says why', async () => {
   expect(screen.queryByRole('menu')).toBeNull();
 });
 
-/** Lays the rows out `h` px tall from the top of the window, and finds what is under a point by them. */
-function layRows(h: number): HTMLElement[] {
+/**
+ * Lays the rows out `h` px tall from the top of the window, and finds what is under a point by them: a row's value,
+ * or with `squares` (a phone's typed page, lines closer together than the 44 px squares) what Chromium finds in the
+ * grip column (x < 20): the next row's grip, whose square is on top over the whole line, and on the last line its
+ * own; past the first and last lines (within `reach` px) the square of the row next to the end.
+ */
+function layRows(h: number, { squares = false, reach = 0 } = {}): HTMLElement[] {
   const rows = [...document.querySelectorAll<HTMLElement>('[data-drop-field]')];
   rows.forEach((el, i) => {
     el.getBoundingClientRect = () => ({ x: 0, y: i * h, top: i * h, bottom: i * h + h, left: 0, right: 300, width: 300, height: h, toJSON: () => ({}) }) as DOMRect;
   });
-  vi.spyOn(document, 'elementFromPoint').mockImplementation((_x, y) => (y >= 0 && y < rows.length * h ? rows[Math.floor(y / h)].querySelector('input') : null));
+  const grip = (i: number) => rows[i].querySelector('[role="img"]');
+  vi.spyOn(document, 'elementFromPoint').mockImplementation((x, y) => {
+    const i = Math.floor(y / h), last = rows.length - 1;
+    if (squares && x < 20) {
+      if (y < 0) return y >= -reach ? grip(Math.min(1, last)) : null;
+      if (i > last) return y < rows.length * h + reach ? grip(last) : null;
+      return grip(Math.min(i + 1, last));
+    }
+    return i >= 0 && i <= last ? rows[i].querySelector('input') : null;
+  });
   return rows;
 }
 
@@ -298,6 +312,55 @@ test('on a phone’s typed page, a press in a grip’s or ⋯’s 44 px square i
   await settle();
 });
 
+test('on a phone’s typed page, a grip drag drops on the row whose line the pointer is on, not the square on top there', async () => {
+  render(<Harness start={F('Name', 'Class', 'Date')} compact />);
+  const rows = layRows(15, { squares: true }); // Name 0–15, Class 15–30, Date 30–45
+  const user = userEvent.setup();
+  const grip = screen.getByRole('img', { name: 'Move “Name”' });
+  const drag = (from: number, to: number) => user.pointer([
+    { keys: '[MouseLeft>]', target: grip, coords: { clientX: 5, clientY: from } },
+    { target: grip, coords: { clientX: 5, clientY: (from + to) / 2 } },
+    { target: grip, coords: { clientX: 5, clientY: to } },
+  ]);
+  const release = (y: number) => user.pointer({ keys: '[/MouseLeft]', target: grip, coords: { clientX: 5, clientY: y } });
+  await drag(7, 18); // Name onto Class's upper half (where Date's square is on top): before Class, where it is
+  expect(rows.map(r => r.dataset.drop)).toEqual([undefined, 'before', undefined]);
+  await release(18);
+  expect(calls).toEqual([]);
+  await settle();
+  await drag(37, 3); // Date onto Name's line (where Class's square is on top): to the top
+  expect(rows.map(r => r.dataset.drop)).toEqual(['before', undefined, undefined]);
+  await release(3);
+  expect(calls).toEqual([['move', 'i2', 0]]);
+  expect(labels()).toEqual(['Date', 'Name', 'Class']);
+  await settle();
+});
+
+test('a press just past the first or last line is for the row at that end', async () => {
+  render(<Harness start={F('Name', 'Class', 'Date')} compact />);
+  layRows(10, { squares: true, reach: 7 }); // lines so close that Class's squares reach past Name's line and Date's
+  const user = userEvent.setup();
+  const expanded = () => screen.getAllByRole('button', { name: /^More for/, hidden: true }).filter(b => b.getAttribute('aria-expanded') === 'true')
+    .map(b => b.getAttribute('aria-label'));
+  await user.pointer({ keys: '[MouseLeft]', target: button('More for “Class”'), coords: { clientX: 290, clientY: -4 } });
+  expect(expanded()).toEqual(['More for “Name”']);
+  await user.keyboard('{Escape}');
+  await settle();
+  await user.pointer({ keys: '[MouseLeft]', target: button('More for “Class”'), coords: { clientX: 290, clientY: 33 } });
+  expect(expanded()).toEqual(['More for “Date”']);
+  await user.keyboard('{Escape}');
+  await settle();
+  const grip = screen.getByRole('img', { name: 'Move “Class”' });
+  await user.pointer([
+    { keys: '[MouseLeft>]', target: grip, coords: { clientX: 5, clientY: 33 } },
+    { target: grip, coords: { clientX: 5, clientY: 15 } },
+    { target: grip, coords: { clientX: 5, clientY: -4 } },
+    { keys: '[/MouseLeft]', target: grip, coords: { clientX: 5, clientY: -4 } },
+  ]);
+  expect(calls).toEqual([['move', 'i2', 0]]); // Date, pressed past the last line, dropped past the first
+  await settle();
+});
+
 test('a name being typed is kept when the editor goes, and nothing happens when its field went first', async () => {
   const { unmount } = render(<Harness start={F('Name', 'Class')} />);
   await userEvent.click(button('Rename “Class”'));
@@ -335,6 +398,14 @@ test('on phones the ⋯ and the grip are 44 px', () => {
   // A style while pressed makes Chromium count the grip as something to tap, so a touch on it isn't moved onto the
   // label beside it (its touch adjustment); hover styles don't count on a phone.
   expect(screen.getByRole('img', { name: 'Move “Name”' })).toHaveClass('active:text-fg');
+  // The squares stop at the header's first and last lines, so a block under the header keeps its taps: the rows'
+  // grid clips them (keeping 3 px for the focus rings, and room at the sides).
+  expect(document.querySelector('[data-drop-field]')!.parentElement).toHaveClass('[clip-path:inset(-3px_-24px)]');
+});
+
+test('the squares are only clipped on the typed page', () => {
+  render(<Harness start={F('Name')} />);
+  expect(document.querySelector('[data-drop-field]')!.parentElement).not.toHaveClass('[clip-path:inset(-3px_-24px)]');
 });
 
 test('compact: Add field sits just under the fields, shown while they have the focus or the pointer, or the header is selected', () => {
@@ -342,6 +413,7 @@ test('compact: Add field sits just under the fields, shown while they have the f
   expect(container.firstElementChild).toHaveClass('relative', 'group/fields');
   expect(button('Add field')).toHaveClass('absolute', 'top-full', 'left-0', 'invisible', 'group-focus-within/fields:visible', 'group-hover/fields:visible',
     'data-[state=open]:visible', 'in-[.selected]:visible');
+  expect(button('Add field')).toHaveClass('h-6', 'wide:h-5'); // 24 px to press on a phone (WCAG 2.5.8), the name tag's 20 px from wide up
   // The grip and the ⋯ show on hover or focus, and always where there is no hover.
   for (const el of [button('More for “Name”'), screen.getByRole('img', { name: 'Move “Name”' })]) {
     expect(el).toHaveClass('opacity-0', '[@media(hover:none)]:opacity-100');

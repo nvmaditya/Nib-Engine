@@ -46,9 +46,30 @@ export function gate(kind: DragKind, pointerType: string): { move(dx: number, dy
 /** What a drag drops on: pages (`[data-drop-page]`), or a header's field rows (`[data-drop-field]`). */
 export type DropTargets = 'page' | 'field';
 
+/**
+ * Of `rows`, the one whose line `y` is on (top inclusive, bottom not), or else the nearest: past the ends, the end
+ * one. A row with no height (not laid out, or hidden) has no line to be on.
+ */
+export function rowAt<T extends Pick<Element, 'getBoundingClientRect'>>(rows: Iterable<T>, y: number): T | undefined {
+  let near: T | undefined, gap = Infinity;
+  for (const r of rows) {
+    const b = r.getBoundingClientRect();
+    if (!(b.bottom > b.top)) continue;
+    if (y >= b.top && y < b.bottom) return r;
+    const d = y < b.top ? b.top - y : y - b.bottom;
+    if (d < gap) { gap = d; near = r; }
+  }
+  return near;
+}
+
 function hit(x: number, y: number, targets: DropTargets): { el: HTMLElement; t: DropTarget } | null {
   const at = document.elementFromPoint(x, y);
-  const el = at instanceof Element ? at.closest<HTMLElement>(targets === 'field' ? '[data-drop-field]' : '[data-drop-page]') : null;
+  let el = at instanceof Element ? at.closest<HTMLElement>(targets === 'field' ? '[data-drop-field]' : '[data-drop-page]') : null;
+  // On a phone's typed page a header's rows are closer together than the 44 px squares their grips are pressed in,
+  // and a later row's square is on top over the line before it: the row is the one whose line the point is on.
+  if (el && targets === 'field' && el.parentElement) {
+    el = rowAt([...el.parentElement.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.dataset.dropField !== undefined), y) ?? el;
+  }
   const page = el ? Number(targets === 'field' ? el.dataset.dropField : el.dataset.dropPage) : NaN;
   if (!el || !Number.isInteger(page)) return null;
   const r = el.getBoundingClientRect();
@@ -56,8 +77,8 @@ function hit(x: number, y: number, targets: DropTargets): { el: HTMLElement; t: 
 }
 
 /**
- * The drop target under a point: the closest `[data-drop-page]` (or, for `field`, `[data-drop-field]`), `after`
- * when the point is below its middle.
+ * The drop target under a point: the closest `[data-drop-page]` (or, for `field`, the `[data-drop-field]` row of
+ * that header whose line the point is on), `after` when the point is below its middle.
  */
 export const targetAt = (x: number, y: number, targets: DropTargets = 'page'): DropTarget | null => hit(x, y, targets)?.t ?? null;
 
