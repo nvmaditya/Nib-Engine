@@ -311,6 +311,95 @@ test('Outline’s header editor adds a field, and the header’s item shows its 
   }
 });
 
+describe('Undo and Redo keys in the header editor’s fields are the document’s', () => {
+  const labels = () => get().doc.boxes.find(b => b.id === 'h')!.fields!.map(f => f.label);
+  const valueOf = (label: string) => get().doc.boxes.find(b => b.id === 'h')!.fields!.find(f => f.label === label)?.value;
+  const field = (name: string) => within(insp()).getByRole('textbox', { name }) as HTMLInputElement;
+  const z = '{Control>}z{/Control}', shiftZ = '{Control>}{Shift>}z{/Shift}{/Control}', y = '{Control>}y{/Control}';
+  async function header() {
+    await outline(docOf(h(), box({ id: 'm', name: 'Main text', y: 178, text: 'x' })));
+    await userEvent.click(item('Header'));
+  }
+  afterEach(async () => { await forgetHeader(); });
+
+  test('Remove, then Ctrl+Z in the value the focus went to, puts the field back, and Redo is still there', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'More for “Class”' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+    await waitFor(() => expect(field('Date')).toHaveFocus());
+    await userEvent.keyboard(z);
+    expect([labels(), get().canRedo, field('Date').value]).toEqual([['Name', 'Class', 'Date'], true, '6 November 2026']);
+    await userEvent.keyboard(shiftZ);
+    expect(labels()).toEqual(['Name', 'Date']);
+    await userEvent.keyboard(z + y); // Ctrl+Y redoes too
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Date'], false]);
+    expect(fireEvent.keyDown(field('Date'), { key: 'z', ctrlKey: true })).toBe(false); // the field's own undo never starts
+    expect(labels()).toEqual(['Name', 'Class', 'Date']);
+  });
+
+  test('Add, then Ctrl+Z in the new value takes the field away again', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Teacher' }));
+    await waitFor(() => expect(field('Teacher')).toHaveFocus());
+    await userEvent.keyboard(z);
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Class', 'Date'], true]);
+  });
+
+  test('typing, then Ctrl+Z, undoes that burst of typing in the document’s history', async () => {
+    await header();
+    await userEvent.type(field('Name'), ' Sen');
+    expect(valueOf('Name')).toBe('Riya Sen');
+    await userEvent.keyboard(z);
+    expect([valueOf('Name'), field('Name').value, get().canRedo]).toEqual(['Riya', 'Riya', true]);
+    await userEvent.keyboard(shiftZ);
+    expect([valueOf('Name'), field('Name').value]).toEqual(['Riya Sen', 'Riya Sen']);
+  });
+
+  test('on Apple, ⌘Z and ⇧⌘Z; Ctrl+Y is left alone', async () => {
+    const mac = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    await header();
+    await userEvent.type(field('Name'), ' Sen');
+    await userEvent.keyboard('{Meta>}z{/Meta}');
+    expect(valueOf('Name')).toBe('Riya');
+    expect(fireEvent.keyDown(field('Name'), { key: 'y', ctrlKey: true })).toBe(true);
+    expect(valueOf('Name')).toBe('Riya');
+    await userEvent.keyboard('{Meta>}{Shift>}z{/Shift}{/Meta}');
+    expect(valueOf('Name')).toBe('Riya Sen');
+    mac.mockRestore();
+  });
+
+  test('in a field’s name while it is open: after Custom field…, Ctrl+Z takes the field away; Esc and Enter are still the name’s', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Custom field…' }));
+    await waitFor(() => expect(field('Field name')).toHaveFocus());
+    await userEvent.keyboard(z);
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Class', 'Date'], true]);
+    expect(within(insp()).queryByRole('textbox', { name: 'Field name' })).toBeNull();
+
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Class”' }));
+    await userEvent.keyboard('Section{Enter}');
+    expect(labels()).toEqual(['Name', 'Section', 'Date']);
+    expect(within(insp()).getByRole('button', { name: 'Rename “Section”' })).toHaveFocus();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Section”' }));
+    await userEvent.keyboard('Sec{Escape}');
+    expect(labels()).toEqual(['Name', 'Section', 'Date']);
+    expect(within(insp()).getByRole('button', { name: 'Rename “Section”' })).toHaveFocus();
+  });
+
+  test('…and when Ctrl+Z there takes back that field’s own rename, the open name shows the name now, and leaving it keeps Redo', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Class”' }));
+    await userEvent.keyboard('Section{Enter}');
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Section”' }));
+    await userEvent.keyboard(z);
+    expect([labels(), field('Field name').value]).toEqual([['Name', 'Class', 'Date'], 'Class']);
+    await userEvent.tab();
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Class', 'Date'], true]);
+  });
+});
+
 test('a clicked word’s caret goes to the inspector’s editor', async () => {
   await outline(docOf(m(), n()));
   act(() => placeCaret('m', 6)); // the start of line2
