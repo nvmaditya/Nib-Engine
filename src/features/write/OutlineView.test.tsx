@@ -490,6 +490,15 @@ describe('on a phone', () => {
     expect(lastToast()).toMatch(/^Moved page 1 to position 2\./);
   });
 
+  test('a page’s grip in the sheet is something to tap, so a finger on it isn’t moved onto the heading or block beside it', async () => {
+    await outline(docOf(m(), n()));
+    const grip = within(sheet()).getByRole('img', { name: 'Drag to move page 1' });
+    // Chromium moves a touch onto the nearest thing it counts as tappable (its touch adjustment): the page's heading
+    // (it can take the focus) or a block's item. A style while pressed makes the grip count; hover styles don't on a phone.
+    expect(grip).toHaveClass('active:text-fg', 'touch-none');
+    expect(grip).toHaveAttribute('data-vaul-no-drag');
+  });
+
   test('the sheet goes with the stage and the view, and Tab goes on out of it, both ways', async () => {
     await outline(docOf(m()));
     const controls = [...sheet().querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]')];
