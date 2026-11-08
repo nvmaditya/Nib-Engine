@@ -1,38 +1,35 @@
 // A header block's fields (Name, Class and Date to start with), each written as one line of the header, and
 // the editor that adds, renames, removes and reorders them.
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { GripVertical, Plus } from 'lucide-react';
 import { HEADER_LIMITS } from '@/engine/doc.js';
 import type { HeaderField } from '@/engine/types';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { setField } from '@/features/doc/actions';
+import { addField, moveField, removeField, renameField, setField } from '@/features/doc/actions';
 import { cn } from '@/lib/utils';
 import { useEditor } from '@/store/editor';
 import { OptionsButton } from './BlockMenu';
 import { dragGhost, dropClass, gripClass, pageDropIndex, rowAt, startDrag } from './dnd';
 
 /**
- * Labelled inputs for the fields the header has, in the order it writes them. `compact` is for the typed
- * page: no boxes, and the text size and line height of the page around it.
+ * The field editor over a header block's fields, each change one undo step in the open document (typing in one
+ * field's value: one step for the burst). `compact` is for the typed page: one ruled line a row, at the page's text
+ * size, and Add field laid over the line under the fields.
  */
 export function HeaderFields({ boxId, compact = false }: { boxId: string; compact?: boolean }) {
   // Changing a field replaces the list, so this re-renders on every change (and on undo).
   const fields = useEditor(s => s.doc.boxes.find(b => b.id === boxId && b.kind === 'header')?.fields);
-  const id = useId();
+  const ops = useMemo((): FieldOps => ({
+    setValue: (id, value) => setField(boxId, id, value),
+    add: field => addField(boxId, field),
+    rename: (id, label) => renameField(boxId, id, label),
+    remove: id => removeField(boxId, id),
+    move: (id, to) => moveField(boxId, id, to),
+  }), [boxId]);
   if (!fields) return null;
-  return (
-    <div className={cn('grid grid-cols-[auto_minmax(0,1fr)] items-center', compact ? 'gap-x-[0.5em]' : 'gap-x-3 gap-y-2')}>
-      {fields.map(f => (
-        <Fragment key={f.id}>
-          <label htmlFor={id + f.id} className={cn('whitespace-nowrap text-muted', compact ? '' : 'text-[13px] font-medium')}>{f.label}</label>
-          <Input id={id + f.id} value={f.value} maxLength={80} autoComplete="off" onChange={e => setField(boxId, f.id, e.target.value)}
-            className={compact ? 'h-auto rounded-sm border-0 border-b border-line bg-transparent px-[0.25em] py-0 text-[length:inherit] leading-[inherit] focus-visible:ring-2 focus-visible:ring-ring/50' : undefined} />
-        </Fragment>
-      ))}
-    </div>
-  );
+  return <FieldEditor fields={fields} ops={ops} compact={compact} />;
 }
 
 /* ---------- The field editor ---------- */

@@ -9,8 +9,9 @@ import { toast as sonner } from 'sonner';
 import { App } from '@/app/App';
 import type { Box, EngineDoc } from '@/engine/types';
 import { deleteBlock, deletePageAt, removePart, select, splitAt } from '@/features/doc/actions';
+import { HEADER_DEFAULT, flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { offsetAt } from '@/features/editor/positions';
-import { createDoc } from '@/store/documents';
+import { createDoc, setPref } from '@/store/documents';
 import { flushSave, placeCaret, undo } from '@/store/editor';
 import { box, docOf, fieldsOf, get, lastToast, lines, words } from '@/test/docs';
 import { OUTLINE_PEEK } from './OutlineView';
@@ -45,6 +46,13 @@ async function outline(doc: EngineDoc): Promise<HTMLElement> {
   render(<App />);
   await within(await screen.findByRole('region', { name: 'Outline' })).findByText('Page 1');
   return ol();
+}
+
+/** The header this test changed is forgotten, here and on the device, so the next test's new headers start from Name, Class and Date. */
+async function forgetHeader(): Promise<void> {
+  await flushHeaderDefault();
+  await setPref(HEADER_DEFAULT, null);
+  useHeaderDefault.setState({ fields: null });
 }
 
 const mouse = { pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
@@ -294,6 +302,21 @@ test('a header shows its fields and the hint, and its item the filled-in fields'
   expect(within(insp()).getByText('New documents fill in today’s date.')).toBeInTheDocument();
   expect(within(insp()).queryByRole('toolbar', { name: 'Formatting' })).toBeNull();
   expect(within(insp()).queryByRole('textbox', { name: /all pages/ })).toBeNull();
+});
+
+test('Outline’s header editor adds a field, and the header’s item shows its value', async () => {
+  try {
+    await outline(docOf(h(), box({ id: 'm', name: 'Main text', y: 178, text: 'x' })));
+    await userEvent.click(item('Header'));
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Teacher' }));
+    await waitFor(() => expect(within(insp()).getByRole('textbox', { name: 'Teacher' })).toHaveFocus());
+    await userEvent.keyboard('Ms Rao');
+    expect(get().doc.boxes.find(b => b.id === 'h')!.text).toBe('Name: Riya\nClass:\nDate: 6 November 2026\nTeacher: Ms Rao');
+    expect(within(ol()).getByText('Riya · 6 November 2026 · Ms Rao')).toBeInTheDocument();
+  } finally {
+    await forgetHeader();
+  }
 });
 
 test('a clicked word’s caret goes to the inspector’s editor', async () => {

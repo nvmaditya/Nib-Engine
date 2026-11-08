@@ -9,10 +9,11 @@ import { hitWord, srcOffset } from '@/engine/core.js';
 import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import type { EngineDoc } from '@/engine/types';
 import { App } from '@/app/App';
-import { addPageAt, deleteBlock, deletePageAt, splitAt } from '@/features/doc/actions';
+import { addPageAt, deleteBlock, deletePageAt, select, splitAt } from '@/features/doc/actions';
+import { HEADER_DEFAULT, flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { layoutFor } from '@/features/doc/model';
 import { offsetAt } from '@/features/editor/positions';
-import { createDoc } from '@/store/documents';
+import { createDoc, setPref } from '@/store/documents';
 import { flushSave, update } from '@/store/editor';
 import { box, docOf, fieldsOf, fontsLoad, get, lines, words } from '@/test/docs';
 
@@ -327,6 +328,41 @@ test('a header on two pages shows its fields once, on its first part', async () 
   expect(within(typed(0)).getByRole('textbox', { name: 'Date' })).toHaveValue('C');
   expect(later.querySelector('input, [role="textbox"]')).toBeNull();
   expect(within(later).queryByText(/^Continues/)).toBeNull();
+});
+
+const hdr = () => box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }) });
+/** The header a test changed is forgotten, here and on the device, so the next test's new headers start from Name, Class and Date. */
+async function forgetHeader(): Promise<void> {
+  await flushHeaderDefault();
+  await setPref(HEADER_DEFAULT, null);
+  useHeaderDefault.setState({ fields: null });
+}
+
+test('a field added on the typed page is a line on the handwritten page', async () => {
+  try {
+    await openWrite(docOf(hdr(), m('words', { y: 246 })));
+    const part = typed(0).querySelector<HTMLElement>('.typed-part[data-part="h:0"]')!;
+    await userEvent.click(within(part).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Section' }));
+    const b = get().doc.boxes.find(x => x.id === 'h')!;
+    expect(b.text).toBe('Name: A\nClass: B\nDate: C\nSection:');
+    expect(layoutFor(get().S, get().doc).segs.find(sg => sg.box.id === 'h' && sg.idx === 0)!.rows).toHaveLength(4);
+    await waitFor(() => expect(within(part).getByRole('textbox', { name: 'Section' })).toHaveFocus());
+  } finally {
+    await forgetHeader();
+  }
+});
+
+test('the typed header’s Add field shows while the header is selected or has the focus', async () => {
+  await openWrite(docOf(hdr(), m('words', { y: 246 })));
+  const part = typed(0).querySelector<HTMLElement>('.typed-part[data-part="h:0"]')!;
+  const add = within(part).getByRole('button', { name: 'Add field' });
+  expect(add).toHaveClass('invisible', 'in-[.selected]:visible', 'group-focus-within/fields:visible');
+  act(() => select('m'));
+  expect(part).not.toHaveClass('selected');
+  act(() => select('h'));
+  expect(part).toHaveClass('selected');
+  expect(add.closest('.typed-part')).toBe(part);
 });
 
 test('the grips have no browser panning, so touch drags them', async () => {

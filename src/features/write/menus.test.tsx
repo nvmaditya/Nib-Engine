@@ -206,9 +206,14 @@ test('the page menu tells a pager which page to show next, only when the documen
   r.unmount();
 });
 
+/** The header's rows, top to bottom (each value is named by its field's label). */
+const rows = () => screen.getAllByRole('textbox').map(e => e.getAttribute('aria-label'));
+/** Lets the moment pass in which a closed menu would put the focus back on its button. */
+const settle = () => act(() => new Promise(r => setTimeout(r, 0)));
+
 test('header fields write the header', async () => {
   render(<HeaderFields boxId="h" />);
-  expect(screen.getAllByRole('textbox').map(e => (e as HTMLInputElement).labels![0].textContent)).toEqual(['Name', 'Class', 'Date']);
+  expect(rows()).toEqual(['Name', 'Class', 'Date']);
   await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Riya');
   expect(boxH().fields!.find(f => f.label === 'Name')!.value).toBe('Riya');
   expect(boxH().text.split('\n')[0]).toBe('Name: Riya');
@@ -216,6 +221,31 @@ test('header fields write the header', async () => {
   expect(boxH().fields!.find(f => f.label === 'Name')!.value).toBe('');
   expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('');
   expect(screen.queryByRole('textbox', { name: 'Subject' })).toBeNull();
+});
+
+test('the header’s fields are edited in place, each change one undo step, and the header’s text follows', async () => {
+  render(<HeaderFields boxId="h" />);
+  await openMenu('Add field'); await userEvent.click(item('Registration no.')); await settle();
+  expect(screen.getByRole('textbox', { name: 'Registration no.' })).toHaveFocus();
+  await userEvent.type(screen.getByRole('textbox', { name: 'Registration no.' }), '12');
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Section{Enter}');
+  expect(boxH().text).toBe('Name:\nSection:\nDate: 6 November 2026\nRegistration no.: 12');
+  await openMenu('More for “Section”'); await userEvent.click(item('Remove')); await settle();
+  expect(lastToast()).toBe('Removed “Section”.');
+  expect(boxH().text).toBe('Name:\nDate: 6 November 2026\nRegistration no.: 12');
+  expect(rows()).toEqual(['Name', 'Date', 'Registration no.']);
+  // Undo, one change at a time: the remove, the rename, the typing, the add.
+  const back = [
+    ['Name:\nSection:\nDate: 6 November 2026\nRegistration no.: 12', ['Name', 'Section', 'Date', 'Registration no.']],
+    ['Name:\nClass:\nDate: 6 November 2026\nRegistration no.: 12', ['Name', 'Class', 'Date', 'Registration no.']],
+    ['Name:\nClass:\nDate: 6 November 2026\nRegistration no.:', ['Name', 'Class', 'Date', 'Registration no.']],
+    ['Name:\nClass:\nDate: 6 November 2026', ['Name', 'Class', 'Date']],
+  ];
+  for (const [text, labels] of back) {
+    act(() => undo());
+    expect([boxH().text, rows()]).toEqual([text, labels]);
+  }
+  expect(get().canUndo).toBe(false);
 });
 
 test('Write bar', async () => {
