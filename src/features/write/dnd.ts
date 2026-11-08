@@ -1,10 +1,15 @@
 // Dragging pages and blocks between pages with pointer events, for mouse and touch alike (plan, Design
 // decision 4). Grips start a drag after 4 px of movement. Items (Outline's blocks) do too with a mouse,
 // but with touch they need a still hold, so a quick swipe still scrolls the list. Drop targets are
-// `[data-drop-page]` elements, found under the pointer; the one being aimed at gets `data-drop`.
+// `[data-drop-page]` elements (or a header's `[data-drop-field]` rows), found under the pointer; the one
+// being aimed at gets `data-drop`.
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
-export interface DropTarget { page: number; after: boolean }
+export interface DropTarget {
+  /** The page, or the header field row, under the pointer. */
+  page: number;
+  after: boolean;
+}
 export type DragKind = 'grip' | 'item';
 type Gate = 'wait' | 'go' | 'scroll';
 
@@ -16,7 +21,7 @@ const HOLD_MS = 350, HOLD_SLOP = 8;
 const EDGE = 48, MAX_SPEED = 18;
 
 /**
- * Drop targets: before/after lines for pages, a dashed fill for blocks. Grips: no browser panning,
+ * Drop targets: before/after lines for pages and header field rows, a dashed fill for blocks. Grips: no browser panning,
  * so a touch on them drags straight away.
  */
 export const dropClass = 'data-[drop=before]:shadow-[inset_0_3px_0_var(--accent)] data-[drop=after]:shadow-[inset_0_-3px_0_var(--accent)] data-[drop=on]:bg-primary-soft data-[drop=on]:outline-dashed data-[drop=on]:outline-2 data-[drop=on]:-outline-offset-2 data-[drop=on]:outline-primary';
@@ -38,17 +43,37 @@ export function gate(kind: DragKind, pointerType: string): { move(dx: number, dy
   };
 }
 
-function hit(x: number, y: number): { el: HTMLElement; t: DropTarget } | null {
+/** What a drag drops on: pages (`[data-drop-page]`), or a header's field rows (`[data-drop-field]`). */
+export type DropTargets = 'page' | 'field';
+
+function hit(x: number, y: number, targets: DropTargets): { el: HTMLElement; t: DropTarget } | null {
   const at = document.elementFromPoint(x, y);
-  const el = at instanceof Element ? at.closest<HTMLElement>('[data-drop-page]') : null;
-  const page = el ? Number(el.dataset.dropPage) : NaN;
+  const el = at instanceof Element ? at.closest<HTMLElement>(targets === 'field' ? '[data-drop-field]' : '[data-drop-page]') : null;
+  const page = el ? Number(targets === 'field' ? el.dataset.dropField : el.dataset.dropPage) : NaN;
   if (!el || !Number.isInteger(page)) return null;
   const r = el.getBoundingClientRect();
   return { el, t: { page, after: y > r.top + r.height / 2 } };
 }
 
-/** The drop target under a point: the closest `[data-drop-page]`, `after` when the point is below its middle. */
-export const targetAt = (x: number, y: number): DropTarget | null => hit(x, y)?.t ?? null;
+/**
+ * The drop target under a point: the closest `[data-drop-page]` (or, for `field`, `[data-drop-field]`), `after`
+ * when the point is below its middle.
+ */
+export const targetAt = (x: number, y: number, targets: DropTargets = 'page'): DropTarget | null => hit(x, y, targets)?.t ?? null;
+
+/** What follows the pointer while dragging: `text`, after a dot of `color` if there is one. */
+export function dragGhost(text: string, color?: string): HTMLElement {
+  const g = document.createElement('div');
+  g.className = 'flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] font-semibold text-fg shadow-lg';
+  if (color) {
+    const dot = document.createElement('span');
+    dot.className = 'size-[9px] flex-none rounded-[3px]';
+    dot.style.background = color;
+    g.append(dot);
+  }
+  g.append(text);
+  return g;
+}
 
 /** Where page `from` goes (0-based) when dropped before or after page `over`. */
 export function pageDropIndex(from: number, over: number, after: boolean): number {
@@ -91,6 +116,8 @@ export function edgeScroll(scroller: HTMLElement, x: number, y: number): boolean
 
 export interface DragOptions {
   kind: DragKind;
+  /** What it drops on: pages (the default), or a header's field rows. */
+  targets?: DropTargets;
   /** What follows the pointer once the drag starts (it is added to the page, and taken away at the end). */
   ghost: () => HTMLElement;
   /** The target under the pointer changed (null: none). */
@@ -111,7 +138,7 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
   const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
   if (busy || (touch && !e.isPrimary) || (e.pointerType === 'mouse' && e.button !== 0)) return; // one finger, the main button
   busy = true;
-  const src = e.currentTarget as HTMLElement, id = e.pointerId;
+  const src = e.currentTarget as HTMLElement, id = e.pointerId, targets = opts.targets ?? 'page';
   const x0 = e.clientX, y0 = e.clientY, t0 = performance.now(), g = gate(opts.kind, e.pointerType);
   const body = document.body, bodyStyle = { userSelect: body.style.userSelect, cursor: body.style.cursor };
   let x = x0, y = y0, active = false, raf = 0;
@@ -120,7 +147,7 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
 
   const place = () => { if (ghost) ghost.style.transform = `translate3d(${x + 12}px, ${y + 12}px, 0)`; };
   const retarget = () => {
-    const h = hit(x, y), t = h?.t ?? null;
+    const h = hit(x, y, targets), t = h?.t ?? null;
     const mark = !h ? null : opts.kind === 'item' ? 'on' : h.t.after ? 'after' : 'before';
     if (marked && (marked !== h?.el || marked.dataset.drop !== mark)) delete marked.dataset.drop;
     marked = h?.el ?? null;
@@ -170,7 +197,7 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
     if (ev.pointerId !== id) return;
     const was = active;
     x = ev.clientX; y = ev.clientY;
-    const t = was ? targetAt(x, y) : null;
+    const t = was ? targetAt(x, y, targets) : null;
     end();
     if (!was) return;
     swallowClick();

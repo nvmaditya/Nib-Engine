@@ -14,7 +14,7 @@ import { plainText } from '@/features/editor/markup';
 import type { PageLayout } from '@/features/pages/PageView';
 import { cn } from '@/lib/utils';
 import { toast, useEditor } from '@/store/editor';
-import { dropClass, gripClass, pageDropIndex, startDrag } from './dnd';
+import { dragGhost, dropClass, gripClass, pageDropIndex, startDrag } from './dnd';
 import { PageMenu } from './PageMenu';
 
 const SNIPPET = 70;
@@ -39,20 +39,6 @@ function partSnippet(sg: Seg): string {
   return snippetOf(b.text.slice(from, to));
 }
 
-/** What follows the pointer while dragging. */
-function ghost(text: string, color?: string): HTMLElement {
-  const g = document.createElement('div');
-  g.className = 'flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] font-semibold text-fg shadow-lg';
-  if (color) {
-    const dot = document.createElement('span');
-    dot.className = 'size-[9px] flex-none rounded-[3px]';
-    dot.style.background = color;
-    g.append(dot);
-  }
-  g.append(text);
-  return g;
-}
-
 interface ItemProps {
   boxId: string; idx: number; name: string; color: string; label: string; own: boolean; snippet: string; selected: boolean;
 }
@@ -62,7 +48,7 @@ const OutlineItem = memo(function OutlineItem({ boxId, idx, name, color, label, 
   // part follows the part before it, which the person is told as soon as the drag starts.
   const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => startDrag(e, {
     kind: 'item',
-    ghost: () => ghost(name, color),
+    ghost: () => dragGhost(name, color),
     onStart: () => {
       if (idx === 0) { select(boxId); return; }
       toast(rule4({ part: idx + 1, name }));
@@ -100,7 +86,7 @@ function PageSection({ i, pages, segs, parts, selectedId }: { i: number; pages: 
   // The grip drags the page; it drops before or after another page's section (Pages view does the same).
   const onGrip = (e: ReactPointerEvent<HTMLElement>) => startDrag(e, {
     kind: 'grip',
-    ghost: () => ghost(`Page ${i + 1}`),
+    ghost: () => dragGhost(`Page ${i + 1}`),
     onDrop: t => { if (t) movePageTo(i, pageDropIndex(i, t.page, t.after)); },
   });
   return (
