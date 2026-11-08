@@ -6,7 +6,7 @@ import { toast as sonner } from 'sonner';
 import { hitWord, segTilt, srcOffset } from '@/engine/core.js';
 import { layoutFor } from '@/features/doc/model';
 import { flushSave } from '@/store/editor';
-import { box, docOf, get, lastToast, lines, open, words } from '@/test/docs';
+import { box, docOf, fieldsOf, get, lastToast, lines, open, words } from '@/test/docs';
 import { BoxFrame } from './BoxFrame';
 
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
@@ -15,7 +15,7 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }
 beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); });
 
 // A header low on page 1, so its last line runs onto page 2.
-const header = () => box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: { name: 'A', class: 'B', date: 'C' } });
+const header = () => box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }) });
 const part = (id: string, idx: number) => layoutFor(get().S, get().doc).segs.find(s => s.box.id === id && s.idx === idx)!;
 const frame = (id: string, idx: number, mode: 'write' | 'style' = 'write', parts = 2) =>
   render(<BoxFrame sg={part(id, idx)} s={1} gap={34} selected parts={parts} mode={mode} />);

@@ -35,20 +35,46 @@ function cleanFrames(fr) {
   }
   return o;
 }
+// The fixed fields of schema 3 and earlier, in their order: an old header's fields convert to a list from these.
 export const HEADER_FIELDS = [['name', 'Name'], ['class', 'Class'], ['subject', 'Subject'], ['roll', 'Roll no.'], ['date', 'Date']];
+export const HEADER_LIMITS = Object.freeze({ fields:12, label:30, value:80 });
 export const DEFAULT_NAMES = { text:'Text block', header:'Header', note:'Margin note' };
 const KINDS = ['text', 'header', 'note'];
-// One line per field present, in the fixed order. An empty value leaves a label to fill in.
-// Values are written with markup characters escaped, so they show as typed.
+// One line per field, in the list's order. An empty value leaves a label to fill in.
+// Labels and values are written with markup characters escaped, so they show as typed. A label also begins its
+// line, so one that starts like a heading, a list or a note gets a backslash there too (the old labels never did).
 const escapeValue = v => v.replace(/[\\*_~=`\[]/g, '\\$&');
 const unescapeValue = v => v.replace(/\\([!-\/:-@\[-`{-~])/g, '$1');
-export function headerText(f) {
-  return HEADER_FIELDS.filter(([k]) => typeof f[k] === 'string').map(([k, label]) => (f[k] ? `${label}: ${escapeValue(f[k])}` : `${label}:`)).join('\n');
+const escapeLabel = l => escapeValue(l).replace(/^[#>+-]/, '\\$&').replace(/^(\d{1,3}|[A-Za-z])([.)])/, '$1\\$2');
+export function headerText(fields) {
+  return fields.map(f => (f.value ? `${escapeLabel(f.label)}: ${escapeValue(f.value)}` : `${escapeLabel(f.label)}:`)).join('\n');
 }
-function cleanFields(f) {
-  const o = {};
-  if (f && typeof f === 'object') for (const [k] of HEADER_FIELDS) if (typeof f[k] === 'string') o[k] = f[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
-  return Object.keys(o).length ? o : { name:'', class:'', date:'' };
+const oneLine = v => v.replace(/[\r\n]+/g, ' ').trim();
+// The first n characters (UTF-16 units), less the first half of one written as two (an emoji, say) that the cut split.
+const cutTo = (v, n) => v.slice(0, n).replace(/[\uD800-\uDBFF]$/, '');
+export function headerLabel(raw) {
+  const l = typeof raw === 'string' ? cutTo(oneLine(raw), HEADER_LIMITS.label).trim() : '';
+  return l || 'Field';
+}
+const cleanValue = v => (typeof v === 'string' ? cutTo(oneLine(v), HEADER_LIMITS.value) : '');
+const BLANKS = () => [{ id:'name', label:'Name', value:'' }, { id:'class', label:'Class', value:'' }, { id:'date', label:'Date', value:'', today:true }];
+export function cleanFields(f) {
+  let out = [];
+  if (Array.isArray(f)) {
+    const kept = f.filter(e => e && typeof e === 'object' && !Array.isArray(e)).slice(0, HEADER_LIMITS.fields);
+    // Ids that are fine keep their place; a missing, empty or repeated one becomes the first free f{n}, f{n+1}…
+    const used = new Set(), ids = kept.map(e => (typeof e.id === 'string' && e.id && !used.has(e.id) ? (used.add(e.id), e.id) : null));
+    out = kept.map((e, i) => {
+      let id = ids[i];
+      for (let n = i + 1; id === null; n++) if (!used.has('f' + n)) used.add(id = 'f' + n);
+      const o = { id, label:headerLabel(e.label), value:cleanValue(e.value) };
+      if (e.today === true) o.today = true;
+      return o;
+    });
+  } else if (f && typeof f === 'object') {
+    for (const [k, label] of HEADER_FIELDS) if (typeof f[k] === 'string') out.push(k === 'date' ? { id:k, label, value:cleanValue(f[k]), today:true } : { id:k, label, value:cleanValue(f[k]) });
+  }
+  return out.length ? out : BLANKS();
 }
 const HEADER_LINE = /^(Name|Class|Subject|Roll no\.|Date):[ \t]*(.*)$/;
 // Documents saved before blocks had kinds: the block of Name:/Class:/Date: lines is the Header, the longest text block the Main text.
@@ -114,7 +140,7 @@ export function sampleDoc(S) {
   use(S, { pageCount:1, boxes:[] });
   const g = geom();
   return { pageCount:1, fileName:'', boxes:[
-    { id:'b2', kind:'header', name:'Header', color:0, fields:{ name:'Aarav Mehta', class:'8-B', date:'29 October 2026' }, page:0, x:446, y:g.top - g.gap, w:320, text:SAMPLE_HEAD, style:{}, shuffle:0, frames:{} },
+    { id:'b2', kind:'header', name:'Header', color:0, fields:[{ id:'name', label:'Name', value:'Aarav Mehta' }, { id:'class', label:'Class', value:'8-B' }, { id:'date', label:'Date', value:'29 October 2026', today:true }], page:0, x:446, y:g.top - g.gap, w:320, text:SAMPLE_HEAD, style:{}, shuffle:0, frames:{} },
     { id:'b1', kind:'text', name:'Main text', color:1, page:0, x:g.left, y:g.top + 2 * g.gap, w:g.right - g.left, text:SAMPLE_BODY, style:{}, shuffle:0, frames:{} },
   ] };
 }

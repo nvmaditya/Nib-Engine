@@ -4,6 +4,7 @@ import { snapY } from '@/engine/core.js';
 import { cleanSettings } from '@/engine/doc.js';
 import type { EngineDoc, Settings } from '@/engine/types';
 import { newDocument, geomFor } from '@/features/doc/build';
+import { defaultHeaderFields } from '@/features/doc/headerDefault';
 import { today } from '@/features/doc/model';
 import { STYLE_LOOKS, lookPatch } from '@/features/style/looks';
 import { placeCaret } from '@/store/editor';
@@ -47,7 +48,7 @@ export function templateSettings(tpl: Template): Settings {
  */
 export function templateRecord(tpl: Template, now: Date = new Date(), idOf?: (i: number) => string): { title: string; settings: Settings; doc: EngineDoc } {
   const settings = templateSettings(tpl);
-  const doc = newDocument(settings, tpl.text(now), tpl.header ? { name: '', class: '', date: today(now) } : null);
+  const doc = newDocument(settings, tpl.text(now), tpl.header ? defaultHeaderFields(now) : null);
   if (idOf) doc.boxes.forEach((b, i) => { b.id = idOf(i); });
   if (tpl.middle) doc.boxes[doc.boxes.length - 1].y = snapY(400, geomFor(settings));
   return { title: tpl.title, settings, doc };

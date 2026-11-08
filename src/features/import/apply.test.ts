@@ -7,7 +7,7 @@ import type { ImportPlace } from '@/features/doc/build';
 import { STYLE_LOOKS } from '@/features/style/looks';
 import { createDoc, getDoc } from '@/store/documents';
 import { flushSave, openDocument, redo, undo } from '@/store/editor';
-import { box, docOf, fontsLoad, get, lastToast, lastToastAction, lines, open, rec } from '@/test/docs';
+import { box, docOf, fieldsOf, fontsLoad, get, lastToast, lastToastAction, lines, open, rec } from '@/test/docs';
 import { importAsNewDocument, importIntoOpenDocument, type ImportRequest } from './apply';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
@@ -68,7 +68,7 @@ test('…however its blocks were written: two imports, Ctrl+Z, then the second o
 
 test('as a new document: opened on Write, named after the file, with its look and header, and nothing to undo', async () => {
   location.hash = '#/'; const notes = STYLE_LOOKS.find(l => l.id === 'notes')!;
-  expect(await importAsNewDocument(req({ look: notes, header: { name: 'Asha', class: '', date: '7 November 2026' } }))).toBe(true);
+  expect(await importAsNewDocument(req({ look: notes, header: fieldsOf({ name: 'Asha', class: '', date: '7 November 2026' }) }))).toBe(true);
   expect(parseHash(location.hash)).toMatchObject({ name: 'doc', stage: 'write' });
   expect([get().title, get().S.font, get().S.paper, get().doc.boxes.map(b => b.kind), get().canUndo]).toEqual(['Essay', 'patrick', 'ruled', ['header', 'text'], false]);
   expect((await getDoc(get().docId!))?.doc.boxes[1].text).toBe('# Essay\nHello'); expect(lastToast()).toBe('Written out. Each page’s part can be moved, resized, edited or split off on its own.');

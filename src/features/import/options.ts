@@ -1,5 +1,5 @@
 // What the Import dialog's options hold, and where they start.
-import type { EngineDoc, HeaderFields } from '@/engine/types';
+import type { EngineDoc, HeaderField } from '@/engine/types';
 import { STYLE_LOOKS } from '@/features/style/looks';
 import { useStylePrefs, type SavedLook } from '@/features/style/prefs';
 
@@ -7,13 +7,13 @@ import { useStylePrefs, type SavedLook } from '@/features/style/prefs';
 export const IMPORT_ACCEPT = '.pdf,.docx,.txt,.md,.markdown,.text,application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 export type ImportTarget = 'new' | 'open';
 
-export interface ImportOptionsValue { where: 'replace' | 'append'; breaks: boolean; look: string | null; header: HeaderFields | null }
+export interface ImportOptionsValue { where: 'replace' | 'append'; breaks: boolean; look: string | null; header: HeaderField[] | null }
 
 /** A new document starts on Exam answer; an open one keeps its look and its header (if it has one). */
 export function initialOptions(target: ImportTarget, doc: EngineDoc | null, _now: Date = new Date()): ImportOptionsValue {
   if (target === 'new') return { where: 'replace', breaks: false, look: 'exam', header: null };
   const fields = doc?.boxes.find(b => b.kind === 'header')?.fields;
-  return { where: 'replace', breaks: false, look: null, header: fields ? { ...fields } : null };
+  return { where: 'replace', breaks: false, look: null, header: fields ? structuredClone(fields) : null };
 }
 
 /** The built-in look, or the saved one, with this id; null for no id or one that is gone. */
