@@ -43,7 +43,7 @@ The preview is the same rich editor as Write: fix anything before it is written 
 - **Where it goes** (in an open document): **Replace what's on the pages**, or **Add after the last page**. Add after carries on the writing that ends on the last page, from the top of a new page, or starts a block of its own when nothing ends there. **Split here** at that page separates it again.
 - **Pages**: **Start a new page where the file does**, for files with more than one part.
 - **Look**: Keep this document's look (open documents only), one of the built-in looks or one you saved, each drawn in its own hand.
-- **Header**: **Add a header block**, starting from your usual fields, at the top right of page 1. Its fields are edited as in Write.
+- **Header**: **Add a header block**, starting from your usual fields (in an open document with a header, from its own fields), at the top right of page 1. Its fields are edited as in Write.
 
 **Write it out** makes one main block that flows page by page. In an open document it is one undo step. From Home it makes a new document. If it has to wait (for the hand of the look you chose, say), the preview and the choices are locked until it is done, so what is written is what you saw when you pressed it. On phones the dialog is full screen. The file is read on the device: nothing is uploaded.
 
