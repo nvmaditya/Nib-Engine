@@ -73,21 +73,27 @@ async function probeBuild(old: boolean): Promise<string> {
 const DRAW = async ({ raw, schema }: { raw: unknown; schema: number }) => {
   const p = (window as unknown as Win).probe;
   // The paper's grain and the ink's are made once per page, from Math.random: one seed gives both pages the same grain.
+  // The page's own Math.random comes back once the page is drawn.
+  const random = Math.random;
   let a = 7;
   Math.random = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  if (!(await p.loadFont('labelle'))) throw new Error('La Belle Aurore didn’t load');
-  const S = p.cleanSettings(null, false), doc = p.cleanDoc(p.migrateDoc(p.cleanDoc(raw)!, schema))!;
-  p.use(S, doc);
-  const L = p.computeLayout();
-  const c = p.exportPage(0), px = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
-  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
-  for (let i = 0; i < px.length; i++) { h1 = Math.imul(h1 ^ px[i], 2654435761); h2 = Math.imul(h2 ^ px[i], 1597334677); }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507); h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507); h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return {
-    layout: { ...L, segs: L.segs.map(s => ({ ...s, box: s.box.id })) },
-    text: doc.boxes.find(b => b.kind === 'header')?.text, size: [c.width, c.height], hash: 4294967296 * (2097151 & h2) + (h1 >>> 0),
-  };
+  try {
+    if (!(await p.loadFont('labelle'))) throw new Error('La Belle Aurore didn’t load');
+    const S = p.cleanSettings(null, false), doc = p.cleanDoc(p.migrateDoc(p.cleanDoc(raw)!, schema))!;
+    p.use(S, doc);
+    const L = p.computeLayout();
+    const c = p.exportPage(0), px = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < px.length; i++) { h1 = Math.imul(h1 ^ px[i], 2654435761); h2 = Math.imul(h2 ^ px[i], 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507); h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507); h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return {
+      layout: { ...L, segs: L.segs.map(s => ({ ...s, box: s.box.id })) },
+      text: doc.boxes.find(b => b.kind === 'header')?.text, size: [c.width, c.height], hash: 4294967296 * (2097151 & h2) + (h1 >>> 0),
+    };
+  } finally {
+    Math.random = random;
+  }
 };
 
 const main = { id: 'm', kind: 'text', name: 'Main text', color: 1, page: 0, x: 112, y: 178, w: 630, text: 'The water cycle is the continuous movement of water.', style: {}, shuffle: 0, frames: {} };
@@ -126,6 +132,9 @@ describe('the previous version and this one, in one Chromium profile', () => {
     };
     old = await start(oldCode, 'previous');
     cur = await start(curCode, 'this');
+    // Without this, a build that never swapped the previous version's code in would compare this version with itself.
+    const schema = (page: PwPage) => page.evaluate(() => (window as unknown as Win).probe.DOC_SCHEMA);
+    expect([await schema(old), await schema(cur)], 'the previous version’s probe runs e8e0610’s code (schema 3), this one schema 4').toEqual([3, 4]);
   }, 180_000);
   afterAll(async () => { await browser?.close(); });
   beforeEach(() => { errors.length = 0; });
@@ -139,6 +148,8 @@ describe('the previous version and this one, in one Chromium profile', () => {
       hashes.push(after.hash);
     }
     expect(new Set(hashes).size).toBe(SHAPES.length); // every page has its own writing on it: none is blank
+    const random = (page: PwPage) => page.evaluate(() => String(Math.random));
+    expect([await random(old), await random(cur)]).toEqual([expect.stringContaining('[native code]'), expect.stringContaining('[native code]')]);
     expect(errors).toEqual([]);
   }, 180_000);
 

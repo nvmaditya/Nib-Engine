@@ -27,6 +27,11 @@ test('a value is one line of at most 80, spaces kept as typed; the same value or
   expect(listSetValue(list, 'gone', 'x')).toBeNull();
 });
 
+test('a value cut through an emoji keeps no broken half', () => {
+  expect([fieldValue('x'.repeat(79) + '😀'), fieldValue('x'.repeat(78) + '😀')]).toEqual(['x'.repeat(79), 'x'.repeat(78) + '😀']);
+  expect(listSetValue(fieldsFrom(null, NOW), 'f1', 'x'.repeat(79) + '😀 and more')![0].value).toBe('x'.repeat(79));
+});
+
 test('a new field’s id is never one the header has', () => {
   vi.mocked(uid).mockReturnValueOnce('f1').mockReturnValueOnce('f3').mockReturnValueOnce('bnew');
   expect(newFieldId(fieldsFrom(null, NOW))).toBe('bnew');

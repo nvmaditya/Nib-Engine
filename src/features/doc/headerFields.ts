@@ -7,8 +7,11 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 /** A date the way a header writes it: 6 November 2026. */
 export const today = (now: Date = new Date()): string => `${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
 
-/** A header field's value as the header keeps it: one line (typing keeps its spaces), at most 80 characters. */
-export const fieldValue = (value: string): string => value.replace(/[\r\n]+/g, ' ').slice(0, 80);
+/**
+ * A header field's value as the header keeps it: one line (typing keeps its spaces), at most 80 characters (UTF-16
+ * units), never ending in the first half of a character written as two (an emoji, say) that the cut split.
+ */
+export const fieldValue = (value: string): string => value.replace(/[\r\n]+/g, ' ').slice(0, 80).replace(/[\uD800-\uDBFF]$/, '');
 
 /** A field as a header to start from keeps it: no id, since each new header gives its own. */
 export interface RememberedField { label: string; value: string; today?: true }

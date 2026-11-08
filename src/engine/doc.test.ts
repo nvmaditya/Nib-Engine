@@ -136,3 +136,11 @@ test('the header limits, and a label made one line', () => {
   expect(HEADER_LIMITS).toEqual({ fields: 12, label: 30, value: 80 });
   expect([headerLabel(' Reg.\r\n\nno. '), headerLabel('  '), headerLabel(5), headerLabel(' ' + 'a'.repeat(29) + ' b')]).toEqual(['Reg. no.', 'Field', 'Field', 'a'.repeat(29)]);
 });
+test('a label or a value cut through an emoji keeps no broken half', () => {
+  const E = '😀', broken = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  expect([headerLabel('a'.repeat(29) + E), headerLabel('a'.repeat(28) + E)]).toEqual(['a'.repeat(29), 'a'.repeat(28) + E]);
+  const h = head([{ id: 'a', label: 'a'.repeat(29) + E, value: 'v'.repeat(79) + E + 'x' }, { id: 'b', label: 'b', value: 'v'.repeat(78) + E }]);
+  expect(h.fields).toEqual([{ id: 'a', label: 'a'.repeat(29), value: 'v'.repeat(79) }, { id: 'b', label: 'b', value: 'v'.repeat(78) + E }]);
+  expect(broken.test(h.text)).toBe(false);
+  expect(head({ name: 'v'.repeat(79) + E, date: '1 May' }).fields).toEqual([{ id: 'name', label: 'Name', value: 'v'.repeat(79) }, { id: 'date', label: 'Date', value: '1 May', today: true }]);
+});

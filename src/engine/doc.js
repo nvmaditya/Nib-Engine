@@ -50,11 +50,13 @@ export function headerText(fields) {
   return fields.map(f => (f.value ? `${escapeLabel(f.label)}: ${escapeValue(f.value)}` : `${escapeLabel(f.label)}:`)).join('\n');
 }
 const oneLine = v => v.replace(/[\r\n]+/g, ' ').trim();
+// The first n characters (UTF-16 units), less the first half of one written as two (an emoji, say) that the cut split.
+const cutTo = (v, n) => v.slice(0, n).replace(/[\uD800-\uDBFF]$/, '');
 export function headerLabel(raw) {
-  const l = typeof raw === 'string' ? oneLine(raw).slice(0, HEADER_LIMITS.label).trim() : '';
+  const l = typeof raw === 'string' ? cutTo(oneLine(raw), HEADER_LIMITS.label).trim() : '';
   return l || 'Field';
 }
-const cleanValue = v => (typeof v === 'string' ? oneLine(v).slice(0, HEADER_LIMITS.value) : '');
+const cleanValue = v => (typeof v === 'string' ? cutTo(oneLine(v), HEADER_LIMITS.value) : '');
 const BLANKS = () => [{ id:'name', label:'Name', value:'' }, { id:'class', label:'Class', value:'' }, { id:'date', label:'Date', value:'', today:true }];
 export function cleanFields(f) {
   let out = [];
