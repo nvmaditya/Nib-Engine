@@ -56,7 +56,7 @@ Everything runs in the browser. Documents, fonts and settings stay on your devic
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/assets/style.gif" alt="Switching hands, looks and paper in the Style stage">
+      <img src="docs/assets/style.gif" alt="Switching looks and paper in the Style stage">
       <p align="center"><b>Style</b>: change the hand, pen, ink and paper, and the pages redraw.</p>
     </td>
     <td width="50%" valign="top">
@@ -66,15 +66,20 @@ Everything runs in the browser. Documents, fonts and settings stay on your devic
   </tr>
   <tr>
     <td width="50%" valign="top">
+      <img src="docs/assets/import.gif" alt="Importing a Word document, checking the preview and writing it out">
+      <p align="center"><b>Import</b>: bring in a PDF, Word or text file and check it before it is written.</p>
+    </td>
+    <td width="50%" valign="top">
       <img src="docs/assets/palette.gif" alt="The Ctrl+K command palette switching to the dark theme, then the shortcut sheet">
       <p align="center"><b>Keyboard</b>: the Ctrl+K palette, dark theme and the shortcut sheet.</p>
     </td>
-    <td width="50%" valign="top" align="center">
-      <img src="docs/assets/phone.gif" alt="Nib on a phone: opening a document and using the Outline sheet" width="260">
-      <p align="center"><b>Phones</b>: one page at a time, with panels as bottom sheets.</p>
-    </td>
   </tr>
 </table>
+
+<p align="center">
+  <img src="docs/assets/phone.gif" alt="Nib on a phone: opening a document and using the Outline sheet" width="300"><br>
+  <b>Phones</b>: one page at a time, with panels as bottom sheets.
+</p>
 
 ## How it works
 
