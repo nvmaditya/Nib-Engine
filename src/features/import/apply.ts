@@ -2,8 +2,10 @@
 // carries the look and the title, or as a new document, which is made only now.
 import { clearMeasureCache, fontReady, loadFont } from '@/engine/core.js';
 import { cleanSettings } from '@/engine/doc.js';
+import type { EngineDoc } from '@/engine/types';
 import { step } from '@/features/doc/actions';
 import { importInto, newDocument, withLook, type ImportPlace } from '@/features/doc/build';
+import { rememberHeader } from '@/features/doc/headerDefault';
 import { createAndOpen } from '@/features/home/actions';
 import { handsOf } from '@/features/home/thumbs';
 import { stateSnapshot, toast, undoToState, update, useEditor } from '@/store/editor';
@@ -36,6 +38,12 @@ export function handsArriving(place: ImportPlace): Promise<void> | null {
   return Promise.race([Promise.all(coming.map(loadFont)).then(() => {}), timeout]).finally(() => clearTimeout(timer));
 }
 
+/** A header written out is the person's own: new headers start from it, as from a header changed in a document. */
+function rememberWritten(doc: EngineDoc): void {
+  const fields = doc.boxes.find(b => b.kind === 'header')?.fields;
+  if (fields) rememberHeader(fields);
+}
+
 /** Write the import into the open document: one undo step, and a message whose Undo puts it all back. */
 export function importIntoOpenDocument(r: ImportRequest): void {
   const snap = stateSnapshot(), s = useEditor.getState();
@@ -49,13 +57,17 @@ export function importIntoOpenDocument(r: ImportRequest): void {
     st.scrollToPage = res.firstPage;
     clearMeasureCache();
   }, { history: step('import') });
+  if (r.place.where === 'replace' && r.place.header) rememberWritten(res.doc); // (Add after never writes one)
   toast(r.place.where === 'replace' ? WRITTEN : addedMessage(res.target.name, res.joined), undoToState(snap));
 }
 
 /** Make a new document of the import, with the new-document settings and the look chosen, and open it on Write. */
 export async function importAsNewDocument(r: ImportRequest): Promise<boolean> {
-  const S = withLook(cleanSettings(null, false), r.place.look);
-  const ok = await createAndOpen({ title: r.name || 'Untitled', settings: S, doc: newDocument(S, r.text, r.place.header) });
-  if (ok) toast(WRITTEN);
+  const S = withLook(cleanSettings(null, false), r.place.look), doc = newDocument(S, r.text, r.place.header);
+  const ok = await createAndOpen({ title: r.name || 'Untitled', settings: S, doc });
+  if (ok) {
+    if (r.place.header) rememberWritten(doc);
+    toast(WRITTEN);
+  }
   return ok;
 }

@@ -1,14 +1,15 @@
 // Import options: where it goes, the file's pages, a look drawn in its own hand, and an optional header block.
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { FONTS } from '@/engine/config.js';
 import { drawSample, loadFont } from '@/engine/core.js';
 import { cleanSettings } from '@/engine/doc.js';
+import { useHeaderDefault } from '@/features/doc/headerDefault';
 import { paperTint } from '@/features/style/HandSample';
 import { useStylePrefs } from '@/features/style/prefs';
-import { box, docOf, fontsLoad, get, open } from '@/test/docs';
+import { box, docOf, fieldsOf, fontsLoad, get, open } from '@/test/docs';
 import { ImportOptions } from './ImportOptions';
 import { initialOptions, lookById, type ImportOptionsValue, type ImportTarget } from './options';
 
@@ -25,7 +26,7 @@ function Harness({ target, parts = 1 }: { target: ImportTarget; parts?: number }
   return <ImportOptions target={target} value={v} onChange={setV} fileParts={parts} base={cleanSettings(null, false)} />;
 }
 const looks = () => within(screen.getByRole('radiogroup', { name: 'Look' })).getAllByRole('radio');
-beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); useStylePrefs.setState({ looks: [] }); vi.mocked(drawSample).mockClear(); });
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); useStylePrefs.setState({ looks: [] }); useHeaderDefault.setState({ fields: null }); vi.mocked(drawSample).mockClear(); });
 afterEach(() => { vi.useRealTimers(); });
 
 test('a new document: a look, Exam answer to start, and a header block; nothing about where', () => {
@@ -53,13 +54,53 @@ test('Start a new page where the file does: only for a file with pages of its ow
 test('Add a header block: Name, Class and today’s Date, and what was typed comes back', async () => {
   render(<Harness target="new" />); const tick = screen.getByRole('checkbox', { name: 'Add a header block' }); await userEvent.click(tick);
   expect(screen.getByRole('textbox', { name: 'Date' })).toHaveValue('7 November 2026'); await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Asha');
-  expect(value.header).toEqual({ name: 'Asha', class: '', date: '7 November 2026' }); expect(screen.getByText('At the top right of page 1.')).toBeInTheDocument();
-  await userEvent.click(tick); expect(value.header).toBeNull(); await userEvent.click(tick); expect(value.header?.name).toBe('Asha');
+  expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Asha'], ['Class', ''], ['Date', '7 November 2026']]); expect(screen.getByText('At the top right of page 1.')).toBeInTheDocument();
+  await userEvent.click(tick); expect(value.header).toBeNull(); await userEvent.click(tick); expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Asha'], ['Class', ''], ['Date', '7 November 2026']]);
+});
+test('Add a header block starts from the remembered default, today’s date on its date fields', async () => {
+  useHeaderDefault.setState({ fields: [{ label: 'Name', value: 'Asha' }, { label: 'Section', value: '' }, { label: 'Due', value: 'x', today: true }] });
+  render(<Harness target="new" />); await userEvent.click(screen.getByRole('checkbox', { name: 'Add a header block' }));
+  expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Asha'], ['Section', ''], ['Due', '7 November 2026']]);
+  expect(screen.getByRole('textbox', { name: 'Due' })).toHaveValue('7 November 2026');
+});
+/** The header's rows, top to bottom (each value is named by its field's label). */
+const rows = () => [...document.querySelectorAll<HTMLElement>('[data-field-value]')].map(e => e.getAttribute('aria-label'));
+/** Lets the moment pass in which a closed menu would put the focus back on its button. */
+const settle = () => act(() => new Promise(r => setTimeout(r, 0)));
+async function choose(menu: string, name: string) { await userEvent.click(screen.getByRole('button', { name: menu })); await userEvent.click(screen.getByRole('menuitem', { name })); await settle(); }
+test('the header uses the field editor: what is added, renamed, moved and removed is what will be written, and the open document is left alone', async () => {
+  const fields = fieldsOf({ name: 'Ravi', class: '9', date: '1 May 2026' });
+  open(docOf(box({ id: 'h', kind: 'header', name: 'Header', fields, text: 'x' }))); const before = structuredClone(get().doc.boxes[0]);
+  render(<Harness target="open" />);
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Section{Enter}');
+  expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Ravi'], ['Section', '9'], ['Date', '1 May 2026']]);
+  await choose('Add field', 'Teacher'); expect(screen.getByRole('textbox', { name: 'Teacher' })).toHaveFocus();
+  await userEvent.keyboard('Ms Rao'); expect(value.header!.map(f => f.label)).toEqual(['Name', 'Section', 'Date', 'Teacher']);
+  await choose('More for “Teacher”', 'Move up'); expect(screen.getByRole('button', { name: 'More for “Teacher”' })).toHaveFocus();
+  await choose('More for “Date”', 'Remove'); expect(screen.getByRole('textbox', { name: 'Teacher' })).toHaveFocus();
+  expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Ravi'], ['Section', '9'], ['Teacher', 'Ms Rao']]); expect(rows()).toEqual(['Name', 'Section', 'Teacher']);
+  expect(screen.getByText('At the top right of page 1.')).toBeInTheDocument();
+  expect([get().doc.boxes[0], get().canUndo]).toEqual([before, false]); expect(fields.map(f => f.label)).toEqual(['Name', 'Class', 'Date']);
+});
+test('a name being typed when Add after hides the header is kept, and Add after stays chosen', async () => {
+  open(docOf(box({ id: 'h', kind: 'header', name: 'Header', fields: fieldsOf({ name: '', class: '', date: 'x' }), text: 'x' }))); render(<Harness target="open" />);
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Section');
+  // (a click that doesn't move the focus first: the name goes with the Header group, still being typed)
+  fireEvent.click(screen.getByRole('radio', { name: 'Add after the last page' }));
+  expect(screen.queryByRole('textbox', { name: 'Field name' })).toBeNull();
+  expect([value.where, value.header!.map(f => f.label)]).toEqual(['append', ['Name', 'Section', 'Date']]);
+});
+test('a name being typed when Add a header block is unticked leaves the header off: it doesn’t come back', async () => {
+  render(<Harness target="new" />); const tick = screen.getByRole('checkbox', { name: 'Add a header block' }); await userEvent.click(tick);
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Section');
+  fireEvent.click(tick); // (a click that doesn't move the focus first: the name goes with the header, still being typed)
+  expect(screen.queryByRole('textbox', { name: 'Field name' })).toBeNull();
+  expect(value.header).toBeNull(); expect(screen.getByRole('checkbox', { name: 'Add a header block' })).not.toBeChecked();
 });
 test('an open document with a header starts with it, fields and all', () => {
-  open(docOf(box({ kind: 'header', name: 'Header', fields: { name: 'Ravi', class: '9', subject: 'Art', date: '1 May 2026' }, text: 'x' }))); render(<Harness target="open" />);
+  open(docOf(box({ kind: 'header', name: 'Header', fields: fieldsOf({ name: 'Ravi', class: '9', subject: 'Art', date: '1 May 2026' }), text: 'x' }))); render(<Harness target="open" />);
   expect(screen.getByRole('checkbox', { name: 'Add a header block' })).toBeChecked(); expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Ravi');
-  expect(value.header).toEqual({ name: 'Ravi', class: '9', subject: 'Art', date: '1 May 2026' });
+  expect(value.header!.map(f => [f.label, f.value])).toEqual([['Name', 'Ravi'], ['Class', '9'], ['Subject', 'Art'], ['Date', '1 May 2026']]);
 });
 test('each look is written in its own hand on its own paper', () => {
   render(<Harness target="new" />); const card = screen.getByRole('radio', { name: 'Journal' });

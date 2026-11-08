@@ -2,9 +2,10 @@
 // { gap: 34, top: 110, left: 112, right: 742, maxBase: 1077 }.
 import { toast as sonner } from 'sonner';
 import { vi } from 'vitest';
-import { cleanSettings } from '@/engine/doc.js';
+import { cleanFields, cleanSettings } from '@/engine/doc.js';
 import { computeLayout, use } from '@/engine/core.js';
-import type { Box, EngineDoc, Layout, Settings } from '@/engine/types';
+import type { Box, EngineDoc, HeaderField, HeaderKey, Layout, Settings } from '@/engine/types';
+import { HEADER_DEFAULT, flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { getDb } from '@/store/db';
 import * as documents from '@/store/documents';
 import type { DocRecord } from '@/store/documents';
@@ -16,6 +17,9 @@ export const box = (p: Partial<Box> = {}): Box =>
   ({ id: 'b1', page: 0, x: 112, y: 110, w: 630, text: '', style: {}, shuffle: 0, frames: {}, kind: 'text', name: 'Text block', color: 0, ...p });
 
 export const docOf = (...b: Box[]): EngineDoc => ({ pageCount: 1, boxes: b, fileName: '' });
+
+/** A schema-3 header's fields as they convert: a list in the old order, ids the keys, and Date marked as today. */
+export const fieldsOf = (o: Partial<Record<HeaderKey, string>>): HeaderField[] => cleanFields(o);
 
 export const rec = (title: string, body: string | EngineDoc): DocRecord => ({
   id: 'd' + title, title, createdAt: 1, updatedAt: 1, settings: cleanSettings(null, false),
@@ -80,3 +84,13 @@ export const lastToastAction = (): (() => void) | undefined => {
   const a = calls.length ? calls[calls.length - 1][1]?.action : undefined;
   return a && typeof a === 'object' && 'onClick' in a ? (a.onClick as () => void) : undefined;
 };
+
+/**
+ * Forget the header a test changed, in this tab and in storage (a test file whose storage is real), so the next
+ * test's new headers start from Name, Class and Date again.
+ */
+export async function forgetHeader(): Promise<void> {
+  await flushHeaderDefault();
+  await documents.setPref(HEADER_DEFAULT, null);
+  useHeaderDefault.setState({ fields: null });
+}

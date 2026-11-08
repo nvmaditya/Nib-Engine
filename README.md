@@ -45,7 +45,7 @@ Everything runs in the browser. Documents, fonts and settings stay on your devic
 - **Realistic handwriting.** Each letter bends a little differently, baselines climb and sag, downstrokes press harder, and the ink runs darker and lighter. Optional mistakes are crossed out and written again.
 - **33 hands and five pens.** Joined-up, print, neat and messy hands, or upload your own TTF, OTF or WOFF. Fineliner, ballpoint, gel, felt tip and pencil, each drawn at its real line width.
 - **Real paper.** Ruled, spiral, yellow pad, grid, plain or a photographed sheet, with room lighting, show-through, punch holes and a fold crease.
-- **Blocks you can place anywhere.** Text, Header and Margin note blocks sit wherever you put them. A long block flows onto the next pages, and each page's part can be moved, split off or joined back.
+- **Blocks you can place anywhere.** Text, Header and Margin note blocks sit wherever you put them. A Header's fields are yours to add, rename and reorder, and new headers start from the last one you changed. A long block flows onto the next pages, and each page's part can be moved, split off or joined back.
 - **Import.** Bring in a PDF, Word or text file and Nib lays it out as handwriting. You can check and edit the text before anything is written.
 - **Clean exports.** PDF, PNG or JPG, at screen or print quality, as written, scanned, greyscale or black and white, with an optional camera tilt. Files carry no metadata: no author, no producer, no dates.
 - **Installable and offline.** Install Nib as an app. After its first load it works with no connection, every hand and both file readers included.

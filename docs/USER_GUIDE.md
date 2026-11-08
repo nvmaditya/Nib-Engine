@@ -17,7 +17,7 @@ This guide covers everything Nib does, stage by stage. For an overview, see the 
 Home is where you start. The big **Import a PDF, Word or text file** button comes first, and you can also drop a file anywhere on the page. Under it, **Start something new** has six templates. Each one is an ordinary document with its own look, so you can change everything later:
 
 - **Blank page**: Exam answer on ruled paper, nothing on it yet.
-- **Assignment**: Exam answer, with a Header block (today's date filled in), a title and a heading.
+- **Assignment**: Exam answer, with a Header block (your usual fields, with today's date filled in), a title and a heading.
 - **Class notes**: Neat notes on grid paper, with a heading and a list.
 - **Letter**: the Letter look on plain paper, with `Dear …,` and `With love,`.
 - **Journal page**: Journal on a yellow pad, starting with today's date.
@@ -27,7 +27,7 @@ Home is where you start. The big **Import a PDF, Word or text file** button come
 
 ### Working in more than one tab
 
-Tabs follow each other: a document you rename, duplicate or delete in one tab changes in the Home of another, and an open document picks up edits made in another tab. If both tabs changed the same document, Nib keeps the newer version and offers **Copy your text**, so what you wrote in the other one is not lost.
+Tabs follow each other: a document you rename, duplicate or delete in one tab changes in the Home of another, and an open document picks up edits made in another tab. If both tabs changed the same document, Nib keeps the newer version and offers **Copy your text**, so what you wrote in the other one is not lost. An older Nib still open in another tab can't change a document this version has saved, and asks you to reload.
 
 ## Import
 
@@ -43,13 +43,13 @@ The preview is the same rich editor as Write: fix anything before it is written 
 - **Where it goes** (in an open document): **Replace what's on the pages**, or **Add after the last page**. Add after carries on the writing that ends on the last page, from the top of a new page, or starts a block of its own when nothing ends there. **Split here** at that page separates it again.
 - **Pages**: **Start a new page where the file does**, for files with more than one part.
 - **Look**: Keep this document's look (open documents only), one of the built-in looks or one you saved, each drawn in its own hand.
-- **Header**: **Add a header block** with Name, Class and Date, at the top right of page 1.
+- **Header**: **Add a header block**, starting from your usual fields (in an open document with a header, from its own fields), at the top right of page 1. Its fields are edited as in Write.
 
 **Write it out** makes one main block that flows page by page. In an open document it is one undo step. From Home it makes a new document. If it has to wait (for the hand of the look you chose, say), the preview and the choices are locked until it is done, so what is written is what you saw when you pressed it. On phones the dialog is full screen. The file is read on the device: nothing is uploaded.
 
 ## Write
 
-Write has two views, switched at the top: **Pages** and **Outline**. Blocks are the units you work with. There are three kinds: **Text**, **Header** (Name, Class, Subject, Roll no. and Date fields, with Date filled in as today) and **Margin note** (small and tilted). Each block has a name (`Main text`, `Text block`, `Header`, `Margin note`) and a colour. The colour shows on its outline and name tag and in the Outline.
+Write has two views, switched at the top: **Pages** and **Outline**. Blocks are the units you work with. There are three kinds: **Text**, **Header** (fields such as Name, Class and Date, which you add, rename and order yourself; date fields start as today) and **Margin note** (small and tilted). Each block has a name (`Main text`, `Text block`, `Header`, `Margin note`) and a colour. The colour shows on its outline and name tag and in the Outline.
 
 - **Pages** shows each page as a typed copy beside the handwritten one. A switch shows Side by side, Typed or Handwritten alone. On the typed page every block sits at its real position under a name tag (grip, part label such as `2 of 3`, and a ⋯ menu), and you type in it directly. Clicking a word on a handwritten page selects its block and puts the caret at that word. The Show choice is remembered on the device.
 - **Outline** lists the pages and the blocks on them (name, part, an `Own style` badge, the first words), with the handwritten pages in the middle and the selected block's whole text on the right. That editor draws a line where each later page's part starts (`Page 2 starts here`), with `Split here` and `Remove page 2 part` on it.
@@ -72,6 +72,18 @@ All of these can be undone, from the message's **Undo** or with Ctrl+Z.
 - **Split** a block where a page's part begins. From there on it is a new block named `<name> (continued)` that remembers where it came from. **Join back** on that block puts it back at the end of the original, and **Add to the end of…** appends any text block to another. The joined text goes in as lines, without the page break, so the text is no longer split at that page.
 - **Remove the page N part** deletes only the text that page shows; the text after it moves up. **Delete block** removes the whole block.
 - **Merge into previous page**, **Delete page** (and its blocks), **Add a page after this one**, and **Add** for a Text block, Margin note, Header or Page. A document has at most one Header.
+
+### Header block fields
+
+Each field of a Header block is one line of it, such as `Name: Aarav Mehta`, and the lines are written in the order the fields are listed. You edit them in the same way wherever they show: on the typed page (in Pages, where the grip and ⋯ of a row show when you point at it or are in it), in Outline's block editor and its sheet on phones, and in Import's header options.
+
+- **Add field** sits under the fields. Its menu lists the common fields the header doesn't have yet: Name, Class, Section, Subject, Roll no., Registration no., Date, Teacher and School. **Custom field…** adds a field called `Field`, with its name selected, ready for you to type your own. On the typed page Add field shows while you are in the header or point at it, or while the header is selected. A header holds up to 12 fields: at 12, Add field is greyed out and says so.
+- **Rename** a field by clicking its name, or with **Rename** in the row's ⋯ menu. Enter (or clicking away) keeps the new name and Esc puts the old one back. A name left empty becomes `Field`.
+- **Remove**, in the ⋯ menu, takes the field out. In a document its message has **Undo**. The last field can't be removed.
+- **Reorder** by dragging a row's grip, or with **Move up** and **Move down** in the ⋯ menu, which work from the keyboard too.
+- In a document each add, rename, remove and move is one undo step, and typing in one field is one step until you do something else. In Import nothing changes the document until **Write it out**.
+- **Your usual fields.** When you change a header's fields or what they say, Nib remembers that header on the device, for every tab. New headers start from it: **Add** → Header, the Assignment template, and Import's **Add a header block** for a new document or one with no header yet. Date fields start as today's date. Until you have changed a header, new ones have Name, Class and Date. The Water Cycle example keeps its own fields.
+- **On phones** a row's ⋯ and grip are 44 px touch targets, on the typed page too.
 
 ### On phones
 
@@ -142,5 +154,5 @@ Nib is a web app that installs: the browser's **Install** button (Chrome, Edge) 
 
 - **What is kept on the device.** On the first visit Nib keeps the whole app, about 4 MB: the interface and the drawing engine, all 33 hands' font files, the paper photo, the icons, and the PDF and Word readers (PDF.js and mammoth). So a hand never chosen before draws, and a first import reads, with no connection. Google's web copies of the older hands (for letters, such as Devanagari, that their own files don't cover) are kept the first time they are used. Your documents, saved looks, uploaded fonts and settings are in the browser's storage as before. When it is ready Nib says `Nib works offline now.`
 - **New versions are offered, never forced.** Nib looks for a new version when it opens, every hour while it is shown, and when you come back to it after an hour or more. When there is one, every open tab says `A new version is ready.` with **Reload**, and the message stays (through opening and closing documents) until you press it or swipe it away. **Reload** writes your last change, then reloads that tab only, in the new version. No tab ever reloads by itself: the others keep their text and caret, and their message.
-- **Two tabs on two versions.** After Reload in one tab, another can go on running the old version beside it until you reload it too. Both read and write the same documents (the storage format is unchanged), under the usual rules for two tabs (see Working in more than one tab). An import started in the old tab may say `The document reader couldn’t be loaded. Check your connection and try again.`, because the old version's files are gone: press Reload there. If a later version ever saves a document an older one can't read, the older tab says `This document was saved by a newer version of Nib. Reload the page to keep editing.` with **Reload**, which applies the waiting version first, so the reload doesn't come back to the old one.
+- **Two tabs on two versions.** After Reload in one tab, another can go on running the old version beside it until you reload it too. Both read the same documents, under the usual rules for two tabs (see Working in more than one tab). An import started in the old tab may say `The document reader couldn’t be loaded. Check your connection and try again.`, because the old version's files are gone: press Reload there. When a later version has saved a document in a form an older one can't change (this version does), the older tab says `This document was saved by a newer version of Nib. Reload the page to keep editing.` with **Reload**, which applies the waiting version first, so the reload doesn't come back to the old one.
 

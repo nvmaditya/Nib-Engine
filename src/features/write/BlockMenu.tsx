@@ -1,7 +1,6 @@
 // A block's ⋯ menu, for the part of it on one page: rename, join or split it, move it, style it, delete it.
 import { useId, useRef, useState, type ComponentProps, type ReactElement, type RefObject } from 'react';
 import { MoreHorizontal } from 'lucide-react';
-import { HEADER_FIELDS } from '@/engine/doc.js';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -10,7 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { addToEndOf, deleteBlock, joinBackBlock, moveBlockTo, removePart, renameBlock, showField, splitAt, styleBox } from '@/features/doc/actions';
+import { addToEndOf, deleteBlock, joinBackBlock, moveBlockTo, removePart, renameBlock, splitAt, styleBox } from '@/features/doc/actions';
 import { joinable, layoutFor } from '@/features/doc/model';
 import { cn } from '@/lib/utils';
 import { useEditor } from '@/store/editor';
@@ -24,9 +23,6 @@ export function OptionsButton({ label, className, ...props }: ComponentProps<'bu
     </button>
   );
 }
-
-/** A header's optional fields, added and removed from its menu. */
-const OPTIONAL = HEADER_FIELDS.filter((f): f is ['subject' | 'roll', string] => f[0] === 'subject' || f[0] === 'roll');
 
 interface Props {
   boxId: string;
@@ -86,10 +82,6 @@ function BlockMenuItems({ boxId, idx, onRename }: { boxId: string; idx: number; 
           <DropdownMenuItem onSelect={() => removePart(boxId, idx)}>Remove the page {part.page + 1} part</DropdownMenuItem>
         </>
       )}
-      {header && OPTIONAL.map(([k, label]) => {
-        const on = typeof box.fields?.[k] === 'string';
-        return <DropdownMenuItem key={k} onSelect={() => showField(boxId, k, !on)}>{on ? 'Remove' : 'Add'} {label}</DropdownMenuItem>;
-      })}
       {others.length > 0 && (
         <>
           <DropdownMenuSeparator />

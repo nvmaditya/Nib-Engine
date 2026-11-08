@@ -8,7 +8,7 @@ import type { Box } from '@/engine/types';
 import { splitAt } from '@/features/doc/actions';
 import { layoutFor } from '@/features/doc/model';
 import { flushSave, undo, useEditor } from '@/store/editor';
-import { box, docOf, get, lastToast, lines, open } from '@/test/docs';
+import { box, docOf, fieldsOf, get, lastToast, lines, open } from '@/test/docs';
 import { BlockMenu } from './BlockMenu';
 import { HeaderFields } from './HeaderFields';
 import { PageMenu } from './PageMenu';
@@ -19,7 +19,7 @@ vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
 
 const m = () => box({ id: 'm', name: 'Main text', text: lines(40) }); // pages 1–2
-const h = (p: Partial<Box> = {}) => box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, color: 1, fields: { name: '', class: '', date: '6 November 2026' }, ...p });
+const h = (p: Partial<Box> = {}) => box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, color: 1, fields: fieldsOf({ name: '', class: '', date: '6 November 2026' }), ...p });
 const n = () => box({ id: 'n', name: 'Answers', page: 1, y: 900, color: 2, text: 'x' });
 
 /** The text of each item in the open menu (the first one, when a submenu is open too), in order. */
@@ -67,23 +67,19 @@ test('a split block offers Join back, and other blocks to add to', async () => {
   expect(lastToast()).toBe('Added “Answers” to the end of “Main text”.');
 });
 
-test('a header offers its extra fields', async () => {
+test('a header’s ⋯ menu has no field items', async () => {
+  open(docOf(h())); // one page, so there is nowhere to move it to
   render(<BlockMenu boxId="h" idx={0} />);
   await openMenu('Options for Header');
-  expect(items()).toEqual(expect.arrayContaining(['Add Subject', 'Add Roll no.']));
-  await userEvent.click(item('Add Subject'));
-  expect(boxH().fields).toEqual({ name: '', class: '', subject: '', date: '6 November 2026' });
-  await openMenu('Options for Header');
-  expect(items()).toEqual(expect.arrayContaining(['Remove Subject', 'Add Roll no.']));
-  expect(items().some(t => /Split|Remove the page|Join back/.test(t!))).toBe(false);
+  expect(items()).toEqual(['Rename', 'Give it its own style', 'Delete block']);
 });
 
 test('a header on two pages can’t be split or lose a part', async () => {
-  open(docOf(h({ y: 1009, fields: { name: 'A', class: 'B', date: 'C' } })));
+  open(docOf(h({ y: 1009, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }) })));
   expect(layoutFor(get().S, get().doc).segs.filter(s => s.box.id === 'h').map(s => s.page)).toEqual([0, 1]);
   render(<BlockMenu boxId="h" idx={1} />);
   await openMenu('Options for Header');
-  expect(items()).toEqual(['Rename', 'Add Subject', 'Add Roll no.', 'Give it its own style', 'Delete block']);
+  expect(items()).toEqual(['Rename', 'Give it its own style', 'Delete block']);
 });
 
 test('Rename opens the Rename block dialog', async () => {
@@ -210,16 +206,46 @@ test('the page menu tells a pager which page to show next, only when the documen
   r.unmount();
 });
 
+/** The header's rows, top to bottom (each value is named by its field's label). */
+const rows = () => screen.getAllByRole('textbox').map(e => e.getAttribute('aria-label'));
+/** Lets the moment pass in which a closed menu would put the focus back on its button. */
+const settle = () => act(() => new Promise(r => setTimeout(r, 0)));
+
 test('header fields write the header', async () => {
   render(<HeaderFields boxId="h" />);
-  expect(screen.getAllByRole('textbox').map(e => (e as HTMLInputElement).labels![0].textContent)).toEqual(['Name', 'Class', 'Date']);
+  expect(rows()).toEqual(['Name', 'Class', 'Date']);
   await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Riya');
-  expect(boxH().fields!.name).toBe('Riya');
+  expect(boxH().fields!.find(f => f.label === 'Name')!.value).toBe('Riya');
   expect(boxH().text.split('\n')[0]).toBe('Name: Riya');
   act(() => undo());
-  expect(boxH().fields!.name).toBe('');
+  expect(boxH().fields!.find(f => f.label === 'Name')!.value).toBe('');
   expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('');
   expect(screen.queryByRole('textbox', { name: 'Subject' })).toBeNull();
+});
+
+test('the header’s fields are edited in place, each change one undo step, and the header’s text follows', async () => {
+  render(<HeaderFields boxId="h" />);
+  await openMenu('Add field'); await userEvent.click(item('Registration no.')); await settle();
+  expect(screen.getByRole('textbox', { name: 'Registration no.' })).toHaveFocus();
+  await userEvent.type(screen.getByRole('textbox', { name: 'Registration no.' }), '12');
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Section{Enter}');
+  expect(boxH().text).toBe('Name:\nSection:\nDate: 6 November 2026\nRegistration no.: 12');
+  await openMenu('More for “Section”'); await userEvent.click(item('Remove')); await settle();
+  expect(lastToast()).toBe('Removed “Section”.');
+  expect(boxH().text).toBe('Name:\nDate: 6 November 2026\nRegistration no.: 12');
+  expect(rows()).toEqual(['Name', 'Date', 'Registration no.']);
+  // Undo, one change at a time: the remove, the rename, the typing, the add.
+  const back = [
+    ['Name:\nSection:\nDate: 6 November 2026\nRegistration no.: 12', ['Name', 'Section', 'Date', 'Registration no.']],
+    ['Name:\nClass:\nDate: 6 November 2026\nRegistration no.: 12', ['Name', 'Class', 'Date', 'Registration no.']],
+    ['Name:\nClass:\nDate: 6 November 2026\nRegistration no.:', ['Name', 'Class', 'Date', 'Registration no.']],
+    ['Name:\nClass:\nDate: 6 November 2026', ['Name', 'Class', 'Date']],
+  ];
+  for (const [text, labels] of back) {
+    act(() => undo());
+    expect([boxH().text, rows()]).toEqual([text, labels]);
+  }
+  expect(get().canUndo).toBe(false);
 });
 
 test('Write bar', async () => {

@@ -1,12 +1,13 @@
 // Restructuring, on documents laid out by the engine (8 px per character; 28 lines fill page 1).
 import { expect, test } from 'vitest';
-import { cleanSettings } from '@/engine/doc.js';
+import { cleanSettings, headerText } from '@/engine/doc.js';
 import { computeLayout, framesOf } from '@/engine/core.js';
 import type { Box, EngineDoc } from '@/engine/types';
-import { box, docOf, lines, words } from '@/test/docs';
+import { box, docOf, fieldsOf, lines, words } from '@/test/docs';
+import { defaultHeaderFields } from './headerDefault';
 import {
-  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock, pageRefusal,
-  removeBlock, removeBlockPart, setHeaderField, showHeaderField, splitBlock, today,
+  addHeaderField, appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, moveHeaderField, movePage,
+  newBlock, pageRefusal, removeBlock, removeBlockPart, removeHeaderField, renameHeaderField, setHeaderField, splitBlock, today,
 } from './model';
 
 const S = cleanSettings(null, false);
@@ -22,8 +23,7 @@ test('rule 4: a continuation can’t move to another page; a start can', () => {
 test('merge into the previous page', () => { const d = { ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1, y: 400 })), pageCount: 2 }; expect(mergeIntoPrevious(S, d, 1)).toEqual({ ranOn: false }); expect([d.boxes[1].page, d.pageCount]).toEqual([0, 1]); const e = docOf(box({ id: 'm', name: 'Main text', w: 300, text: lines(40) }), box({ id: 'c', page: 1, x: 450, y: 600, w: 290 })); /* c has room beside Main text */ expect(mergeIntoPrevious(S, e, 1)).toEqual({ ranOn: true }); expect([e.boxes[1].page, e.boxes[1].y]).toEqual([0, 600]); expect(layoutFor(S, e).pages).toBe(2); });
 test('delete a page and what is on it', () => { const d = docOf(m(), box({ id: 'c', page: 1, y: 600 })); deletePage(S, d, 1); expect(d.boxes.map(b => b.id)).toEqual(['m']); expect(d.boxes[0].text).toBe(lines(28)); expect(d.pageCount).toBe(1); expect(layoutFor(S, d).pages).toBe(1); });
 test('insert a page', () => { const d = { ...docOf(box({ id: 'a' }), box({ id: 'b', page: 1 })), pageCount: 2 }; insertPage(S, d, 1); expect([d.boxes[1].page, d.pageCount]).toEqual([2, 3]); });
-test('new blocks', () => { const d = docOf(); const t = newBlock(S, d, 'text', 0) as Box; expect([t.name, t.x, t.y, t.w]).toEqual(['Main text', 112, 110, 420]); const n = newBlock(S, d, 'note', 0) as Box; expect([n.kind, n.name, n.x, n.w]).toEqual(['note', 'Margin note', 522, 220]); const h = newBlock(S, d, 'header', 0) as Box; expect([h.page, h.x, h.y, h.w, h.text]).toEqual([0, 446, 76, 320, 'Name:\nClass:\nDate: ' + today()]); expect(newBlock(S, d, 'header', 0)).toBe('header-exists'); expect((newBlock(S, d, 'text', 0) as Box).name).toBe('Text block'); });
-test('today', () => expect(today(new Date(2026, 10, 6))).toBe('6 November 2026'));
+test('new blocks', () => { const d = docOf(); const t = newBlock(S, d, 'text', 0) as Box; expect([t.name, t.x, t.y, t.w]).toEqual(['Main text', 112, 110, 420]); const n = newBlock(S, d, 'note', 0) as Box; expect([n.kind, n.name, n.x, n.w]).toEqual(['note', 'Margin note', 522, 220]); const h = newBlock(S, d, 'header', 0, defaultHeaderFields()) as Box; expect([h.page, h.x, h.y, h.w, h.text]).toEqual([0, 446, 76, 320, 'Name:\nClass:\nDate: ' + today()]); expect(newBlock(S, d, 'header', 0)).toBe('header-exists'); expect((newBlock(S, d, 'text', 0) as Box).name).toBe('Text block'); });
 
 // Beyond the brief's cases.
 test('a split block keeps its kind, and a later split is named once', () => {
@@ -35,7 +35,7 @@ test('a split block keeps its kind, and a later split is named once', () => {
   expect(splitBlock(S, d, 'nope', 1)).toBeNull();
 });
 test('a header is never split, joined or added to the end of another block', () => {
-  const d = docOf(box({ id: 't', w: 300, text: 't' }), box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: { name: 'A', class: 'B', date: 'C' }, text: 'Name: A\nClass: B\nDate: C' }));
+  const d = docOf(box({ id: 't', w: 300, text: 't' }), box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 1009, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }), text: 'Name: A\nClass: B\nDate: C' }));
   expect(layoutFor(S, d).segs.filter(s => s.box.id === 'h').length).toBe(2); // it runs onto page 2
   const before = JSON.stringify(d);
   expect(splitBlock(S, d, 'h', 1)).toBeNull();
@@ -127,20 +127,40 @@ test('a new block takes the first free line', () => {
 });
 test('header fields', () => {
   const d = docOf();
-  const h = newBlock(S, d, 'header', 0) as Box;
-  setHeaderField(h, 'name', 'Riya ');
+  const h = newBlock(S, d, 'header', 0, defaultHeaderFields()) as Box;
+  setHeaderField(h, 'f1', 'Riya ');
   expect(h.text.split('\n')[0]).toBe('Name: Riya ');
-  setHeaderField(h, 'class', '8\nB');
-  expect(h.fields!.class).toBe('8 B');
-  showHeaderField(h, 'roll', true);
-  showHeaderField(h, 'subject', true);
-  expect(h.text).toBe(`Name: Riya \nClass: 8 B\nSubject:\nRoll no.:\nDate: ${today()}`);
-  setHeaderField(h, 'roll', '12');
-  showHeaderField(h, 'roll', true);
-  expect(h.fields!.roll).toBe('12');
-  showHeaderField(h, 'subject', false);
-  expect(h.text).toBe(`Name: Riya \nClass: 8 B\nRoll no.: 12\nDate: ${today()}`);
+  setHeaderField(h, 'f2', '8\nB');
+  expect(h.fields![1]).toEqual({ id: 'f2', label: 'Class', value: '8 B' });
+  expect(h.text).toBe(`Name: Riya \nClass: 8 B\nDate: ${today()}`);
+  setHeaderField(h, 'gone', 'x');
+  expect(h.text).toBe(`Name: Riya \nClass: 8 B\nDate: ${today()}`);
 });
+test('each field change keeps the header’s text derived, and a block that isn’t a header is left alone', () => {
+  const h = box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }), text: 'Name: A\nClass: B\nDate: C' });
+  const derived = () => expect(h.text).toBe(headerText(h.fields!));
+  const due = addHeaderField(h, { label: 'Due' })!;
+  expect(due).toMatchObject({ label: 'Due', value: '' }); expect(h.fields!.at(-1)).toBe(due); derived();
+  expect(renameHeaderField(h, 'class', 'Section')).toBe(true); derived();
+  expect(moveHeaderField(h, 'class', 3)).toBe(true); derived();
+  expect(removeHeaderField(h, 'date')).toEqual({ field: { id: 'date', label: 'Date', value: 'C', today: true }, index: 1 }); derived();
+  expect(h.text).toBe('Name: A\nDue:\nSection: B');
+  // Nothing to change: false or null, and the text as it was.
+  expect([renameHeaderField(h, 'class', 'Section'), moveHeaderField(h, 'class', 2), moveHeaderField(h, 'gone', 0), removeHeaderField(h, 'gone')]).toEqual([false, false, false, null]);
+  expect(h.text).toBe('Name: A\nDue:\nSection: B');
+  const t = box({ id: 't', text: 'words' });
+  expect([addHeaderField(t, { label: 'Due' }), renameHeaderField(t, 'name', 'X'), moveHeaderField(t, 'name', 0), removeHeaderField(t, 'name')]).toEqual([null, false, false, null]);
+  expect([t.text, t.fields]).toEqual(['words', undefined]);
+});
+test('a header keeps 1 to 12 fields', () => {
+  const h = box({ id: 'h', kind: 'header', fields: fieldsOf({ name: 'A' }), text: 'Name: A' });
+  expect(removeHeaderField(h, 'name')).toBeNull();
+  for (let i = 1; i < 12; i++) expect(addHeaderField(h, { label: 'F' + i })).not.toBeNull();
+  expect(h.fields).toHaveLength(12);
+  expect(addHeaderField(h, { label: 'One more' })).toBeNull();
+  expect([h.fields!.length, h.text]).toEqual([12, headerText(h.fields!)]);
+});
+test('a new header without fields given gets the three blanks', () => { const h = newBlock(S, docOf(), 'header', 0) as Box; expect([h.fields!.map(f => f.label), h.text]).toEqual([['Name', 'Class', 'Date'], 'Name:\nClass:\nDate:']); });
 
 // Join back is the inverse of split (final review A, item 1).
 const SHAPES: Record<string, string> = {
@@ -217,7 +237,7 @@ test('join back keeps the later parts’ own width, and the joined block’s own
 });
 
 test('a split part pushed down by a block above keeps its own place, not the pushed one', () => {
-  const h = box({ id: 'h', kind: 'header', name: 'Header', page: 1, x: 446, y: 76, w: 320, fields: { name: 'A', class: 'B', date: 'C' }, text: 'Name: A\nClass: B\nDate: C' });
+  const h = box({ id: 'h', kind: 'header', name: 'Header', page: 1, x: 446, y: 76, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }), text: 'Name: A\nClass: B\nDate: C' });
   const d = docOf(m(), h);
   const part2 = layoutFor(S, d).segs.find(s => s.box.id === 'm' && s.idx === 1)!;
   expect([part2.top, part2.storedTop]).toEqual([178, 110]);
@@ -244,7 +264,7 @@ test('merging a page that shows only a pushed block moves that block up, where t
 });
 
 // A block pushed down on its own page keeps its stored y through moves and merges.
-const hdr = (page: number) => box({ id: 'h', kind: 'header', name: 'Header', page, x: 446, y: 76, w: 320, fields: { name: 'A', class: 'B', date: 'C' }, text: 'Name: A\nClass: B\nDate: C' });
+const hdr = (page: number) => box({ id: 'h', kind: 'header', name: 'Header', page, x: 446, y: 76, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }), text: 'Name: A\nClass: B\nDate: C' });
 test('moving a page keeps the stored y of a block pushed on its own page', () => {
   const d = { ...docOf(hdr(0), box({ id: 't', y: 110, text: lines(5) }), box({ id: 'o', page: 1, text: 'other' })), pageCount: 2 };
   expect(layoutFor(S, d).segs.find(s => s.box.id === 't')!.top).toBe(178);

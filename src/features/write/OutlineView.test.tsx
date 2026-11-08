@@ -12,7 +12,7 @@ import { deleteBlock, deletePageAt, removePart, select, splitAt } from '@/featur
 import { offsetAt } from '@/features/editor/positions';
 import { createDoc } from '@/store/documents';
 import { flushSave, placeCaret, undo } from '@/store/editor';
-import { box, docOf, get, lastToast, lines, words } from '@/test/docs';
+import { box, docOf, fieldsOf, forgetHeader, get, lastToast, lines, words } from '@/test/docs';
 import { OUTLINE_PEEK } from './OutlineView';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
@@ -27,7 +27,7 @@ const m = () => box({ id: 'm', name: 'Main text', text: lines(40) }); // pages 1
 const n = (p: Partial<Box> = {}) => box({ id: 'n', name: 'Answers', page: 1, y: 900, color: 2, text: 'x', shuffle: 7, ...p }); // own style, page 2
 const h = () => box({
   id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, color: 1,
-  fields: { name: 'Riya', class: '', date: '6 November 2026' }, text: 'Name: Riya\nClass:\nDate: 6 November 2026',
+  fields: fieldsOf({ name: 'Riya', class: '', date: '6 November 2026' }), text: 'Name: Riya\nClass:\nDate: 6 November 2026',
 });
 
 const ol = () => screen.getByRole('region', { name: 'Outline' });
@@ -291,9 +291,113 @@ test('a header shows its fields and the hint, and its item the filled-in fields'
   expect(within(ol()).getByText('Riya · 6 November 2026')).toBeInTheDocument();
   await userEvent.click(item('Header'));
   expect(within(insp()).getByRole('textbox', { name: 'Name' })).toHaveValue('Riya');
-  expect(within(insp()).getByText('New documents fill in today’s date. Add Subject or Roll no. from ⋯.')).toBeInTheDocument();
+  expect(within(insp()).getByText('New documents fill in today’s date.')).toBeInTheDocument();
   expect(within(insp()).queryByRole('toolbar', { name: 'Formatting' })).toBeNull();
   expect(within(insp()).queryByRole('textbox', { name: /all pages/ })).toBeNull();
+});
+
+test('Outline’s header editor adds a field, and the header’s item shows its value', async () => {
+  try {
+    await outline(docOf(h(), box({ id: 'm', name: 'Main text', y: 178, text: 'x' })));
+    await userEvent.click(item('Header'));
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Teacher' }));
+    await waitFor(() => expect(within(insp()).getByRole('textbox', { name: 'Teacher' })).toHaveFocus());
+    await userEvent.keyboard('Ms Rao');
+    expect(get().doc.boxes.find(b => b.id === 'h')!.text).toBe('Name: Riya\nClass:\nDate: 6 November 2026\nTeacher: Ms Rao');
+    expect(within(ol()).getByText('Riya · 6 November 2026 · Ms Rao')).toBeInTheDocument();
+  } finally {
+    await forgetHeader();
+  }
+});
+
+describe('Undo and Redo keys in the header editor’s fields are the document’s', () => {
+  const labels = () => get().doc.boxes.find(b => b.id === 'h')!.fields!.map(f => f.label);
+  const valueOf = (label: string) => get().doc.boxes.find(b => b.id === 'h')!.fields!.find(f => f.label === label)?.value;
+  const field = (name: string) => within(insp()).getByRole('textbox', { name }) as HTMLInputElement;
+  const z = '{Control>}z{/Control}', shiftZ = '{Control>}{Shift>}z{/Shift}{/Control}', y = '{Control>}y{/Control}';
+  async function header() {
+    await outline(docOf(h(), box({ id: 'm', name: 'Main text', y: 178, text: 'x' })));
+    await userEvent.click(item('Header'));
+  }
+  afterEach(async () => { await forgetHeader(); });
+
+  test('Remove, then Ctrl+Z in the value the focus went to, puts the field back, and Redo is still there', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'More for “Class”' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+    await waitFor(() => expect(field('Date')).toHaveFocus());
+    await userEvent.keyboard(z);
+    expect([labels(), get().canRedo, field('Date').value]).toEqual([['Name', 'Class', 'Date'], true, '6 November 2026']);
+    await userEvent.keyboard(shiftZ);
+    expect(labels()).toEqual(['Name', 'Date']);
+    await userEvent.keyboard(z + y); // Ctrl+Y redoes too
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Date'], false]);
+    expect(fireEvent.keyDown(field('Date'), { key: 'z', ctrlKey: true })).toBe(false); // the field's own undo never starts
+    expect(labels()).toEqual(['Name', 'Class', 'Date']);
+  });
+
+  test('Add, then Ctrl+Z in the new value takes the field away again', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Teacher' }));
+    await waitFor(() => expect(field('Teacher')).toHaveFocus());
+    await userEvent.keyboard(z);
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Class', 'Date'], true]);
+  });
+
+  test('typing, then Ctrl+Z, undoes that burst of typing in the document’s history', async () => {
+    await header();
+    await userEvent.type(field('Name'), ' Sen');
+    expect(valueOf('Name')).toBe('Riya Sen');
+    await userEvent.keyboard(z);
+    expect([valueOf('Name'), field('Name').value, get().canRedo]).toEqual(['Riya', 'Riya', true]);
+    await userEvent.keyboard(shiftZ);
+    expect([valueOf('Name'), field('Name').value]).toEqual(['Riya Sen', 'Riya Sen']);
+  });
+
+  test('on Apple, ⌘Z and ⇧⌘Z; Ctrl+Y is left alone', async () => {
+    const mac = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    await header();
+    await userEvent.type(field('Name'), ' Sen');
+    await userEvent.keyboard('{Meta>}z{/Meta}');
+    expect(valueOf('Name')).toBe('Riya');
+    expect(fireEvent.keyDown(field('Name'), { key: 'y', ctrlKey: true })).toBe(true);
+    expect(valueOf('Name')).toBe('Riya');
+    await userEvent.keyboard('{Meta>}{Shift>}z{/Shift}{/Meta}');
+    expect(valueOf('Name')).toBe('Riya Sen');
+    mac.mockRestore();
+  });
+
+  test('in a field’s name while it is open: after Custom field…, Ctrl+Z takes the field away; Esc and Enter are still the name’s', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Add field' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Custom field…' }));
+    await waitFor(() => expect(field('Field name')).toHaveFocus());
+    await userEvent.keyboard(z);
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Class', 'Date'], true]);
+    expect(within(insp()).queryByRole('textbox', { name: 'Field name' })).toBeNull();
+
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Class”' }));
+    await userEvent.keyboard('Section{Enter}');
+    expect(labels()).toEqual(['Name', 'Section', 'Date']);
+    expect(within(insp()).getByRole('button', { name: 'Rename “Section”' })).toHaveFocus();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Section”' }));
+    await userEvent.keyboard('Sec{Escape}');
+    expect(labels()).toEqual(['Name', 'Section', 'Date']);
+    expect(within(insp()).getByRole('button', { name: 'Rename “Section”' })).toHaveFocus();
+  });
+
+  test('…and when Ctrl+Z there takes back that field’s own rename, the open name shows the name now, and leaving it keeps Redo', async () => {
+    await header();
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Class”' }));
+    await userEvent.keyboard('Section{Enter}');
+    await userEvent.click(within(insp()).getByRole('button', { name: 'Rename “Section”' }));
+    await userEvent.keyboard(z);
+    expect([labels(), field('Field name').value]).toEqual([['Name', 'Class', 'Date'], 'Class']);
+    await userEvent.tab();
+    expect([labels(), get().canRedo]).toEqual([['Name', 'Class', 'Date'], true]);
+  });
 });
 
 test('a clicked word’s caret goes to the inspector’s editor', async () => {
@@ -473,6 +577,15 @@ describe('on a phone', () => {
     expect(lastToast()).toBe('Moved “Answers” to page 3.');
     await drag(within(sheet()).getByRole('img', { name: 'Drag to move page 1' }), within(section(1)).getByText('Page 2'));
     expect(lastToast()).toMatch(/^Moved page 1 to position 2\./);
+  });
+
+  test('a page’s grip in the sheet is something to tap, so a finger on it isn’t moved onto the heading or block beside it', async () => {
+    await outline(docOf(m(), n()));
+    const grip = within(sheet()).getByRole('img', { name: 'Drag to move page 1' });
+    // Chromium moves a touch onto the nearest thing it counts as tappable (its touch adjustment): the page's heading
+    // (it can take the focus) or a block's item. A style while pressed makes the grip count; hover styles don't on a phone.
+    expect(grip).toHaveClass('active:text-fg', 'touch-none');
+    expect(grip).toHaveAttribute('data-vaul-no-drag');
   });
 
   test('the sheet goes with the stage and the view, and Tab goes on out of it, both ways', async () => {

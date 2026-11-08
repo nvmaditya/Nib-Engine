@@ -71,11 +71,40 @@ test('another tab opening a newer version is not held up by this tab', async () 
 
 const schemaOf = async (id: string) => ((await (await getDb()).get('documents', id)) as { schema?: number }).schema;
 
-test('documents are written with schema 3', async () => {
+test('documents are written with schema 4', async () => {
   const a = await createDoc();
-  expect(await schemaOf(a.id)).toBe(3);
+  expect(await schemaOf(a.id)).toBe(4);
   await putDoc({ ...a, title: 'B' });
-  expect(await schemaOf(a.id)).toBe(3);
+  expect(await schemaOf(a.id)).toBe(4);
+});
+
+/** A schema-3 record whose header has the fixed-key fields, in storage as the previous version left it. */
+async function schema3(): Promise<DocRecord> {
+  const a = await createDoc({ title: 'Week 1' });
+  const fields = { date: '1 May 2026', roll: '12', name: 'Riya', class: '8' };
+  await (await getDb()).put('documents', { ...a, schema: 3, doc: { pageCount: 1, fileName: '', boxes: [{ id: 'h', kind: 'header', text: 'x', fields }] } });
+  return a;
+}
+const RIYA = [
+  { id: 'name', label: 'Name', value: 'Riya' }, { id: 'class', label: 'Class', value: '8' }, { id: 'roll', label: 'Roll no.', value: '12' },
+  { id: 'date', label: 'Date', value: '1 May 2026', today: true },
+];
+
+test('a schema-3 record’s header is read as a list in the old order, and written back as schema 4', async () => {
+  const a = await schema3();
+  const read = (await getDoc(a.id))!;
+  expect(read.doc.boxes[0].fields).toEqual(RIYA);
+  expect(read.doc.boxes[0].text).toBe('Name: Riya\nClass: 8\nRoll no.: 12\nDate: 1 May 2026');
+  await putDoc(read);
+  expect(await schemaOf(a.id)).toBe(4);
+});
+
+test('Home’s rename stamps 4 on a schema-3 record without cleaning it, and its header still reads as a list', async () => {
+  const a = await schema3();
+  await renameDoc(a.id, 'Week 2');
+  const stored = (await (await getDb()).get('documents', a.id)) as DocRecord & { schema: number };
+  expect([stored.schema, stored.title, stored.doc.boxes[0].fields]).toEqual([4, 'Week 2', { date: '1 May 2026', roll: '12', name: 'Riya', class: '8' }]);
+  expect((await getDoc(a.id))!.doc.boxes[0].fields).toEqual(RIYA);
 });
 
 test('a schema-1 record is migrated when read', async () => {

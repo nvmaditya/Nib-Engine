@@ -2,18 +2,19 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { toast as sonner } from 'sonner';
 import type { EngineDoc } from '@/engine/types';
-import { box, docOf, get, lastToast, lines, open } from '@/test/docs';
-import { flushSave, redo, undo } from '@/store/editor';
+import { box, docOf, fieldsOf, get, lastToast, lastToastAction, lines, open } from '@/test/docs';
+import { flushSave, redo, snapshot, undo } from '@/store/editor';
 import {
-  addBlock, addPageAt, addTextBlockAt, addToEndOf, deleteBlock, deletePageAt, joinBackBlock, mergeIntoPreviousPage,
-  moveBlockTo, movePageTo, removePart, renameBlock, resetBoxStyle, select, setField, setV, showField, shuffleBox, splitAt,
+  addBlock, addField, addPageAt, addTextBlockAt, addToEndOf, deleteBlock, deletePageAt, joinBackBlock, mergeIntoPreviousPage,
+  moveBlockTo, moveField, movePageTo, removeField, removePart, renameBlock, renameField, resetBoxStyle, select, setField, setV, shuffleBox, splitAt,
 } from './actions';
+import { useHeaderDefault } from './headerDefault';
 import { layoutFor, today } from './model';
 
 vi.mock('@/store/documents', () => ({ putDoc: vi.fn(async () => {}) }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
 
-beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); });
+beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); useHeaderDefault.setState({ fields: null }); });
 
 const m = () => box({ id: 'm', name: 'Main text', text: lines(40) }); // pages 1–2
 const long = (): EngineDoc => docOf(m());
@@ -239,7 +240,7 @@ test('repeating an action, or one with nothing to act on, records nothing and sa
   deletePageAt(0); deletePageAt(0); mergeIntoPreviousPage(1); movePageTo(0, 1);
   open(long());
   const text = json();
-  setField('m', 'name', 'x'); showField('m', 'roll', true); // not a header
+  setField('m', 'name', 'x'); // not a header
   expect(json()).toBe(text);
   expect(get().canUndo).toBe(false);
   expect(toasts()).toBe(0);
@@ -409,22 +410,97 @@ test('renaming a block', () => {
   expect(get().canUndo).toBe(false);
 });
 
-test('header fields: typing is one step per field, and fields can be shown and hidden', () => {
+test('header fields: typing is one step per field', () => {
   open(long());
   addBlock('header', 0);
   const h = get().doc.boxes[1].id;
   const head = () => get().doc.boxes.find(b => b.id === h)!;
-  setField(h, 'name', 'R');
-  setField(h, 'name', 'Riya');
+  const nameId = head().fields!.find(f => f.label === 'Name')!.id;
+  setField(h, nameId, 'R');
+  setField(h, nameId, 'Riya');
   expect(head().text).toBe(`Name: Riya\nClass:\nDate: ${today()}`);
   undo();
-  expect(head().fields!.name).toBe('');
-  showField(h, 'subject', true);
-  expect(head().text).toBe(`Name:\nClass:\nSubject:\nDate: ${today()}`);
-  showField(h, 'subject', false);
-  expect(head().fields!.subject).toBeUndefined();
-  undo();
-  expect(head().fields!.subject).toBe('');
+  expect(head().fields!.find(f => f.id === nameId)!.value).toBe('');
+  expect(head().text).toBe(`Name:\nClass:\nDate: ${today()}`);
   setField('m', 'name', 'x'); // not a header
   expect(get().doc.boxes[0].fields).toBeUndefined();
+});
+
+/* ---------- A header's fields: add, rename, remove and move, one undo step each ---------- */
+
+const hdr = (fields = fieldsOf({ name: '', class: '', date: 'd' })) =>
+  box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields, text: '' });
+const withHeader = (fields?: Parameters<typeof hdr>[0]): EngineDoc => docOf(hdr(fields), box({ id: 'm', name: 'Main text', y: 178, text: 'words' }));
+const head = () => get().doc.boxes.find(b => b.id === 'h')!;
+const twelve = () => Array.from({ length: 12 }, (_, i) => ({ id: 'f' + (i + 1), label: 'L' + (i + 1), value: '' }));
+
+test('adding, renaming, removing and moving a field are one undo step each, and Redo is exact', () => {
+  open(withHeader());
+  const snaps = [JSON.parse(snapshot())];
+  const take = () => snaps.push(JSON.parse(snapshot()));
+  const id = addField('h', { label: 'Registration no.' })!; take();
+  addField('h', { label: 'Teacher' }); take(); // a second add straight after: a step of its own
+  setField('h', id, '1'); setField('h', id, '12'); take(); // typing: one step
+  renameField('h', 'class', 'Section'); take();
+  renameField('h', 'class', 'Group'); take(); // a second rename straight after: a step of its own
+  moveField('h', id, 0); take();
+  moveField('h', id, 1); take();
+  removeField('h', 'class'); take();
+  expect(snaps).toHaveLength(9);
+  expect(head().text).toBe('Name:\nRegistration no.: 12\nDate: d\nTeacher:');
+  expect(head().fields!.map(f => f.label)).toEqual(['Name', 'Registration no.', 'Date', 'Teacher']);
+  for (let i = snaps.length - 2; i >= 0; i--) { undo(); expect(JSON.parse(snapshot()), `undo to ${i}`).toEqual(snaps[i]); }
+  expect(get().canUndo).toBe(false);
+  for (let i = 1; i < snaps.length; i++) { redo(); expect(JSON.parse(snapshot()), `redo to ${i}`).toEqual(snaps[i]); }
+  expect(get().canRedo).toBe(false);
+});
+
+test('Remove says Removed “Section”. with Undo, which puts the field back where it was', () => {
+  open(withHeader());
+  renameField('h', 'class', 'Section');
+  const before = JSON.parse(snapshot());
+  removeField('h', 'class');
+  expect(head().text).toBe('Name:\nDate: d');
+  expect(lastToast()).toBe('Removed “Section”.');
+  const undoIt = lastToastAction()!;
+  expect(vi.mocked(sonner).mock.calls.at(-1)![1]?.action).toMatchObject({ label: 'Undo' });
+  undoIt();
+  expect(JSON.parse(snapshot())).toEqual(before);
+  expect(head().fields!.map(f => [f.id, f.label])).toEqual([['name', 'Name'], ['class', 'Section'], ['date', 'Date']]);
+  expect(head().text).toBe('Name:\nSection:\nDate: d');
+});
+
+test('a field change that changes nothing records nothing', () => {
+  const nothing = (doc: EngineDoc, run: () => void, name: string) => {
+    open(doc);
+    const before = json(), said = toasts();
+    run();
+    expect([json(), get().canUndo, toasts()], name).toEqual([before, false, said]);
+  };
+  nothing(withHeader(), () => renameField('h', 'class', ' Class '), 'the same label');
+  nothing(withHeader(), () => moveField('h', 'class', 1), 'to its own row');
+  nothing(withHeader(), () => moveField('h', 'class', 3), 'past the end');
+  nothing(withHeader(fieldsOf({ name: 'A' })), () => removeField('h', 'name'), 'the only field');
+  nothing(withHeader(twelve()), () => addField('h', { label: 'One more' }), 'at 12');
+  nothing(withHeader(), () => { renameField('h', 'gone', 'X'); moveField('h', 'gone', 0); removeField('h', 'gone'); }, 'an unknown field');
+  nothing(withHeader(), () => { addField('m', { label: 'X' }); renameField('m', 'name', 'X'); moveField('m', 'name', 0); removeField('m', 'name'); }, 'a block that isn’t a header');
+  nothing(withHeader(), () => { addField('nope', { label: 'X' }); removeField('nope', 'name'); }, 'a block that isn’t there');
+});
+
+test('addField gives the new field’s id, and null at 12', () => {
+  open(withHeader());
+  const id = addField('h', { label: 'Date', today: true });
+  expect(head().fields!.at(-1)).toEqual({ id, label: 'Date', value: today(), today: true });
+  expect(id).toMatch(/^b/); // a uid(), not one of the f1…fN a new header's fields have
+  open(withHeader(twelve()));
+  expect(addField('h', { label: 'One more' })).toBeNull();
+});
+
+test('Add → Header starts from the remembered default, its date-marked fields as today', () => {
+  useHeaderDefault.setState({ fields: [{ label: 'Name', value: 'Asha' }, { label: 'Section', value: 'B' }, { label: 'Due', value: '1 May 2026', today: true }] });
+  open(long());
+  addBlock('header', 0);
+  const h = get().doc.boxes.find(b => b.kind === 'header')!;
+  expect(h.text).toBe(`Name: Asha\nSection: B\nDue: ${today()}`);
+  expect(h.fields!.map(f => f.id)).toEqual(['f1', 'f2', 'f3']);
 });

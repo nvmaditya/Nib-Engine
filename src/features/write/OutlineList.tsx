@@ -4,7 +4,6 @@
 // list's, not the sheet's (`data-vaul-no-drag`): the sheet doesn't follow them or move when they start.
 import { memo, useId, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { GripVertical, Plus } from 'lucide-react';
-import { HEADER_FIELDS } from '@/engine/doc.js';
 import { frameRange, hasOwnStyle } from '@/engine/core.js';
 import type { Seg } from '@/engine/types';
 import { Button } from '@/components/ui/button';
@@ -15,7 +14,7 @@ import { plainText } from '@/features/editor/markup';
 import type { PageLayout } from '@/features/pages/PageView';
 import { cn } from '@/lib/utils';
 import { toast, useEditor } from '@/store/editor';
-import { dropClass, gripClass, pageDropIndex, startDrag } from './dnd';
+import { dragGhost, dropClass, gripClass, pageDropIndex, startDrag } from './dnd';
 import { PageMenu } from './PageMenu';
 
 const SNIPPET = 70;
@@ -35,23 +34,9 @@ function snippetOf(markup: string): string {
 /** What a part's item shows under its name: its text, or a header's filled-in fields. */
 function partSnippet(sg: Seg): string {
   const b = sg.box;
-  if (b.kind === 'header') return HEADER_FIELDS.map(([k]) => b.fields?.[k]?.trim()).filter(Boolean).join(' · ');
+  if (b.kind === 'header') return b.fields?.map(f => f.value.trim()).filter(Boolean).join(' · ') ?? '';
   const [from, to] = frameRange(b, sg.idx);
   return snippetOf(b.text.slice(from, to));
-}
-
-/** What follows the pointer while dragging. */
-function ghost(text: string, color?: string): HTMLElement {
-  const g = document.createElement('div');
-  g.className = 'flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] font-semibold text-fg shadow-lg';
-  if (color) {
-    const dot = document.createElement('span');
-    dot.className = 'size-[9px] flex-none rounded-[3px]';
-    dot.style.background = color;
-    g.append(dot);
-  }
-  g.append(text);
-  return g;
 }
 
 interface ItemProps {
@@ -63,7 +48,7 @@ const OutlineItem = memo(function OutlineItem({ boxId, idx, name, color, label, 
   // part follows the part before it, which the person is told as soon as the drag starts.
   const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => startDrag(e, {
     kind: 'item',
-    ghost: () => ghost(name, color),
+    ghost: () => dragGhost(name, color),
     onStart: () => {
       if (idx === 0) { select(boxId); return; }
       toast(rule4({ part: idx + 1, name }));
@@ -101,14 +86,16 @@ function PageSection({ i, pages, segs, parts, selectedId }: { i: number; pages: 
   // The grip drags the page; it drops before or after another page's section (Pages view does the same).
   const onGrip = (e: ReactPointerEvent<HTMLElement>) => startDrag(e, {
     kind: 'grip',
-    ghost: () => ghost(`Page ${i + 1}`),
+    ghost: () => dragGhost(`Page ${i + 1}`),
     onDrop: t => { if (t) movePageTo(i, pageDropIndex(i, t.page, t.after)); },
   });
   return (
     <div data-drop-page={i} className={cn('rounded-[10px] pt-0.5 pb-1.5', dropClass)}>
       <div className="flex items-center gap-1 py-1 pr-0.5">
+        {/* (Its style while pressed makes Chromium count it as something to tap, so a finger on it isn't moved onto the
+            heading or a block's item beside it.) */}
         <span role="img" aria-label={`Drag to move page ${i + 1}`} title="Drag to move this page" onPointerDown={onGrip} data-vaul-no-drag=""
-          className={cn(gripClass, 'inline-grid size-[26px] flex-none place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-fg [&_svg]:size-4')}>
+          className={cn(gripClass, 'inline-grid size-[26px] flex-none place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-fg active:text-fg [&_svg]:size-4')}>
           <GripVertical aria-hidden />
         </span>
         <h3 tabIndex={-1} data-page-heading={i}

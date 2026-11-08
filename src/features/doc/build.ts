@@ -1,8 +1,8 @@
 // Documents built from text: an import written out, and a new document (spec §1, §3). Pure: each builder
 // works on what it is given and returns what it made, and leaves the engine on the open document.
 import { geom, snapY, use } from '@/engine/core.js';
-import { DEFAULT_NAMES, HEADER_FIELDS, headerText, uid } from '@/engine/doc.js';
-import type { Box, EngineDoc, Geom, HeaderFields, Layout, Seg, Settings } from '@/engine/types';
+import { DEFAULT_NAMES, HEADER_LIMITS, headerLabel, headerText, uid } from '@/engine/doc.js';
+import type { Box, EngineDoc, Geom, HeaderField, Layout, Seg, Settings } from '@/engine/types';
 import { newBlockName, nextColor } from '@/features/doc/blocks';
 import { fieldValue, layoutFor } from '@/features/doc/model';
 import { lookPatch } from '@/features/style/looks';
@@ -10,7 +10,7 @@ import type { SavedLook } from '@/features/style/prefs';
 import { useEditor } from '@/store/editor';
 
 /** Where an import goes, the look it brings (`null` keeps the document's) and the Header it asks for (`null` for none). */
-export interface ImportPlace { where: 'replace' | 'append'; look: SavedLook | null; header: HeaderFields | null }
+export interface ImportPlace { where: 'replace' | 'append'; look: SavedLook | null; header: HeaderField[] | null }
 
 /** An import written out: the settings and document to put in place, the block the text went into and the page it starts on. */
 export interface Imported { S: Settings; doc: EngineDoc; target: Box; firstPage: number; joined: boolean }
@@ -34,18 +34,13 @@ export function geomFor(S: Settings): Geom {
 /** A look applied to the whole document, as Style applies one, paper included. The same settings when there is none. */
 export const withLook = (S: Settings, look: SavedLook | null): Settings => (look ? { ...S, ...lookPatch(look, false) } : S);
 
-/** Each field's value as the header keeps it (as typing into the field writes it). */
-function oneLine(fields: HeaderFields): HeaderFields {
-  const f: HeaderFields = {};
-  for (const [k] of HEADER_FIELDS) {
-    const v = fields[k];
-    if (typeof v === 'string') f[k] = fieldValue(v);
-  }
-  return f;
+/** The fields as the header keeps them: at most 12, each label one line and each value as typing into the field writes it. */
+function oneLine(fields: HeaderField[]): HeaderField[] {
+  return fields.slice(0, HEADER_LIMITS.fields).map(f => ({ id: f.id, label: headerLabel(f.label), value: fieldValue(f.value), ...(f.today && { today: true as const }) }));
 }
 
 /** A Header block at the top right of page 1 (not added to `doc`). */
-export function headerBlock(doc: EngineDoc, S: Settings, fields: HeaderFields): Box {
+export function headerBlock(doc: EngineDoc, S: Settings, fields: HeaderField[]): Box {
   const g = geomFor(S), f = oneLine(fields);
   return {
     id: uid(), kind: 'header', name: DEFAULT_NAMES.header, color: nextColor(doc),
@@ -67,7 +62,7 @@ export function mainBlock(doc: EngineDoc, S: Settings, text: string, below: Box 
 }
 
 /** A one-page document: the Header (if asked for), then the text as its Main text. */
-export function newDocument(S: Settings, text: string, header: HeaderFields | null): EngineDoc {
+export function newDocument(S: Settings, text: string, header: HeaderField[] | null): EngineDoc {
   const doc = emptyDoc();
   if (header) doc.boxes.push(headerBlock(doc, S, header));
   doc.boxes.push(mainBlock(doc, S, text, doc.boxes[0] ?? null));
@@ -96,7 +91,7 @@ function trimEnd(text: string): string {
 }
 
 /** The document becomes the Header (only if asked for; the one it has keeps its place) and one Main text. */
-function replaced(S: Settings, doc: EngineDoc, text: string, header: HeaderFields | null): Imported {
+function replaced(S: Settings, doc: EngineDoc, text: string, header: HeaderField[] | null): Imported {
   const out: EngineDoc = { pageCount: 1, boxes: [], fileName: doc.fileName };
   const had = doc.boxes.find(b => b.kind === 'header');
   if (header) {

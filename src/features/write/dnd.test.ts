@@ -2,7 +2,7 @@
 import { createElement, type PointerEvent as ReactPointerEvent } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { gate, pageDropIndex, startDrag, targetAt, type DragKind } from './dnd';
+import { dragGhost, gate, pageDropIndex, rowAt, startDrag, targetAt, type DragKind } from './dnd';
 
 // The click swallowed after a drop is only the one that comes straight after it: let that moment pass.
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); document.body.innerHTML = ''; await new Promise(r => setTimeout(r, 0)); });
@@ -45,6 +45,171 @@ test('the drop target is the page under the pointer', () => {
   expect(targetAt(5, 120)).toEqual({ page: 1, after: false });
   expect(targetAt(5, 40)).toEqual({ page: 0, after: false });
   expect(targetAt(5, 260)).toBeNull();
+});
+
+test('a field row drag finds the row under the pointer, never the page around it', () => {
+  const page = document.createElement('div'), row = document.createElement('div');
+  page.dataset.dropPage = '0';
+  page.getBoundingClientRect = () => ({ x: 0, y: 0, top: 0, bottom: 400, left: 0, right: 300, width: 300, height: 400, toJSON: () => ({}) }) as DOMRect;
+  row.dataset.dropField = '1';
+  row.innerHTML = '<input>';
+  row.getBoundingClientRect = () => ({ x: 0, y: 100, top: 100, bottom: 140, left: 0, right: 300, width: 300, height: 40, toJSON: () => ({}) }) as DOMRect;
+  page.append(row);
+  document.body.append(page);
+  vi.spyOn(document, 'elementFromPoint').mockImplementation((_x, y) => (y >= 100 && y < 140 ? row.firstElementChild : y >= 0 && y < 400 ? page : null));
+  expect(targetAt(5, 130, 'field')).toEqual({ page: 1, after: true });
+  expect(targetAt(5, 110, 'field')).toEqual({ page: 1, after: false });
+  expect(targetAt(5, 300, 'field')).toBeNull();
+  expect(targetAt(5, 130)).toEqual({ page: 0, after: false });
+  const drop = vi.fn();
+  render(createElement('button', {
+    type: 'button',
+    onPointerDown: (e: ReactPointerEvent) => startDrag(e, { kind: 'grip', targets: 'field', ghost: () => document.createElement('div'), onDrop: drop }),
+  }, 'grip'));
+  down(); move(10, 130);
+  expect([row.dataset.drop, page.dataset.drop]).toEqual(['after', undefined]);
+  up(10, 130);
+  expect(drop).toHaveBeenCalledWith({ page: 1, after: true });
+  expect(row.dataset.drop).toBeUndefined();
+});
+
+test('a field row is the one whose line the point is on, even where a later row’s part is on top there', () => {
+  // Two rows 15 px tall, and on top of both, and 6 px past them, a part of the second (a phone's 44 px square).
+  const grid = document.createElement('div');
+  const rows = [0, 1].map(i => {
+    const row = document.createElement('div');
+    row.dataset.dropField = String(i);
+    row.innerHTML = '<span></span>';
+    row.getBoundingClientRect = () => ({ x: 0, y: i * 15, top: i * 15, bottom: i * 15 + 15, left: 0, right: 300, width: 300, height: 15, toJSON: () => ({}) }) as DOMRect;
+    grid.append(row);
+    return row;
+  });
+  document.body.append(grid);
+  vi.spyOn(document, 'elementFromPoint').mockImplementation((_x, y) => (y >= -6 && y < 36 ? rows[1].firstElementChild : null));
+  expect(targetAt(5, 4, 'field')).toEqual({ page: 0, after: false });
+  expect(targetAt(5, 12, 'field')).toEqual({ page: 0, after: true });
+  expect(targetAt(5, 18, 'field')).toEqual({ page: 1, after: false });
+  expect(targetAt(5, -3, 'field')).toEqual({ page: 0, after: false }); // past the first line: the first row
+  expect(targetAt(5, 33, 'field')).toEqual({ page: 1, after: true }); // past the last: the last
+  expect(targetAt(5, 40, 'field')).toBeNull();
+  // A drag marks that row.
+  const drop = vi.fn();
+  render(createElement('button', {
+    type: 'button',
+    onPointerDown: (e: ReactPointerEvent) => startDrag(e, { kind: 'grip', targets: 'field', ghost: () => document.createElement('div'), onDrop: drop }),
+  }, 'grip'));
+  down(); move(10, 4);
+  expect(rows.map(r => r.dataset.drop)).toEqual(['before', undefined]);
+  up(10, 4);
+  expect(drop).toHaveBeenCalledWith({ page: 0, after: false });
+});
+
+/**
+ * Three field rows 40 px tall and 300 px wide (y 0–120), the grip in the first, a hint under them (y 120–160).
+ * With `sheet`, they are in a list that scrolls, from y `top` to `bottom` on the screen (Outline's phone sheet).
+ */
+function fieldRows(sheet?: { top: number; bottom: number }) {
+  const grid = document.createElement('div'), hint = document.createElement('p');
+  const rows = [0, 1, 2].map(i => {
+    const row = document.createElement('div');
+    row.dataset.dropField = String(i);
+    row.innerHTML = '<span></span>';
+    row.getBoundingClientRect = () => ({ x: 0, y: i * 40, top: i * 40, bottom: i * 40 + 40, left: 0, right: 300, width: 300, height: 40, toJSON: () => ({}) }) as DOMRect;
+    grid.append(row);
+    return row;
+  });
+  if (sheet) {
+    const list = document.createElement('div');
+    list.style.overflowY = 'auto';
+    Object.defineProperties(list, { scrollHeight: { value: 1000 }, clientHeight: { value: sheet.bottom - sheet.top } });
+    list.getBoundingClientRect = () => ({ x: 0, y: sheet.top, ...sheet, left: 0, right: 300, width: 300, height: sheet.bottom - sheet.top, toJSON: () => ({}) }) as DOMRect;
+    list.append(grid, hint);
+    document.body.append(list);
+  } else document.body.append(grid, hint);
+  vi.spyOn(document, 'elementFromPoint').mockImplementation((x, y) => (x < 0 || x > 300 ? null : y >= 0 && y < 120 ? rows[Math.floor(y / 40)].firstElementChild : y >= 120 && y < 160 ? hint : null));
+  const drop = vi.fn();
+  render(createElement('button', {
+    type: 'button',
+    onPointerDown: (e: ReactPointerEvent) => startDrag(e, { kind: 'grip', targets: 'field', ghost: () => document.createElement('div'), onDrop: drop }),
+  }, 'grip'), { container: rows[0] });
+  const marks = () => rows.map(r => r.dataset.drop);
+  return { drop, marks };
+}
+
+test('a field drag let go just past its header’s rows (up to 48 px above or below, over them sideways) drops on the end row there', () => {
+  const { drop, marks } = fieldRows();
+  down('touch', 10, 20); move(10, 132); // 12 px under the last row, on the hint
+  expect(marks()).toEqual([undefined, undefined, 'after']);
+  up(10, 132);
+  down('touch', 10, 20); move(10, 168); // 48 px under it
+  expect(marks()).toEqual([undefined, undefined, 'after']);
+  up(10, 168);
+  down('touch', 10, 20); move(10, -30); // 30 px above the first row
+  expect(marks()).toEqual(['before', undefined, undefined]);
+  up(10, -30);
+  expect(drop.mock.calls).toEqual([[{ page: 2, after: true }], [{ page: 2, after: true }], [{ page: 0, after: false }]]);
+});
+
+test('…but let go farther away, or beside the rows, it drops on nothing: never mind', () => {
+  const { drop, marks } = fieldRows();
+  down('touch', 10, 20); move(10, 132); move(10, 320); // 200 px under the last row
+  expect(marks()).toEqual([undefined, undefined, undefined]);
+  up(10, 320);
+  down('touch', 10, 20); move(10, 169); // just over 48 px under it
+  up(10, 169);
+  down('touch', 10, 20); move(10, 132); move(400, 132); // level with the rows, but beside them
+  expect(marks()).toEqual([undefined, undefined, undefined]);
+  up(400, 132);
+  down('touch', 10, 20); move(10, -49); // just over 48 px above the first row
+  up(10, -49);
+  expect(drop.mock.calls).toEqual([[null], [null], [null], [null]]);
+  // A grip outside any header's rows drops on nothing off them, near or not.
+  expect(targetAt(5, 132, 'field')).toBeNull();
+});
+
+test('held in the edge where a drag scrolls the list, a field drag keeps aiming where it last did, rows scrolled away or not', () => {
+  // (jsdom lays nothing out, so the scroller is the page: its edge is the last 48 px of the window's height.)
+  const { drop, marks } = fieldRows();
+  down('touch', 10, 20); move(10, 132); move(10, innerHeight - 8); // on past the end row, into the edge
+  expect(marks()).toEqual([undefined, undefined, 'after']);
+  up(10, innerHeight - 8);
+  down('touch', 10, 20); move(10, 132); move(10, 320); move(10, innerHeight - 8); // let go of first, far from the rows
+  expect(marks()).toEqual([undefined, undefined, undefined]);
+  up(10, innerHeight - 8);
+  expect(drop.mock.calls).toEqual([[{ page: 2, after: true }], [null]]);
+});
+
+test('…but let go past the edge, off the list that scrolls them (on the handwritten page above a phone’s sheet), it drops on nothing', () => {
+  const { drop, marks } = fieldRows({ top: -40, bottom: 400 }); // its edges are y -40 to 8, over the first row, and 352 to 400
+  down('touch', 10, 20); move(10, 100); move(10, 60); move(10, 5); // across the rows, up into the top edge
+  const inTop = marks();
+  move(10, -260); // on up, 220 px above the list
+  const above = marks();
+  up(10, -260);
+  down('touch', 10, 20); move(10, 100); move(10, 380); // into the bottom edge
+  const inBottom = marks();
+  move(10, 600); // on down, 200 px below the list
+  const below = marks();
+  up(10, 600);
+  expect([inTop, above, inBottom, below]).toEqual([
+    ['before', undefined, undefined], [undefined, undefined, undefined], [undefined, undefined, 'before'], [undefined, undefined, undefined],
+  ]);
+  expect(drop.mock.calls).toEqual([[null], [null]]);
+});
+
+test('of some rows, the one whose line a point is on, or the nearest', () => {
+  const rows = [0, 1, 3].map(top => ({ getBoundingClientRect: () => ({ top: top * 10, bottom: top * 10 + 10 }) as DOMRect }));
+  expect([-5, 0, 9, 10, 19.9, 22, 28, 35, 60].map(y => rows.indexOf(rowAt(rows, y)!))).toEqual([0, 0, 0, 1, 1, 1, 2, 2, 2]);
+  expect(rowAt([], 5)).toBeUndefined();
+  const flat = { getBoundingClientRect: () => ({ top: 0, bottom: 0 }) as DOMRect };
+  expect(rowAt([flat], 0)).toBeUndefined(); // no height: not laid out
+  expect(rowAt([flat, rows[1]], 0)).toBe(rows[1]);
+});
+
+test('a drag’s ghost shows its name, after a dot of its colour if it has one', () => {
+  const plain = dragGhost('Name'), dotted = dragGhost('Page 2', 'rgb(255, 0, 0)');
+  expect([plain.textContent, plain.children.length]).toEqual(['Name', 0]);
+  expect([dotted.textContent, (dotted.firstElementChild as HTMLElement).style.background]).toEqual(['Page 2', 'rgb(255, 0, 0)']);
 });
 
 /** A grip that starts a drag of `kind`, and what the drag told it. */

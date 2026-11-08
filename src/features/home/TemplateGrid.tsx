@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useHeaderDefault } from '@/features/doc/headerDefault';
 import { today } from '@/features/doc/model';
 import { PageThumb } from './PageThumb';
 import { TEMPLATES, openTemplate, templateRecord, type TemplateId } from './templates';
@@ -9,8 +10,9 @@ export function TemplateGrid() {
   const refocus = useRef<TemplateId | null>(null);
   const cards = useRef<Partial<Record<TemplateId, HTMLButtonElement | null>>>({});
   const day = today();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- the day is the only thing the records read from the clock
-  const records = useMemo(() => TEMPLATES.map(t => templateRecord(t, new Date(), i => `tpl-${t.id}-${i}`)), [day]);
+  const remembered = useHeaderDefault(s => s.fields); // the Assignment header starts from it
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the records read the day from the clock, and the remembered header from its store
+  const records = useMemo(() => TEMPLATES.map(t => templateRecord(t, new Date(), i => `tpl-${t.id}-${i}`)), [day, remembered]);
   const start = async (id: TemplateId) => {
     if (busy) return;
     setBusy(true);

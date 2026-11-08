@@ -1,30 +1,46 @@
 // The Import dialog's options: where it goes, the file's pages, a look drawn in its own hand, and a header block.
 import { useRef } from 'react';
 import { RadioGroup as RadioGroupPrimitive } from 'radix-ui';
-import type { HeaderFields, Settings } from '@/engine/types';
+import type { HeaderField, Settings } from '@/engine/types';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { today } from '@/features/doc/model';
+import { defaultHeaderFields } from '@/features/doc/headerDefault';
+import { listAdd, listMove, listRemove, listRename, listSetValue } from '@/features/doc/headerFields';
 import { HandSample, paperTint } from '@/features/style/HandSample';
 import { lookPatch, STYLE_LOOKS } from '@/features/style/looks';
 import { Group, Hint } from '@/features/style/parts';
 import { useStylePrefs } from '@/features/style/prefs';
+import { FieldEditor, type FieldOps } from '@/features/write/HeaderFields';
 import type { ImportOptionsValue, ImportTarget } from './options';
 
 const KEEP = 'keep';
-const FIELDS = [['name', 'Name'], ['class', 'Class'], ['date', 'Date']] as const;
 
 export function ImportOptions({ target, value, onChange, fileParts, base }: {
   target: ImportTarget; value: ImportOptionsValue; onChange(v: ImportOptionsValue): void; fileParts: number; base: Settings;
 }) {
   const saved = useStylePrefs(s => s.looks);
-  const typed = useRef<HeaderFields | null>(value.header);
+  // The latest options: what was drawn, then each change made since, so two changes in one moment (a name still being
+  // typed as its row goes, say) both count.
+  const live = useRef(value);
+  live.current = value;
+  const typed = useRef<HeaderField[] | null>(value.header);
   if (value.header) typed.current = value.header;
-  const set = (patch: Partial<ImportOptionsValue>) => onChange({ ...value, ...patch });
-  const setField = (k: (typeof FIELDS)[number][0], v: string) => set({ header: { ...value.header, [k]: v } });
-  const tickHeader = (on: boolean) => set({ header: on ? typed.current ?? { name: '', class: '', date: today() } : null });
+  const set = (patch: Partial<ImportOptionsValue>) => { live.current = { ...live.current, ...patch }; onChange(live.current); };
+  /** A change to the header to write: the latest header, changed (or null: nothing changes). */
+  const header = (fn: (h: HeaderField[]) => HeaderField[] | null) => {
+    const h = live.current.header, next = h && fn(h);
+    if (next) set({ header: next });
+    return next;
+  };
+  const ops: FieldOps = {
+    setValue: (id, v) => { header(h => listSetValue(h, id, v)); },
+    add: field => header(h => listAdd(h, field))?.at(-1)?.id ?? null,
+    rename: (id, label) => { header(h => listRename(h, id, label)); },
+    remove: id => { header(h => listRemove(h, id)?.list ?? null); },
+    move: (id, to) => { header(h => listMove(h, id, to)); },
+  };
+  const tickHeader = (on: boolean) => set({ header: on ? typed.current ?? defaultHeaderFields() : null });
 
   const cards = [...STYLE_LOOKS, ...saved].map(look => ({ id: look.id, name: look.name, paper: look.v.paper ?? base.paper, settings: { ...base, ...lookPatch(look, false) } }));
   if (target === 'open') cards.unshift({ id: KEEP, name: 'Keep this document’s look', paper: base.paper, settings: base });
@@ -68,14 +84,7 @@ export function ImportOptions({ target, value, onChange, fileParts, base }: {
           </Label>
           {value.header && (
             <>
-              <div className="mt-3 grid gap-3">
-                {FIELDS.map(([k, label]) => (
-                  <div key={k} className="grid gap-1.5">
-                    <Label htmlFor={`import-header-${k}`}>{label}</Label>
-                    <Input id={`import-header-${k}`} value={value.header?.[k] ?? ''} maxLength={80} autoComplete="off" onChange={e => setField(k, e.target.value)} />
-                  </div>
-                ))}
-              </div>
+              <div className="mt-3"><FieldEditor fields={value.header} ops={ops} /></div>
               <Hint>At the top right of page 1.</Hint>
             </>
           )}

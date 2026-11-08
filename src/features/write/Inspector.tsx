@@ -86,7 +86,7 @@ function Body({ boxId, layout }: { boxId: string; layout: PageLayout | null }) {
       {kind === 'header' ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3.5 pb-5">
           <HeaderFields boxId={boxId} />
-          <p className="mt-3 text-[13px] text-muted">New documents fill in today’s date. Add Subject or Roll no. from ⋯.</p>
+          <p className="mt-3 text-[13px] text-muted">New documents fill in today’s date.</p>
         </div>
       ) : (
         <>

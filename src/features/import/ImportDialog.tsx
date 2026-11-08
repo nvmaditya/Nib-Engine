@@ -215,6 +215,8 @@ function ImportPanel({ file, target, onClose, stopFocus }: { file: File | null; 
         if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[contenteditable="true"]')) return;
         if (!focusOn(opener)) focusInstead();
       }}
+      // Esc in a header field's name is the name's (it puts the old one back): Radix hears it first, on its way down.
+      onEscapeKeyDown={e => { if (e.target instanceof Element && e.target.closest('[data-field-name]')) e.preventDefault(); }}
       onKeyDown={keepUndo}
       onDragOver={e => { e.preventDefault(); if (!busy) setOver(true); }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}

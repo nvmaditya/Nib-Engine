@@ -5,7 +5,7 @@ import { cleanSettings } from '@/engine/doc.js';
 import type { Box, EngineDoc, Layout } from '@/engine/types';
 import { STYLE_LOOKS } from '@/features/style/looks';
 import type { SavedLook } from '@/features/style/prefs';
-import { box, docOf, get, layoutOf, lines, open } from '@/test/docs';
+import { box, docOf, fieldsOf, get, layoutOf, lines, open } from '@/test/docs';
 import { geomFor, headerBlock, importInto, newDocument, withLook } from './build';
 import { fieldValue, newBlock, setHeaderField } from './model';
 
@@ -18,25 +18,33 @@ test('a new document is one main block, from the top line of page 1', () => {
 });
 
 test('with a header, Name, Class and Date sit at the top right of page 1 and the main block starts on the line below them', () => {
-  const d = newDocument(S, 'Hello', { name: 'Asha', class: '8-B', date: '7 November 2026' });
+  const given = fieldsOf({ name: 'Asha', class: '8-B', date: '7 November 2026' }), d = newDocument(S, 'Hello', given);
   expect(d.boxes.map(b => [b.kind, b.name, b.color, b.page, b.x, b.y, b.w])).toEqual([['header', 'Header', 0, 0, 446, 76, 320], ['text', 'Main text', 1, 0, 112, 178, 630]]);
-  expect([d.boxes[0].fields, d.boxes[0].text]).toEqual([{ name: 'Asha', class: '8-B', date: '7 November 2026' }, 'Name: Asha\nClass: 8-B\nDate: 7 November 2026']);
+  expect([d.boxes[0].fields, d.boxes[0].text]).toEqual([given, 'Name: Asha\nClass: 8-B\nDate: 7 November 2026']);
   expect(layoutOf(d, S).segs.some(s => s.pushed)).toBe(false);
 });
 
-test('a header’s values are one line each, of at most 80 characters', () => {
-  const h = headerBlock(docOf(), S, { name: 'Asha\nK', class: 'x'.repeat(90), date: '' });
-  expect([h.fields, h.text]).toEqual([{ name: 'Asha K', class: 'x'.repeat(80), date: '' }, `Name: Asha K\nClass: ${'x'.repeat(80)}\nDate:`]);
+test('a header’s labels and values are one line each, of at most 30 and 80 characters, and it holds at most 12', () => {
+  const h = headerBlock(docOf(), S, [
+    { id: 'name', label: 'Name', value: 'Asha\nK' }, { id: 'class', label: ' Class\r\n', value: 'x'.repeat(90) }, { id: 'date', label: 'Date', value: '', today: true },
+  ]);
+  expect([h.fields, h.text]).toEqual([
+    [{ id: 'name', label: 'Name', value: 'Asha K' }, { id: 'class', label: 'Class', value: 'x'.repeat(80) }, { id: 'date', label: 'Date', value: '', today: true }],
+    `Name: Asha K\nClass: ${'x'.repeat(80)}\nDate:`,
+  ]);
+  const many = Array.from({ length: 13 }, (_, i) => ({ id: 'x' + i, label: 'L'.repeat(40), value: '' }));
+  expect(headerBlock(docOf(), S, many).fields).toEqual(many.slice(0, 12).map(f => ({ ...f, label: 'L'.repeat(30) })));
 });
 
 test('a header block from an import writes each value as typing into its field does', () => {
-  const v = 'Asha\r\nK ' + 'x'.repeat(90), h = headerBlock(docOf(), S, { name: v }), typed = box({ kind: 'header', fields: {} });
+  const v = 'Asha\r\nK ' + 'x'.repeat(90), h = headerBlock(docOf(), S, [{ id: 'name', label: 'Name', value: v }]);
+  const typed = box({ kind: 'header', fields: [{ id: 'name', label: 'Name', value: '' }] });
   setHeaderField(typed, 'name', v);
-  expect(h.fields!.name).toBe(fieldValue(v)); expect(h.fields).toEqual(typed.fields);
+  expect(h.fields![0].value).toBe(fieldValue(v)); expect(h.fields).toEqual(typed.fields);
 });
 
 test('a long import is one block that flows page by page, nothing pushed', () => {
-  const d = newDocument(S, lines(600), { name: '', class: '', date: 'x' }), L = layoutOf(d, S), main = partsOf(L, d.boxes[1].id);
+  const d = newDocument(S, lines(600), fieldsOf({ name: '', class: '', date: 'x' })), L = layoutOf(d, S), main = partsOf(L, d.boxes[1].id);
   expect(main.length).toBeGreaterThan(15); expect(main).toEqual(main.map((_, i) => [i, i])); expect(L.segs.some(s => s.pushed)).toBe(false);
 });
 
@@ -57,14 +65,14 @@ test('the builders measure with the settings given, and leave the engine on the 
 });
 
 const withHeader = () => docOf(
-  box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields: { name: 'A', class: 'B', subject: 'Maths', date: 'C' }, text: 'Name: A\nClass: B\nSubject: Maths\nDate: C' }),
+  box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields: fieldsOf({ name: 'A', class: 'B', subject: 'Maths', date: 'C' }), text: 'Name: A\nClass: B\nSubject: Maths\nDate: C' }),
   box({ id: 'm', name: 'Main text', color: 1, y: 212, text: lines(40) }), box({ id: 'n', kind: 'note', name: 'Margin note', color: 2, page: 1, x: 520, w: 220, text: 'note' }));
 
 test('Replace: the file’s text becomes the main text, and the header stays only if asked for, with the fields given', () => {
   const d = { ...withHeader(), fileName: 'week 1' }, given = JSON.stringify(d);
-  const r = importInto(S, d, 'New', { where: 'replace', look: null, header: { name: 'Asha', class: 'B', subject: 'Maths', date: 'C' } });
+  const r = importInto(S, d, 'New', { where: 'replace', look: null, header: fieldsOf({ name: 'Asha', class: 'B', subject: 'Maths', date: 'C' }) });
   expect(r.doc.boxes.map(b => [b.id === 'h', b.kind, b.name])).toEqual([[true, 'header', 'Header'], [false, 'text', 'Main text']]);
-  expect(r.doc.boxes[0].fields).toEqual({ name: 'Asha', class: 'B', subject: 'Maths', date: 'C' });
+  expect(r.doc.boxes[0].fields).toEqual(fieldsOf({ name: 'Asha', class: 'B', subject: 'Maths', date: 'C' }));
   expect(r.doc.boxes[1]).toMatchObject({ y: 76 + 4 * 34, text: 'New', color: 1 });
   expect([r.doc.pageCount, r.doc.fileName, r.firstPage, r.joined, r.target]).toEqual([1, 'week 1', 0, false, r.doc.boxes[1]]);
   expect(importInto(S, d, 'New', { where: 'replace', look: null, header: null }).doc.boxes.map(b => [b.kind, b.y])).toEqual([['text', 76]]);
@@ -72,7 +80,7 @@ test('Replace: the file’s text becomes the main text, and the header stays onl
 });
 
 test('Replace with a header in a document that has none puts a new one at the top right of page 1', () => {
-  const r = importInto(S, docOf(box({ id: 'm', text: 'old' })), 'New', { where: 'replace', look: null, header: { name: 'Asha', class: '', date: 'C' } });
+  const r = importInto(S, docOf(box({ id: 'm', text: 'old' })), 'New', { where: 'replace', look: null, header: fieldsOf({ name: 'Asha', class: '', date: 'C' }) });
   expect(r.doc.boxes.map(b => [b.kind, b.color, b.page, b.x, b.y, b.w])).toEqual([['header', 0, 0, 446, 76, 320], ['text', 1, 0, 112, 178, 630]]);
 });
 
@@ -149,6 +157,6 @@ test('…but with a margin note beside or below it, the text is a block of its o
   expect(at(L)).toEqual(before); expect(L.segs.some(s => s.pushed)).toBe(false);
 });
 
-test('Add after the last page takes no header, and brings the look', () => { const r = importInto(S, docOf(box({ id: 'm', text: 'a' })), 'x', { where: 'append', look: journal, header: { name: 'A', class: '', date: '' } }); expect([r.doc.boxes.map(b => b.kind), r.S.font]).toEqual([['text'], 'caveat']); });
+test('Add after the last page takes no header, and brings the look', () => { const r = importInto(S, docOf(box({ id: 'm', text: 'a' })), 'x', { where: 'append', look: journal, header: fieldsOf({ name: 'A', class: '', date: '' }) }); expect([r.doc.boxes.map(b => b.kind), r.S.font]).toEqual([['text'], 'caveat']); });
 
 test('a long import added after the last page pushes nothing', () => { const d = withHeader(); d.boxes.pop(); /* not the margin note, which Main text's page 2 part already pushes */ const r = append(d, lines(600)); const L = layoutOf(r.doc, r.S); expect(L.segs.some(s => s.pushed)).toBe(false); const m = partsOf(L, 'm'); expect(m).toEqual(m.map((_, i) => [i, i])); });

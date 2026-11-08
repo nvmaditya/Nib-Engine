@@ -13,13 +13,21 @@ export interface Settings {
 export interface FrameRect { x?: number; y?: number; w?: number }
 
 export type BlockKind = 'text' | 'header' | 'note';
+/** The fixed fields' keys before schema 4 (converting only). */
 export type HeaderKey = 'name' | 'class' | 'subject' | 'roll' | 'date';
-export type HeaderFields = Partial<Record<HeaderKey, string>>;
+/**
+ * One line of a header, `Label: value`. `id` is unique within the header. `today` marks a date field: a new header
+ * starts it as today's date, and afterwards its value is ordinary text.
+ */
+export interface HeaderField { id: string; label: string; value: string; today?: true }
 
 export interface Box {
   id: string; page: number; x: number; y: number; w: number; text: string;
   style: Partial<Settings>; shuffle: number; frames: Record<number, FrameRect>;
-  kind: BlockKind; name: string; color: number; fields?: HeaderFields; from?: string;
+  kind: BlockKind; name: string; color: number;
+  /** A header's fields, in the order it writes them (1–12). */
+  fields?: HeaderField[];
+  from?: string;
   /** What Split took out between this block and the one it came from (blank lines, `\\newpage` lines); Join back puts it back. */
   fromSep?: string;
 }

@@ -4,10 +4,11 @@ import { toast as sonner } from 'sonner';
 import { afterAll, beforeEach, expect, test, vi } from 'vitest';
 import { parseHash } from '@/app/route';
 import type { ImportPlace } from '@/features/doc/build';
+import { flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { STYLE_LOOKS } from '@/features/style/looks';
 import { createDoc, getDoc } from '@/store/documents';
 import { flushSave, openDocument, redo, undo } from '@/store/editor';
-import { box, docOf, fontsLoad, get, lastToast, lastToastAction, lines, open, rec } from '@/test/docs';
+import { box, docOf, fieldsOf, fontsLoad, get, lastToast, lastToastAction, lines, open, rec } from '@/test/docs';
 import { importAsNewDocument, importIntoOpenDocument, type ImportRequest } from './apply';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }) }));
@@ -17,8 +18,8 @@ vi.mock('@/store/documents', async importOriginal => {
 });
 
 fontsLoad();
-beforeEach(async () => { await flushSave(); vi.mocked(sonner).mockClear(); });
-afterAll(async () => { await flushSave(); vi.unstubAllGlobals(); });
+beforeEach(async () => { await flushSave(); await flushHeaderDefault(); useHeaderDefault.setState({ fields: null }); vi.mocked(sonner).mockClear(); });
+afterAll(async () => { await flushSave(); await flushHeaderDefault(); vi.unstubAllGlobals(); });
 
 const journal = STYLE_LOOKS.find(l => l.id === 'journal')!;
 const req = (p: Partial<ImportPlace> = {}, text = '# Essay\nHello'): ImportRequest => ({ text, name: 'Essay', place: { where: 'replace', look: null, header: null, ...p } });
@@ -68,7 +69,7 @@ test('…however its blocks were written: two imports, Ctrl+Z, then the second o
 
 test('as a new document: opened on Write, named after the file, with its look and header, and nothing to undo', async () => {
   location.hash = '#/'; const notes = STYLE_LOOKS.find(l => l.id === 'notes')!;
-  expect(await importAsNewDocument(req({ look: notes, header: { name: 'Asha', class: '', date: '7 November 2026' } }))).toBe(true);
+  expect(await importAsNewDocument(req({ look: notes, header: fieldsOf({ name: 'Asha', class: '', date: '7 November 2026' }) }))).toBe(true);
   expect(parseHash(location.hash)).toMatchObject({ name: 'doc', stage: 'write' });
   expect([get().title, get().S.font, get().S.paper, get().doc.boxes.map(b => b.kind), get().canUndo]).toEqual(['Essay', 'patrick', 'ruled', ['header', 'text'], false]);
   expect((await getDoc(get().docId!))?.doc.boxes[1].text).toBe('# Essay\nHello'); expect(lastToast()).toBe('Written out. Each page’s part can be moved, resized, edited or split off on its own.');
@@ -79,4 +80,16 @@ test('a file with no name of its own makes an Untitled document', async () => { 
 test('when this device can’t store documents, it says so and nothing opens', async () => {
   location.hash = '#/'; vi.mocked(createDoc).mockRejectedValueOnce(new Error('blocked'));
   expect(await importAsNewDocument(req())).toBe(false); expect([lastToast(), location.hash]).toEqual(['Nib can’t create documents on this device right now.', '#/']);
+});
+
+test('a header written out is the one new headers start from; Add after, no header, or a document not made remember nothing', async () => {
+  const remembered = () => useHeaderDefault.getState().fields?.map(f => [f.label, f.value]) ?? null;
+  const mine = fieldsOf({ name: 'Mine', class: '7B', date: '1 May 2026' });
+  open(docOf(box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields: mine }), box({ id: 'm', text: 'old', y: 178 })));
+  importIntoOpenDocument(req({ where: 'append', header: fieldsOf({ name: 'Ravi' }) })); expect(remembered()).toBeNull();
+  importIntoOpenDocument(req()); expect(remembered()).toBeNull();
+  location.hash = '#/'; vi.mocked(createDoc).mockRejectedValueOnce(new Error('blocked'));
+  expect(await importAsNewDocument(req({ header: fieldsOf({ name: 'Asha' }) }))).toBe(false); expect(remembered()).toBeNull();
+  importIntoOpenDocument(req({ header: fieldsOf({ name: 'Ravi', subject: 'Art' }) })); expect(remembered()).toEqual([['Name', 'Ravi'], ['Subject', 'Art']]);
+  expect(await importAsNewDocument(req({ header: [{ id: 'x', label: 'Section', value: 'B' }] }))).toBe(true); expect(remembered()).toEqual([['Section', 'B']]);
 });
