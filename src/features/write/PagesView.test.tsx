@@ -10,12 +10,11 @@ import { cleanSettings, sampleDoc } from '@/engine/doc.js';
 import type { EngineDoc } from '@/engine/types';
 import { App } from '@/app/App';
 import { addPageAt, deleteBlock, deletePageAt, select, splitAt } from '@/features/doc/actions';
-import { HEADER_DEFAULT, flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { layoutFor } from '@/features/doc/model';
 import { offsetAt } from '@/features/editor/positions';
-import { createDoc, setPref } from '@/store/documents';
+import { createDoc } from '@/store/documents';
 import { flushSave, update } from '@/store/editor';
-import { box, docOf, fieldsOf, fontsLoad, get, lines, words } from '@/test/docs';
+import { box, docOf, fieldsOf, fontsLoad, forgetHeader, get, lines, words } from '@/test/docs';
 
 vi.mock('@/store/documents', async orig => ({ ...(await orig<typeof import('@/store/documents')>()), putDoc: vi.fn(async () => {}) }));
 
@@ -331,13 +330,6 @@ test('a header on two pages shows its fields once, on its first part', async () 
 });
 
 const hdr = () => box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }) });
-/** The header a test changed is forgotten, here and on the device, so the next test's new headers start from Name, Class and Date. */
-async function forgetHeader(): Promise<void> {
-  await flushHeaderDefault();
-  await setPref(HEADER_DEFAULT, null);
-  useHeaderDefault.setState({ fields: null });
-}
-
 test('a field added on the typed page is a line on the handwritten page', async () => {
   try {
     await openWrite(docOf(hdr(), m('words', { y: 246 })));

@@ -62,13 +62,19 @@ export function rowAt<T extends Pick<Element, 'getBoundingClientRect'>>(rows: It
   return near;
 }
 
-function hit(x: number, y: number, targets: DropTargets): { el: HTMLElement; t: DropTarget } | null {
+/**
+ * The target under a point. For field rows, `own` is the rows of the header being dragged in: a point off every
+ * header's rows (past its last row, on its Add field, or where a drag into the edge scrolled the rows away) is for
+ * the end row of those.
+ */
+function hit(x: number, y: number, targets: DropTargets, own: HTMLElement | null = null): { el: HTMLElement; t: DropTarget } | null {
   const at = document.elementFromPoint(x, y);
   let el = at instanceof Element ? at.closest<HTMLElement>(targets === 'field' ? '[data-drop-field]' : '[data-drop-page]') : null;
   // On a phone's typed page a header's rows are closer together than the 44 px squares their grips are pressed in,
   // and a later row's square is on top over the line before it: the row is the one whose line the point is on.
-  if (el && targets === 'field' && el.parentElement) {
-    el = rowAt([...el.parentElement.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.dataset.dropField !== undefined), y) ?? el;
+  const rows = targets === 'field' ? (el?.parentElement ?? own) : null;
+  if (rows) {
+    el = rowAt([...rows.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.dataset.dropField !== undefined), y) ?? el;
   }
   const page = el ? Number(targets === 'field' ? el.dataset.dropField : el.dataset.dropPage) : NaN;
   if (!el || !Number.isInteger(page)) return null;
@@ -160,6 +166,8 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
   if (busy || (touch && !e.isPrimary) || (e.pointerType === 'mouse' && e.button !== 0)) return; // one finger, the main button
   busy = true;
   const src = e.currentTarget as HTMLElement, id = e.pointerId, targets = opts.targets ?? 'page';
+  // A field row's grip: the rows of its own header, which a drop off every header's rows falls back to.
+  const own = targets === 'field' ? src.closest<HTMLElement>('[data-drop-field]')?.parentElement ?? null : null;
   const x0 = e.clientX, y0 = e.clientY, t0 = performance.now(), g = gate(opts.kind, e.pointerType);
   const body = document.body, bodyStyle = { userSelect: body.style.userSelect, cursor: body.style.cursor };
   let x = x0, y = y0, active = false, raf = 0;
@@ -168,7 +176,7 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
 
   const place = () => { if (ghost) ghost.style.transform = `translate3d(${x + 12}px, ${y + 12}px, 0)`; };
   const retarget = () => {
-    const h = hit(x, y, targets), t = h?.t ?? null;
+    const h = hit(x, y, targets, own), t = h?.t ?? null;
     const mark = !h ? null : opts.kind === 'item' ? 'on' : h.t.after ? 'after' : 'before';
     if (marked && (marked !== h?.el || marked.dataset.drop !== mark)) delete marked.dataset.drop;
     marked = h?.el ?? null;
@@ -218,7 +226,7 @@ export function startDrag(e: ReactPointerEvent, opts: DragOptions): void {
     if (ev.pointerId !== id) return;
     const was = active;
     x = ev.clientX; y = ev.clientY;
-    const t = was ? targetAt(x, y, targets) : null;
+    const t = was ? hit(x, y, targets, own)?.t ?? null : null;
     end();
     if (!was) return;
     swallowClick();

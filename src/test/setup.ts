@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
+import { cleanup } from '@testing-library/react';
 import { encodeCanvas } from './images';
 import { answer } from './media';
 
@@ -67,4 +68,15 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
 // clears this to show them; a test that clears localStorage itself sets it again.
 beforeEach(() => {
   try { localStorage.setItem('nib.tips', 'seen'); } catch { /* a test's own blocked storage */ }
+});
+
+// Some libraries start a timer as they unmount and never clear it: sonner removes a toast 200 ms after it goes, and
+// TipTap destroys its editor a moment after its component goes. Once a file's tests end, jsdom is taken down, and a
+// timer that fires after that throws (`window is not defined`), failing the run though every test passed. So each
+// file ends by unmounting what is still drawn and waiting for those timers (with real ones, whatever a test left).
+// This runs after the file's own afterAll hooks.
+afterAll(async () => {
+  cleanup();
+  vi.useRealTimers();
+  await new Promise(r => setTimeout(r, 250));
 });

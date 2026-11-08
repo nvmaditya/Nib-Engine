@@ -90,6 +90,13 @@ test('a name being typed when Add after hides the header is kept, and Add after 
   expect(screen.queryByRole('textbox', { name: 'Field name' })).toBeNull();
   expect([value.where, value.header!.map(f => f.label)]).toEqual(['append', ['Name', 'Section', 'Date']]);
 });
+test('a name being typed when Add a header block is unticked leaves the header off: it doesn’t come back', async () => {
+  render(<Harness target="new" />); const tick = screen.getByRole('checkbox', { name: 'Add a header block' }); await userEvent.click(tick);
+  await userEvent.click(screen.getByRole('button', { name: 'Rename “Class”' })); await userEvent.keyboard('Section');
+  fireEvent.click(tick); // (a click that doesn't move the focus first: the name goes with the header, still being typed)
+  expect(screen.queryByRole('textbox', { name: 'Field name' })).toBeNull();
+  expect(value.header).toBeNull(); expect(screen.getByRole('checkbox', { name: 'Add a header block' })).not.toBeChecked();
+});
 test('an open document with a header starts with it, fields and all', () => {
   open(docOf(box({ kind: 'header', name: 'Header', fields: fieldsOf({ name: 'Ravi', class: '9', subject: 'Art', date: '1 May 2026' }), text: 'x' }))); render(<Harness target="open" />);
   expect(screen.getByRole('checkbox', { name: 'Add a header block' })).toBeChecked(); expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Ravi');

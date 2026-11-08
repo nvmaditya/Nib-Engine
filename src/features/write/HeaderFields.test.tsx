@@ -408,6 +408,25 @@ test('the squares are only clipped on the typed page', () => {
   expect(document.querySelector('[data-drop-field]')!.parentElement).not.toHaveClass('[clip-path:inset(-3px_-24px)]');
 });
 
+test('a long label is cut short with an ellipsis, its full name its title; on the typed page the value keeps at least 55% of the row', () => {
+  const long = 'Registration number for school'; // 30 characters, the most a label holds
+  for (const compact of [false, true]) {
+    const { unmount } = render(<Harness start={F(long, 'Name')} compact={compact} />);
+    const label = button(`Rename “${long}”`); // (the name it is pressed by is unchanged)
+    expect(label).toHaveTextContent(long);
+    expect(label).toHaveAttribute('title', long);
+    expect(label).toHaveClass('min-w-0', 'truncate');
+    unmount();
+  }
+  // On the typed page the label column is at most 45% of what the label and the value share: the row less the grip,
+  // the ⋯ (1em each) and the three gaps between the four columns (0.4em each).
+  render(<Harness start={F(long, 'Name')} compact />);
+  const grid = document.querySelector('[data-drop-field]')!.parentElement!;
+  expect(grid).toHaveClass('grid-cols-[auto_fit-content(calc((100%_-_3.2em)*0.45))_minmax(0,1fr)_auto]', 'gap-x-[0.4em]');
+  expect(screen.getByRole('img', { name: `Move “${long}”` })).toHaveClass('size-[1em]');
+  expect(button(`More for “${long}”`)).toHaveClass('size-[1em]');
+});
+
 test('compact: Add field sits just under the fields, shown while they have the focus or the pointer, or the header is selected', () => {
   const { container } = render(<Harness start={F('Name', 'Class')} compact />);
   expect(container.firstElementChild).toHaveClass('relative', 'group/fields');

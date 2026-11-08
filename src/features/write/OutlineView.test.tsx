@@ -9,11 +9,10 @@ import { toast as sonner } from 'sonner';
 import { App } from '@/app/App';
 import type { Box, EngineDoc } from '@/engine/types';
 import { deleteBlock, deletePageAt, removePart, select, splitAt } from '@/features/doc/actions';
-import { HEADER_DEFAULT, flushHeaderDefault, useHeaderDefault } from '@/features/doc/headerDefault';
 import { offsetAt } from '@/features/editor/positions';
-import { createDoc, setPref } from '@/store/documents';
+import { createDoc } from '@/store/documents';
 import { flushSave, placeCaret, undo } from '@/store/editor';
-import { box, docOf, fieldsOf, get, lastToast, lines, words } from '@/test/docs';
+import { box, docOf, fieldsOf, forgetHeader, get, lastToast, lines, words } from '@/test/docs';
 import { OUTLINE_PEEK } from './OutlineView';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn() }), Toaster: () => null }));
@@ -46,13 +45,6 @@ async function outline(doc: EngineDoc): Promise<HTMLElement> {
   render(<App />);
   await within(await screen.findByRole('region', { name: 'Outline' })).findByText('Page 1');
   return ol();
-}
-
-/** The header this test changed is forgotten, here and on the device, so the next test's new headers start from Name, Class and Date. */
-async function forgetHeader(): Promise<void> {
-  await flushHeaderDefault();
-  await setPref(HEADER_DEFAULT, null);
-  useHeaderDefault.setState({ fields: null });
 }
 
 const mouse = { pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };

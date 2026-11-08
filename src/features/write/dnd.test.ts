@@ -104,6 +104,38 @@ test('a field row is the one whose line the point is on, even where a later row�
   expect(drop).toHaveBeenCalledWith({ page: 0, after: false });
 });
 
+test('a field drag ending past its own header’s rows (on the hint under them, or where the list scrolled away) drops on the end row there', () => {
+  // Three rows 40 px tall, the dragged row's grip in the first; a hint under them (y 120–160); nothing beyond.
+  const grid = document.createElement('div'), hint = document.createElement('p');
+  const rows = [0, 1, 2].map(i => {
+    const row = document.createElement('div');
+    row.dataset.dropField = String(i);
+    row.innerHTML = '<span></span>';
+    row.getBoundingClientRect = () => ({ x: 0, y: i * 40, top: i * 40, bottom: i * 40 + 40, left: 0, right: 300, width: 300, height: 40, toJSON: () => ({}) }) as DOMRect;
+    grid.append(row);
+    return row;
+  });
+  document.body.append(grid, hint);
+  vi.spyOn(document, 'elementFromPoint').mockImplementation((_x, y) => (y >= 0 && y < 120 ? rows[Math.floor(y / 40)].firstElementChild : y >= 120 && y < 160 ? hint : null));
+  const drop = vi.fn();
+  render(createElement('button', {
+    type: 'button',
+    onPointerDown: (e: ReactPointerEvent) => startDrag(e, { kind: 'grip', targets: 'field', ghost: () => document.createElement('div'), onDrop: drop }),
+  }, 'grip'), { container: rows[0] });
+  down('touch', 10, 20); move(10, 132);
+  expect(rows.map(r => r.dataset.drop)).toEqual([undefined, undefined, 'after']);
+  up(10, 132);
+  down('touch', 10, 20); move(10, 90); move(10, 600); // into the edge: the list scrolled, nothing under the finger
+  expect(rows.map(r => r.dataset.drop)).toEqual([undefined, undefined, 'after']);
+  up(10, 600);
+  down('touch', 10, 20); move(10, -30); // above the first row: the first row
+  expect(rows.map(r => r.dataset.drop)).toEqual(['before', undefined, undefined]);
+  up(10, -30);
+  expect(drop.mock.calls).toEqual([[{ page: 2, after: true }], [{ page: 2, after: true }], [{ page: 0, after: false }]]);
+  // A grip outside any header's rows still drops on nothing there.
+  expect(targetAt(5, 600, 'field')).toBeNull();
+});
+
 test('of some rows, the one whose line a point is on, or the nearest', () => {
   const rows = [0, 1, 3].map(top => ({ getBoundingClientRect: () => ({ top: top * 10, bottom: top * 10 + 10 }) as DOMRect }));
   expect([-5, 0, 9, 10, 19.9, 22, 28, 35, 60].map(y => rows.indexOf(rowAt(rows, y)!))).toEqual([0, 0, 0, 1, 1, 1, 2, 2, 2]);

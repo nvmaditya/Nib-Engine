@@ -63,6 +63,12 @@ const COMPACT_INPUT = 'h-auto rounded-sm border-0 border-b border-line bg-transp
 const COMPACT_HIT = 'relative before:absolute before:top-1/2 before:left-1/2 before:size-11 before:-translate-x-1/2 before:-translate-y-1/2 wide:before:hidden';
 /** The squares stop 3 px past the first and last lines (room for the focus rings), and well past the sides. */
 const COMPACT_CLIP = '[clip-path:inset(-3px_-24px)]';
+/**
+ * The typed page's columns: grip, label, value, ⋯. The label column takes at most 45% of what the label and the value
+ * share (the row less the grip and the ⋯, 1em each, and the three 0.4em gaps), so the value always keeps 55% of it;
+ * a longer label is cut short with an ellipsis.
+ */
+const COMPACT_COLS = 'grid-cols-[auto_fit-content(calc((100%_-_3.2em)*0.45))_minmax(0,1fr)_auto] gap-x-[0.4em]';
 /** On the typed page, the label, name and value are above those squares: a press on them is theirs. */
 const OVER_SQUARES = 'relative z-[1]';
 /** On the typed page, the grip and the ⋯ show while their row has the pointer or the focus, and always where there is no hover. */
@@ -196,7 +202,7 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
 
   return (
     <div ref={root} className="group/fields relative">
-      <div className={cn('grid items-center', compact ? cn('grid-cols-[auto_fit-content(45%)_minmax(0,1fr)_auto] gap-x-[0.4em]', COMPACT_CLIP) : 'grid-cols-[auto_fit-content(40%)_minmax(0,1fr)_auto] gap-x-3 gap-y-2')}>
+      <div className={cn('grid items-center', compact ? cn(COMPACT_COLS, COMPACT_CLIP) : 'grid-cols-[auto_fit-content(40%)_minmax(0,1fr)_auto] gap-x-3 gap-y-2')}>
         {fields.map((f, i) => (
           <div key={f.id} data-drop-field={i} className={cn('group/row col-span-full grid grid-cols-subgrid items-center', compact ? 'h-lh' : 'rounded-md', dropClass)}>
             <span role="img" aria-label={`Move “${f.label}”`} data-vaul-no-drag="" onPointerDown={e => drag(e, f)}
@@ -209,7 +215,7 @@ export function FieldEditor({ fields, ops, compact = false }: { fields: HeaderFi
               <NameInput id={f.id} label={f.label} compact={compact} has={() => latest.current.some(x => x.id === f.id)}
                 end={(draft, back) => endName(f.id, draft, back)} />
             ) : (
-              <button type="button" aria-label={`Rename “${f.label}”`} data-field-label={f.id} onClick={() => openName(f.id, false)}
+              <button type="button" aria-label={`Rename “${f.label}”`} title={f.label} data-field-label={f.id} onClick={() => openName(f.id, false)}
                 className={cn('min-w-0 cursor-text truncate rounded-sm text-left text-muted hover:text-fg', ring,
                   compact ? cn('leading-[inherit]', OVER_SQUARES) : '-mx-1 px-1 py-1 text-[13px] font-medium hover:bg-surface-2')}>
                 {f.label}
