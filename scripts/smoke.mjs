@@ -1,8 +1,8 @@
 // Smoke run: build, serve with `vite preview` at /nib-engine/ (where GitHub Pages serves it), and drive the real app in
 // Chromium through Home, Write, Style and Export, then Home, the templates and Import (reading the downloaded PDF and ZIP
-// byte by byte), then the shortcut sheet, the palette, the theme, the tips, every stage at 390 and 320 px, a new version
-// in two tabs, and installing and working offline with the server stopped. Prints "smoke ok" and exits 0, or exits 1 on
-// any failure or console error.
+// byte by byte), a header's fields, then the shortcut sheet, the palette, the theme, the tips, every stage at 390 and
+// 320 px, a header's fields at 390 px, a new version in two tabs, and installing and working offline with the server
+// stopped. Prints "smoke ok" and exits 0, or exits 1 on any failure or console error.
 // Uses the Playwright that is installed on the machine (it is not a project dependency).
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
@@ -14,6 +14,7 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { essayDocx, textPdf, RIVERS_PAGES } from './fixtures.mjs';
+import { PAGE_W, SAMPLE_HEAD } from '../src/engine/config.js';
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -566,6 +567,100 @@ async function main() {
       await dialog.waitFor({ state: 'hidden', timeout: 5000 });
     });
 
+    // ---- Custom header fields ----
+    /** A header's frame (its first part) on the handwritten page of the stage on screen. */
+    const frame = (p, id) => p.locator(`[data-stage]:not([hidden]) .block-frame[data-id="${id}:0"]`);
+    const heightOf = async loc => (await loc.boundingBox())?.height ?? 0;
+    /**
+     * One ruled line of the page `fr` is on, in px: the document's line spacing at the page's scale. (A frame is a
+     * little taller than its lines, so a third of a three-line header's frame is up to 2 px more than a line.)
+     */
+    const lineOf = async (fr, gap) => gap * (await fr.evaluate(el => el.parentElement.getBoundingClientRect().width)) / PAGE_W;
+    /** Wait for `check()` to come true, polling; fail with `why()` after `ms`. */
+    const until = async (check, why, ms = 10000) => {
+      for (const end = Date.now() + ms; !(await check());) {
+        if (Date.now() > end) fail(await why());
+        await new Promise(r => setTimeout(r, 100));
+      }
+    };
+    /** The stored header text of document `id`. */
+    const headerText = async id => (await idbDocs()).find(d => d.id === id)?.doc.boxes.find(b => b.kind === 'header')?.text;
+    const storedIs = async (id, want) => until(async () => await headerText(id) === want,
+      async () => `the stored header is ${JSON.stringify(await headerText(id))}, not ${JSON.stringify(want)}`);
+    /** The frame comes to `want` px tall (±2). */
+    const heightIs = async (loc, want, what) => until(async () => Math.abs(await heightOf(loc) - want) <= 2,
+      async () => `the header’s frame is ${await heightOf(loc)} px tall, not ${Math.round(want)} (${what})`);
+    const focusedIs = (p, label) => p.waitForFunction(l => document.activeElement?.getAttribute('aria-label') === l, label, { timeout: 5000 });
+    const topBar = (p, what) => p.getByTitle(new RegExp(`^${what} \\(`));
+    /** The Assignment template's card (Recent may list documents called Assignment too). */
+    const assignmentCard = () => page.getByRole('region', { name: 'Start something new' }).getByRole('button', { name: /^Assignment/ });
+
+    await step('Header fields: add Registration no., type it and rename Class to Section; both lines are on the handwritten page, Undo and Redo take them away and back, and the next Assignment starts from them', async () => {
+      await homeLink().click();
+      await assignmentCard().click();
+      await page.waitForURL(/#\/d\/.+\/write/, { timeout: 15000 });
+      await page.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
+      const rec = await newest(), hid = rec.doc.boxes.find(b => b.kind === 'header').id;
+      // (The Essay was written out with a header that says Asha: new headers start from it.)
+      const THREE = `Name: Asha\nClass:\nDate: ${todayText()}`, FOUR = `Name: Asha\nSection:\nDate: ${todayText()}\nRegistration no.: 12345`;
+      await storedIs(rec.id, THREE);
+      await page.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Pages' }).click();
+      const fr = frame(page, hid);
+      await fr.waitFor({ timeout: 10000 });
+      const h0 = await heightOf(fr), line = await lineOf(fr, rec.settings.gap);
+
+      await page.getByRole('textbox', { name: 'Name', exact: true }).click();
+      const add = page.getByRole('button', { name: 'Add field' });
+      await add.waitFor({ state: 'visible', timeout: 5000 });
+      await add.click();
+      await page.getByRole('menuitem', { name: 'Registration no.', exact: true }).click();
+      await focusedIs(page, 'Registration no.');
+      await page.keyboard.type('12345');
+      await page.getByRole('button', { name: 'Rename “Class”' }).click();
+      await focusedIs(page, 'Field name');
+      await page.keyboard.press('Control+A');
+      await page.keyboard.type('Section');
+      await page.keyboard.press('Enter');
+      await focusedIs(page, 'Rename “Section”');
+      await page.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
+      await storedIs(rec.id, FOUR);
+
+      // Both lines are written: the frame is a line taller, and its ink canvas has writing in its bottom quarter, the
+      // fourth line's. (With three lines only the tails of a few letters reach it: 5 to 14 pixels; with four, about 600.)
+      await heightIs(fr, h0 + line, 'after the changes');
+      const ink = page.locator(`[data-stage]:not([hidden]) .ink-layer canvas[data-id="${hid}:0"]`);
+      const bottomInk = () => ink.evaluate(c => {
+        if (!c.width) return 0;
+        const from = Math.floor(c.height * 0.75), d = c.getContext('2d').getImageData(0, from, c.width, c.height - from).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0 && (d[i] < 250 || d[i + 1] < 250 || d[i + 2] < 250)) n++;
+        return n;
+      });
+      await until(async () => await bottomInk() >= 100, async () => `the header’s ink canvas has ${await bottomInk()} inked pixels in its bottom quarter`, 20000);
+
+      for (let k = 0; k < 3; k++) await topBar(page, 'Undo').click();
+      await storedIs(rec.id, THREE);
+      await heightIs(fr, h0, 'after Undo');
+      for (let k = 0; k < 3; k++) await topBar(page, 'Redo').click();
+      await storedIs(rec.id, FOUR);
+      await heightIs(fr, h0 + line, 'after Redo');
+
+      // The header is the device's default now (written about a second after the last change).
+      await page.waitForTimeout(1500);
+      const kept = await idb('prefs', 'header-default');
+      const fields = kept?.fields ?? [];
+      if (fields.map(f => f.label).join(', ') !== 'Name, Section, Date, Registration no.' || fields[3].value !== '12345') {
+        fail(`the remembered header is ${JSON.stringify(kept)}`);
+      }
+      await homeLink().click();
+      await assignmentCard().click();
+      await page.waitForURL(/#\/d\/.+\/write/, { timeout: 15000 });
+      await page.getByText('Saved', { exact: true }).waitFor({ timeout: 15000 });
+      const next = await newest();
+      if (next.id === rec.id) fail('no new Assignment was made');
+      await storedIs(next.id, FOUR);
+    });
+
     await step('Phone: Home and Import at 390 px, and Longhand work brought over on a first visit', async () => {
       const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, acceptDownloads: true, serviceWorkers: 'block' });
       await phone.addInitScript(() => { try { localStorage.setItem('nib.tips', 'seen'); } catch {} });
@@ -588,8 +683,8 @@ async function main() {
           const d = g.getImageData(0, 0, c.width, c.height).data, lum = [];
           for (let i = 0; i < d.length; i += 4) lum.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
           const median = [...lum].sort((a, b) => a - b)[lum.length >> 1];
-          return lum.filter(v => v <= median - 70).length >= m;
-        }, 2); // (a one-line document at 156 px has only 3 to 7 pixels that dark, so the brief's 5 is flaky)
+          return lum.filter(v => v <= median - 50).length >= m;
+        }, 10); // (a one-line document at 156 px has only 2 to 9 pixels 70 darker, but 32 to 48 that are 50 darker; a page with no writing has none)
         if (!phoneInked) fail('the migrated document’s thumbnail has no ink');
         const wide = await p.evaluate(() => document.documentElement.scrollWidth);
         if (wide > 390) fail(`Home is ${wide} px wide on a 390 px phone`);
@@ -814,6 +909,80 @@ async function main() {
         await p.getByRole('link', { name: 'Home', exact: true }).click();
         await p.getByRole('heading', { name: 'Start something new' }).waitFor({ timeout: 10000 });
         await fits('Home', 320, 640);
+      } finally { await phone.close(); }
+    });
+
+    await step('Phone: header fields at 390 px: 44 px targets in Outline’s sheet, Add field on the typed page, and nothing wider than the screen', async () => {
+      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+      await phone.addInitScript(() => { try { localStorage.setItem('nib.tips', 'seen'); } catch {} });
+      try {
+        const p = watch(await phone.newPage());
+        const narrow = async where => {
+          const sw = await p.evaluate(() => document.documentElement.scrollWidth);
+          if (sw > 390) fail(`${where}: the page is ${sw} px wide on a 390 px phone`);
+        };
+        await p.goto(BASE);
+        await p.getByText('The Water Cycle').click();
+        await p.getByText(/^Page 1 of \d+$/).waitFor({ timeout: 15000 });
+        const id = /#\/d\/([^/]+)\//.exec(p.url())?.[1];
+        /** The open document's record, read in this phone's page. */
+        const record = () => p.evaluate(key => new Promise((res, rej) => {
+          const open = indexedDB.open('nib');
+          open.onerror = () => rej(open.error);
+          open.onsuccess = () => {
+            const get = open.result.transaction('documents').objectStore('documents').get(key);
+            get.onsuccess = () => { open.result.close(); res(get.result); };
+            get.onerror = () => rej(get.error);
+          };
+        }), id);
+        const stored = async () => (await record())?.doc.boxes.find(b => b.kind === 'header')?.text;
+        const storedHere = want => until(async () => await stored() === want, async () => `the stored header is ${JSON.stringify(await stored())}, not ${JSON.stringify(want)}`);
+
+        // The typed page: no hover on a phone, so Add field shows once a field is tapped, on the screen.
+        await p.getByRole('textbox', { name: 'Name', exact: true }).tap();
+        const typedAdd = p.getByRole('button', { name: 'Add field' });
+        await typedAdd.waitFor({ state: 'visible', timeout: 5000 });
+        if (!inside(await typedAdd.boundingBox(), 390)) fail(`the typed page’s Add field is at ${JSON.stringify(await typedAdd.boundingBox())}`);
+        await narrow('Write');
+
+        await p.getByRole('group', { name: 'Write view' }).getByRole('button', { name: 'Outline' }).click();
+        const sheet = p.getByRole('dialog', { name: 'Outline' });
+        await sheet.waitFor({ timeout: 10000 });
+        await p.waitForTimeout(600); // (the sheet slides up)
+        await sheet.getByRole('button', { name: 'Header', exact: true }).tap();
+        const fr = frame(p, 'b2');
+        await fr.waitFor({ timeout: 10000 });
+        const h0 = await heightOf(fr), line = await lineOf(fr, (await record()).settings.gap);
+        for (const target of [sheet.getByRole('button', { name: 'More for “Name”' }), sheet.getByRole('img', { name: 'Move “Name”' })]) {
+          await target.scrollIntoViewIfNeeded();
+          const b = await target.boundingBox();
+          if (!b || b.width < 44 || b.height < 44) fail(`${await target.getAttribute('aria-label')} is ${b?.width} × ${b?.height} px, not 44 × 44`);
+        }
+        await narrow('Outline');
+
+        const add = sheet.getByRole('button', { name: 'Add field' });
+        await add.scrollIntoViewIfNeeded();
+        await add.tap();
+        await p.getByRole('menuitem', { name: 'Registration no.', exact: true }).tap();
+        await focusedIs(p, 'Registration no.');
+        await p.keyboard.type('12345');
+        await sheet.getByRole('button', { name: 'More for “Class”' }).tap();
+        await p.getByRole('menuitem', { name: 'Rename', exact: true }).tap();
+        await focusedIs(p, 'Field name');
+        await sheet.getByRole('textbox', { name: 'Field name' }).fill('Section');
+        await p.keyboard.press('Enter');
+        await focusedIs(p, 'Rename “Section”');
+        await sheet.getByRole('button', { name: 'More for “Registration no.”' }).tap();
+        await p.getByRole('menuitem', { name: 'Move up', exact: true }).tap();
+        await focusedIs(p, 'More for “Registration no.”');
+        await narrow('Outline, after the changes');
+
+        await storedHere('Name: Aarav Mehta\nSection: 8-B\nRegistration no.: 12345\nDate: 29 October 2026');
+        await heightIs(fr, h0 + line, 'after the changes');
+        for (let k = 0; k < 4; k++) await topBar(p, 'Undo').tap();
+        await storedHere(SAMPLE_HEAD);
+        await heightIs(fr, h0, 'after Undo');
+        await narrow('Outline, after Undo');
       } finally { await phone.close(); }
     });
 
