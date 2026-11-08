@@ -5,9 +5,10 @@ import { computeLayout, framesOf } from '@/engine/core.js';
 import type { Box, EngineDoc } from '@/engine/types';
 import { box, docOf, fieldsOf, lines, words } from '@/test/docs';
 import { defaultHeaderFields } from './headerDefault';
+import { headerText } from '@/engine/doc.js';
 import {
-  appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, movePage, newBlock, pageRefusal,
-  removeBlock, removeBlockPart, setHeaderField, splitBlock, today,
+  addHeaderField, appendToBlock, deletePage, insertPage, joinBack, layoutFor, mergeIntoPrevious, moveBlockToPage, moveHeaderField, movePage,
+  newBlock, pageRefusal, removeBlock, removeBlockPart, removeHeaderField, renameHeaderField, setHeaderField, splitBlock, today,
 } from './model';
 
 const S = cleanSettings(null, false);
@@ -135,6 +136,30 @@ test('header fields', () => {
   expect(h.text).toBe(`Name: Riya \nClass: 8 B\nDate: ${today()}`);
   setHeaderField(h, 'gone', 'x');
   expect(h.text).toBe(`Name: Riya \nClass: 8 B\nDate: ${today()}`);
+});
+test('each field change keeps the header’s text derived, and a block that isn’t a header is left alone', () => {
+  const h = box({ id: 'h', kind: 'header', name: 'Header', x: 446, y: 76, w: 320, fields: fieldsOf({ name: 'A', class: 'B', date: 'C' }), text: 'Name: A\nClass: B\nDate: C' });
+  const derived = () => expect(h.text).toBe(headerText(h.fields!));
+  const due = addHeaderField(h, { label: 'Due' })!;
+  expect(due).toMatchObject({ label: 'Due', value: '' }); expect(h.fields!.at(-1)).toBe(due); derived();
+  expect(renameHeaderField(h, 'class', 'Section')).toBe(true); derived();
+  expect(moveHeaderField(h, 'class', 3)).toBe(true); derived();
+  expect(removeHeaderField(h, 'date')).toEqual({ field: { id: 'date', label: 'Date', value: 'C', today: true }, index: 1 }); derived();
+  expect(h.text).toBe('Name: A\nDue:\nSection: B');
+  // Nothing to change: false or null, and the text as it was.
+  expect([renameHeaderField(h, 'class', 'Section'), moveHeaderField(h, 'class', 2), moveHeaderField(h, 'gone', 0), removeHeaderField(h, 'gone')]).toEqual([false, false, false, null]);
+  expect(h.text).toBe('Name: A\nDue:\nSection: B');
+  const t = box({ id: 't', text: 'words' });
+  expect([addHeaderField(t, { label: 'Due' }), renameHeaderField(t, 'name', 'X'), moveHeaderField(t, 'name', 0), removeHeaderField(t, 'name')]).toEqual([null, false, false, null]);
+  expect([t.text, t.fields]).toEqual(['words', undefined]);
+});
+test('a header keeps 1 to 12 fields', () => {
+  const h = box({ id: 'h', kind: 'header', fields: fieldsOf({ name: 'A' }), text: 'Name: A' });
+  expect(removeHeaderField(h, 'name')).toBeNull();
+  for (let i = 1; i < 12; i++) expect(addHeaderField(h, { label: 'F' + i })).not.toBeNull();
+  expect(h.fields).toHaveLength(12);
+  expect(addHeaderField(h, { label: 'One more' })).toBeNull();
+  expect([h.fields!.length, h.text]).toEqual([12, headerText(h.fields!)]);
 });
 test('a new header without fields given gets the three blanks', () => { const h = newBlock(S, docOf(), 'header', 0) as Box; expect([h.fields!.map(f => f.label), h.text]).toEqual([['Name', 'Class', 'Date'], 'Name:\nClass:\nDate:']); });
 

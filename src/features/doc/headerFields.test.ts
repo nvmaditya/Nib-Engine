@@ -1,11 +1,15 @@
-// A header's fields as a list: new headers' fields, and a value typed into one.
-import { expect, test, vi } from 'vitest';
+// A header's fields as a list: new headers' fields, a value typed into one, and adding, renaming, removing and moving one.
+import { beforeEach, expect, test, vi } from 'vitest';
 import { uid } from '@/engine/doc.js';
-import { fieldValue, fieldsFrom, listSetValue, newFieldId, today } from './headerFields';
+import { fieldValue, fieldsFrom, listAdd, listMove, listRemove, listRename, listSetValue, newFieldId, today } from './headerFields';
 
 vi.mock('@/engine/doc.js', async orig => ({ ...(await orig<typeof import('@/engine/doc.js')>()), uid: vi.fn() }));
 
 const NOW = new Date(2026, 10, 7);
+const L = (...labels: string[]) => labels.map((label, i) => ({ id: 'i' + i, label, value: '' }));
+
+// Each test's ids: u1, u2… unless it says otherwise.
+beforeEach(() => { let n = 0; vi.mocked(uid).mockReset().mockImplementation(() => 'u' + ++n); });
 
 test('today', () => expect(today(new Date(2026, 10, 6))).toBe('6 November 2026'));
 
@@ -36,4 +40,31 @@ test('a new field’s id is never one the header has', () => {
   vi.mocked(uid).mockReturnValueOnce('f1').mockReturnValueOnce('f3').mockReturnValueOnce('bnew');
   expect(newFieldId(fieldsFrom(null, NOW))).toBe('bnew');
   expect(vi.mocked(uid)).toHaveBeenCalledTimes(3);
+});
+
+test('adding: at the end and empty; a Date comes marked and as today; at 12 nothing', () => {
+  vi.mocked(uid).mockReturnValueOnce('i0'); // an id the header has already: another is taken
+  expect(listAdd(L('Name'), { label: ' Teacher ' })).toEqual([...L('Name'), { id: expect.not.stringMatching(/^i0$/), label: 'Teacher', value: '' }]);
+  expect(listAdd(L('Name'), { label: 'Date', today: true }, NOW)!.at(-1)).toMatchObject({ label: 'Date', value: '7 November 2026', today: true });
+  expect(listAdd(L('Name'), { label: '' })!.at(-1)!.label).toBe('Field'); // Custom field… starts as Field
+  expect(listAdd(L(...'abcdefghijkl'), { label: 'x' })).toBeNull();
+  expect(listAdd(L(...'abcdefghijk'), { label: 'x' })).toHaveLength(12);
+});
+test('renaming: one line, at most 30, empty is Field; the date mark stays; the same name changes nothing', () => {
+  const d = [{ id: 'd', label: 'Date', value: 'x', today: true as const }];
+  expect(listRename(d, 'd', ' Due\ndate ')).toEqual([{ id: 'd', label: 'Due date', value: 'x', today: true }]);
+  expect(listRename(L('A'), 'i0', '')![0].label).toBe('Field'); expect(listRename(L('A'), 'i0', ' A ')).toBeNull(); expect(listRename(L('A'), 'zz', 'B')).toBeNull();
+  expect(listRename(L('A'), 'i0', 'y'.repeat(40))![0].label).toBe('y'.repeat(30));
+  expect(d[0].label).toBe('Date'); // a new list: the one given is left as it was
+});
+test('removing: never the only field; says which went and where it was', () => {
+  expect(listRemove(L('A', 'B'), 'i1')).toEqual({ list: L('A'), field: L('A', 'B')[1], index: 1 }); expect(listRemove(L('A'), 'i0')).toBeNull();
+  expect(listRemove(L('A', 'B'), 'zz')).toBeNull();
+});
+test('moving: to any row; off the ends or in place changes nothing', () => {
+  expect(listMove(L('A', 'B', 'C'), 'i0', 2)!.map(f => f.label)).toEqual(['B', 'C', 'A']);
+  expect(listMove(L('A', 'B', 'C'), 'i2', 0)!.map(f => f.label)).toEqual(['C', 'A', 'B']);
+  expect(listMove(L('A', 'B', 'C'), 'i1', 2)!.map(f => f.label)).toEqual(['A', 'C', 'B']);
+  expect([listMove(L('A', 'B'), 'i0', 0), listMove(L('A', 'B'), 'i0', 2), listMove(L('A', 'B'), 'i0', -1)]).toEqual([null, null, null]);
+  expect([listMove(L('A', 'B'), 'zz', 1), listMove(L('A', 'B'), 'i0', 0.5)]).toEqual([null, null]);
 });
